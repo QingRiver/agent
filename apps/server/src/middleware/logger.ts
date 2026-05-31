@@ -1,0 +1,44 @@
+import type { Context, Next } from 'koa'
+import type { TLSSocket } from 'node:tls'
+import { get } from 'radash'
+
+const RESET = '\x1B[0m'
+const GREEN = '\x1B[32m'
+const YELLOW = '\x1B[33m'
+const BLUE = '\x1B[34m'
+const RED = '\x1B[31m'
+const CYAN = '\x1B[36m'
+
+const METHOD_COLOR: Record<string, string> = {
+  GET: GREEN,
+  POST: BLUE,
+}
+
+const LATENCY_THRESHOLDS: Array<{ min: number, color: string }> = [
+  { min: 100, color: RED },
+  { min: 50, color: YELLOW },
+  { min: 0, color: GREEN },
+]
+
+function colorize(text: string, color: string): string {
+  return `${color}${text}${RESET}`
+}
+
+function colorMethod(method: string): string {
+  return colorize(method, get(METHOD_COLOR, method, CYAN))
+}
+
+function colorLatency(ms: number): string {
+  const tier = LATENCY_THRESHOLDS.find(({ min }) => ms >= min)!
+  return colorize(`${ms}ms`, tier.color)
+}
+
+export async function logger(ctx: Context, next: Next) {
+  const start = Date.now()
+  await next()
+  const ms = Date.now() - start
+  const protocol = (ctx.req.socket as TLSSocket).alpnProtocol || 'http/1.1'
+  const method = colorMethod(ctx.method)
+  const latency = colorLatency(ms)
+  console.log(`${method} ${ctx.url} - ${latency} - Protocol: ${protocol}`)
+}
