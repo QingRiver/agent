@@ -20,14 +20,32 @@ pnpm --filter server dev
 
 默认地址：`https://localhost:3000`（环境变量 `PORT` 可改）
 
+### 环境变量
+
+在 `apps/server/.env` 中配置（勿提交到 git）：
+
+| 变量              | 说明                                                                     |
+| ----------------- | ------------------------------------------------------------------------ |
+| `PORT`            | 监听端口，默认 `3000`                                                    |
+| `OPENAI_API_KEY`  | DeepSeek API Key（[控制台申请](https://platform.deepseek.com/api_keys)） |
+| `OPENAI_MODEL`    | 默认 `deepseek-v4-flash`（亦可 `deepseek-v4-pro`）                       |
+| `OPENAI_BASE_URL` | 默认 `https://api.deepseek.com`（OpenAI 兼容）                           |
+
+复制模板：`cp apps/server/.env.example apps/server/.env`
+
+服务入口已 `import 'dotenv/config'`，启动时自动加载 `.env`。
+
 ## API
 
-| 方法  | 路径                         | 说明 |
-| ----- | ---------------------------- | ---- |
-| `GET` | `/`                          | 心跳：路径、时间戳、`protocol`（如 `h2`） |
-| `GET` | `/:param`                    | 动态参数路由 |
-| `GET` | `/sample/simpleGraph`        | 同步执行 LangGraph，返回最终 state |
-| `GET` | `/sample/simpleGraph/sse`    | SSE 流式推送 LangGraph `updates` 事件 |
+| 方法   | 路径                              | 说明                                             |
+| ------ | --------------------------------- | ------------------------------------------------ |
+| `GET`  | `/`                               | 心跳：路径、时间戳、`protocol`（如 `h2`）        |
+| `GET`  | `/:param`                         | 动态参数路由                                     |
+| `GET`  | `/sample/simpleGraph`             | 同步执行 LangGraph，返回最终 state               |
+| `GET`  | `/sample/simpleGraph/sse`         | SSE 流式推送 LangGraph `updates` 事件            |
+| `GET`  | `/sample/weather`                 | Weather ReAct Agent，仅 SSE；query `message`     |
+| `GET`  | `/hitl/workflow/sse`              | HITL 工作流启动，SSE；query `input`（可选）      |
+| `POST` | `/hitl/workflow/:threadId/resume` | HITL 审批恢复，SSE；body `{ approved, reason? }` |
 
 ### curl 示例
 
@@ -45,6 +63,17 @@ curl -sk https://localhost:3000/sample/simpleGraph
 
 # LangGraph SSE（流式）
 curl -sk -N https://localhost:3000/sample/simpleGraph/sse
+
+# Weather Agent SSE
+curl -sk -N "https://localhost:3000/sample/weather?message=北京天气"
+
+# HITL 启动
+curl -sk -N "https://localhost:3000/hitl/workflow/sse"
+
+# HITL 恢复（替换 threadId）
+curl -sk -N -X POST "https://localhost:3000/hitl/workflow/<threadId>/resume" \
+  -H "Content-Type: application/json" \
+  -d '{"approved":true}'
 ```
 
 ### SSE 事件格式
@@ -63,11 +92,17 @@ src/
 ├── index.ts                 # Koa + HTTP/2 入口
 ├── controller/
 │   ├── default.ts           # 心跳、动态参数
-│   └── sample.ts            # LangGraph 同步 / SSE
+│   ├── sample.ts            # simpleGraph / weather SSE
+│   └── hitl.ts              # 人在回路工作流 SSE
 ├── graphs/
-│   └── simpleGraph.ts       # LangGraph 两节点示例
+│   ├── simpleGraph.ts       # 两节点示例图
+│   ├── weatherGraph.ts      # ReAct Agent（绑定 get_weather 工具）
+│   └── hitlGraph.ts         # interrupt + MemorySaver 挂起/恢复
+├── tools/
+│   └── openMeteo.ts         # get_weather：Open-Meteo 地理编码与实况
 ├── middleware/
-│   └── logger.ts
+│   ├── logger.ts            # 请求日志（query 已解码，中文可读）
+│   └── sseResponder.ts      # 将 AsyncIterable 包装为 text/event-stream
 ├── router/
 │   ├── decorator.ts         # @Controller / @Get / @Post
 │   ├── registry.ts          # 扫描控制器、排序注册
@@ -89,26 +124,28 @@ certificates/                # mkcert 证书（gitignore）
 ### 新增接口
 
 1. 在 `src/controller/` 添加或扩展 Controller。
-2. 在 `src/router/routeConfig.ts` 加入该类。
-3. 保存后 `tsx watch` 自动重载。
+2. 图逻辑放 `src/graphs/`；对外 API / Agent 工具放 `src/tools/`。
+3. 在 `src/router/routeConfig.ts` 的 `collectRoutesFromControllers([...])` 注册 Controller。
+4. SSE 路由：`ctx.body = graphApp.stream(..., { streamMode: 'updates' })`，由 `sseResponder` 统一封装。
+5. 保存后 `tsx watch` 自动重载。
 
 ## 中间件顺序
 
 ```text
-bodyParser → koa-static(public) → logger → router
+bodyParser → koa-static(public) → logger → sseResponder → router
 ```
 
 ## 脚本
 
-| 命令        | 说明 |
-| ----------- | ---- |
-| `pnpm dev`  | `tsx watch` 开发 |
+| 命令        | 说明                        |
+| ----------- | --------------------------- |
+| `pnpm dev`  | `tsx watch` 开发            |
 | `pnpm cert` | mkcert 生成 `certificates/` |
 
 ## 技术栈
 
 - Koa 3、`@koa/router`
-- `@langchain/langgraph`（`simpleGraph`）
+- `@langchain/langgraph`、`@langchain/openai`（`simpleGraph`、`weatherGraph`）
 - HTTP/2（TLS，`allowHTTP1: true`）
 - TypeScript Stage 3 装饰器 + tsx
 - Radash（工具库）

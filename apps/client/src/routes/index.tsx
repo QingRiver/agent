@@ -20,6 +20,12 @@ function HomePage() {
             LangGraph SSE
           </Link>
           <Link
+            to="/weather"
+            className="inline-block rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-800"
+          >
+            Weather Agent
+          </Link>
+          <Link
             to="/hitl"
             className="inline-block rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-800"
           >

@@ -9,10 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WeatherRouteImport } from './routes/weather'
 import { Route as SseRouteImport } from './routes/sse'
 import { Route as HitlRouteImport } from './routes/hitl'
 import { Route as IndexRouteImport } from './routes/index'
 
+const WeatherRoute = WeatherRouteImport.update({
+  id: '/weather',
+  path: '/weather',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SseRoute = SseRouteImport.update({
   id: '/sse',
   path: '/sse',
@@ -33,34 +39,45 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/hitl': typeof HitlRoute
   '/sse': typeof SseRoute
+  '/weather': typeof WeatherRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/hitl': typeof HitlRoute
   '/sse': typeof SseRoute
+  '/weather': typeof WeatherRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/hitl': typeof HitlRoute
   '/sse': typeof SseRoute
+  '/weather': typeof WeatherRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/hitl' | '/sse'
+  fullPaths: '/' | '/hitl' | '/sse' | '/weather'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/hitl' | '/sse'
-  id: '__root__' | '/' | '/hitl' | '/sse'
+  to: '/' | '/hitl' | '/sse' | '/weather'
+  id: '__root__' | '/' | '/hitl' | '/sse' | '/weather'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HitlRoute: typeof HitlRoute
   SseRoute: typeof SseRoute
+  WeatherRoute: typeof WeatherRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/weather': {
+      id: '/weather'
+      path: '/weather'
+      fullPath: '/weather'
+      preLoaderRoute: typeof WeatherRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sse': {
       id: '/sse'
       path: '/sse'
@@ -89,6 +106,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HitlRoute: HitlRoute,
   SseRoute: SseRoute,
+  WeatherRoute: WeatherRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

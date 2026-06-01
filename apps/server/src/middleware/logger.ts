@@ -33,6 +33,25 @@ function colorLatency(ms: number): string {
   return colorize(`${ms}ms`, tier.color)
 }
 
+/** 用已解码的 path / query 拼日志 URL，避免 %E6%B7%B1 等编码 */
+function formatRequestUrl(ctx: Context): string {
+  const entries = Object.entries(ctx.query)
+  if (entries.length === 0)
+    return ctx.path
+
+  const search = entries
+    .flatMap(([key, value]) => {
+      if (Array.isArray(value))
+        return value.map(v => `${key}=${v}`)
+      if (value == null)
+        return []
+      return [`${key}=${value}`]
+    })
+    .join('&')
+
+  return search ? `${ctx.path}?${search}` : ctx.path
+}
+
 export async function logger(ctx: Context, next: Next) {
   const start = Date.now()
   await next()
@@ -40,5 +59,5 @@ export async function logger(ctx: Context, next: Next) {
   const protocol = (ctx.req.socket as TLSSocket).alpnProtocol || 'http/1.1'
   const method = colorMethod(ctx.method)
   const latency = colorLatency(ms)
-  console.log(`${method} ${ctx.url} - ${latency} - Protocol: ${protocol}`)
+  console.log(`${method} ${formatRequestUrl(ctx)} - ${latency} - Protocol: ${protocol}`)
 }

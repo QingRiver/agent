@@ -1,7 +1,5 @@
 # agent
 
-pnpm monorepo：Koa HTTPS 后端 + Vite React 前端，含 LangGraph 示例与 SSE 流式联调。
-
 ## 结构
 
 ```
@@ -19,13 +17,49 @@ packages/          # 共享包（预留）
 
 ## 快速开始
 
+### 1. 安装依赖
+
 ```bash
 pnpm install
+```
 
-# 首次：生成证书（写入 apps/server/certificates）
+### 2. 配置环境变量（server）
+
+Weather Agent 需要调用 DeepSeek（OpenAI 兼容接口）；`/sse` 与 `/hitl` 不依赖 LLM，可不配 Key。
+
+```bash
+# 在 apps/server 下从模板复制（勿提交 .env）
+cp apps/server/.env.example apps/server/.env
+```
+
+编辑 `apps/server/.env`，至少填写：
+
+```env
+OPENAI_API_KEY=sk-你的-deepseek-key   # https://platform.deepseek.com/api_keys
+OPENAI_MODEL=deepseek-v4-flash
+OPENAI_BASE_URL=https://api.deepseek.com
+```
+
+| 变量              | 必填         | 说明                                               |
+| ----------------- | ------------ | -------------------------------------------------- |
+| `OPENAI_API_KEY`  | Weather 必填 | DeepSeek API Key                                   |
+| `OPENAI_MODEL`    | 否           | 默认 `deepseek-v4-flash`，可改为 `deepseek-v4-pro` |
+| `OPENAI_BASE_URL` | 否           | 默认 `https://api.deepseek.com`                    |
+| `PORT`            | 否           | 默认 `3000`                                        |
+
+服务启动时会 `import 'dotenv/config'`，自动加载 `apps/server/.env`（在 `apps/server` 目录执行 `pnpm dev` 时生效）。
+
+### 3. 本地 HTTPS 证书（首次）
+
+```bash
 pnpm --filter server cert
+```
 
-# 并行启动 server + client
+证书写入 `apps/server/certificates/`，client 开发服务器会复用。
+
+### 4. 启动
+
+```bash
 pnpm dev
 ```
 
@@ -60,4 +94,12 @@ pnpm --filter client typecheck
 ## 联调说明
 
 - Client 通过 Vite 代理将 `/api/*` 转发到 Server（去掉 `/api` 前缀）。
-- LangGraph SSE 页面：`https://localhost:5173/sse` → 请求 `GET /sample/simpleGraph/sse`。
+- 演示页面（先完成上文 **env 配置** 再访问 `/weather`）：
+
+| 页面                             | 说明                                 |
+| -------------------------------- | ------------------------------------ |
+| `https://localhost:5173/sse`     | 简单两节点图 SSE                     |
+| `https://localhost:5173/weather` | Weather Agent 聊天气泡 + 工具调用    |
+| `https://localhost:5173/hitl`    | LangGraph `interrupt` + 人工审批恢复 |
+
+Server 代码分层：`graphs/` 编排 LangGraph，`tools/` 放 Agent 工具实现（如 Open-Meteo）。

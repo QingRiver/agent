@@ -22,6 +22,12 @@ function RootLayout() {
             LangGraph SSE
           </Link>
           <Link
+            to="/weather"
+            className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
+          >
+            Weather Agent
+          </Link>
+          <Link
             to="/hitl"
             className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
           >

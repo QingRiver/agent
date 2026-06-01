@@ -1,6 +1,6 @@
 # client
 
-`apps/client` 是 Vite + React + TypeScript 前端，使用 TanStack Router 做路由，Tailwind CSS 4 做样式，通过 HTTPS 代理访问 server 的 LangGraph SSE 接口。
+`apps/client` 是 Vite + React + TypeScript 前端，使用 TanStack Router 做路由，Tailwind CSS 4 做样式，通过 HTTPS 代理访问 server 的 LangGraph / HITL / Weather API。
 
 ## 技术栈
 
@@ -9,6 +9,7 @@
 - TypeScript 6
 - [TanStack Router](https://tanstack.com/router)（文件路由 + `@tanstack/router-plugin`）
 - Tailwind CSS 4（`@tailwindcss/vite`）
+- `@microsoft/fetch-event-source`（SSE，用于 `/weather`）
 
 ## 快速开始
 
@@ -28,10 +29,12 @@ pnpm dev                    # 推荐：与 server 并行启动
 
 ## 页面路由
 
-| 路径   | 说明                                                 |
-| ------ | ---------------------------------------------------- |
-| `/`    | 首页，入口链接到 SSE 演示                            |
-| `/sse` | 请求 `GET /sample/simpleGraph/sse`，流式打印后端事件 |
+| 路径       | 说明                                                                   |
+| ---------- | ---------------------------------------------------------------------- |
+| `/`        | 首页，入口链接到各演示                                                 |
+| `/sse`     | `GET /sample/simpleGraph/sse`，流式打印原始 SSE 事件                   |
+| `/weather` | `GET /sample/weather?message=...`，聊天气泡 UI（用户右 / AI 与工具左） |
+| `/hitl`    | HITL 工作流：启动 → 等待审批 → `Command(resume)` 恢复                  |
 
 ## 常用命令
 
@@ -48,16 +51,25 @@ pnpm --filter client lint      # 使用仓库根目录 @antfu/eslint-config
 ```text
 apps/client
 ├── src/
-│   ├── routes/              # TanStack Router 文件路由
-│   │   ├── __root.tsx       # 布局与导航
-│   │   ├── index.tsx        # /
-│   │   └── sse.tsx          # /sse 流式页
+│   ├── routes/                    # TanStack Router 文件路由
+│   │   ├── __root.tsx             # 布局与导航
+│   │   ├── index.tsx              # /
+│   │   ├── sse.tsx                # /sse
+│   │   ├── weather.tsx            # /weather 聊天页
+│   │   └── hitl.tsx               # /hitl 人在回路
+│   ├── components/
+│   │   └── weather/
+│   │       └── WeatherChatBubble.tsx
 │   ├── lib/
-│   │   └── streamSimpleGraph.ts   # fetch + ReadableStream 解析 SSE
-│   ├── routeTree.gen.ts     # 插件生成，勿手改
+│   │   ├── streamSimpleGraph.ts   # simpleGraph SSE
+│   │   ├── streamWeatherGraph.ts  # weather SSE
+│   │   ├── parseWeatherUpdate.ts  # LangGraph update → 聊天气泡
+│   │   ├── parseSse.ts            # 通用 SSE 消费（HITL）
+│   │   └── hitlWorkflow.ts        # HITL 启动 / 恢复 API
+│   ├── routeTree.gen.ts           # 插件生成，勿手改
 │   ├── main.tsx
 │   └── index.css
-├── vite.config.ts           # HTTPS、Tailwind、Router 插件、/api 代理
+├── vite.config.ts                 # HTTPS、Tailwind、Router 插件、/api 代理
 └── index.html
 ```
 
@@ -66,11 +78,22 @@ apps/client
 `vite.config.ts` 会读取 `../server/certificates/` 下的 mkcert 证书；不存在则开发服务器使用 HTTP。
 
 ```text
-浏览器  https://localhost:5173/sse
-    → fetch /api/sample/simpleGraph/sse
+浏览器  https://localhost:5173/weather
+    → fetch /api/sample/weather?message=北京天气
     → Vite proxy
-    → https://localhost:3000/sample/simpleGraph/sse
+    → https://localhost:3000/sample/weather?message=北京天气
 ```
+
+## Weather 页消息解析
+
+`parseWeatherUpdate` 解析 SSE `{ type: "update", data: { agent|tools: { messages } } }` 中的 LangChain 消息，映射为：
+
+| 气泡类型      | 展示                 |
+| ------------- | -------------------- |
+| `user`        | 右侧绿色，用户输入   |
+| `assistant`   | 左侧，模型文本       |
+| `tool-call`   | 左侧琥珀色，工具调用 |
+| `tool-result` | 左侧紫色，工具返回   |
 
 ## Tailwind
 
@@ -83,5 +106,5 @@ apps/client
 ## 开发说明
 
 - 新页面：在 `src/routes/` 新增路由文件，保存后插件会更新 `routeTree.gen.ts`。
-- 页面组件与 `Route` 导出写在同文件（路由目录已关闭 `react-refresh/only-export-components`）。
-- ESLint 配置继承仓库根目录 `eslint.config.mjs`，无本地 `eslint.config.js`。
+- 页面组件与 `Route` 导出写在同文件。
+- ESLint 配置继承仓库根目录 `eslint.config.mjs`。
