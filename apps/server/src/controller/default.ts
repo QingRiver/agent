@@ -1,11 +1,10 @@
 import type { Context, Next } from 'koa'
 import type { TLSSocket } from 'node:tls'
-import { Debug } from '../utils/debug'
 import { Controller, Get } from '../router/decorator'
+import { Debug } from '../utils/debug'
 
 @Controller('')
 export class DefaultController {
-
   @Get('/')
   @Get('/heartbeat')
   async hello(ctx: Context, next: Next): Promise<void> {

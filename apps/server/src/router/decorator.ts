@@ -14,6 +14,8 @@ export interface RouteMeta {
 
 export function joinPath(prefix: string, subPath: string): string {
   const p = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
+  if (!subPath || subPath === '/')
+    return p || '/'
   const s = subPath.startsWith('/') ? subPath : `/${subPath}`
   return `${p}${s}`
 }

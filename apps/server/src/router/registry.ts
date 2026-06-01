@@ -1,7 +1,7 @@
 import type { HttpMethod } from '@koa/router'
 import type { Context, Next } from 'koa'
-import { flat, isFunction } from 'radash'
 import type { RouteMeta } from './decorator'
+import { flat, isFunction } from 'radash'
 import { joinPath, PREFIX_SYM, ROUTE_META_SYM } from './decorator'
 
 export interface RouterConfig {
@@ -44,7 +44,8 @@ function sortRoutesForRegistration(routes: RouterConfig[]): RouterConfig[] {
   return [...routes].sort((a, b) => {
     const ap = hasPathParam(a.path) ? 1 : 0
     const bp = hasPathParam(b.path) ? 1 : 0
-    if (ap !== bp) return ap - bp
+    if (ap !== bp)
+      return ap - bp
     return b.path.length - a.path.length
   })
 }
@@ -53,19 +54,23 @@ function collectRoutesFromController(
   Ctor: new (...args: any[]) => any,
 ): RouterConfig[] {
   const prefix = (Ctor as any)[PREFIX_SYM] as string | undefined
-  if (prefix == null) throw new Error(`Missing @Controller on ${Ctor.name}`)
+  if (prefix == null)
+    throw new Error(`Missing @Controller on ${Ctor.name}`)
 
   const inst = getSingleton(Ctor)
   const proto = Ctor.prototype as object
   const routes: RouterConfig[] = []
 
   for (const key of Reflect.ownKeys(proto)) {
-    if (key === 'constructor') continue
+    if (key === 'constructor')
+      continue
     const fn = Object.getOwnPropertyDescriptor(proto, key)?.value
-    if (!isFunction(fn)) continue
+    if (!isFunction(fn))
+      continue
 
     const meta = (fn as any)[ROUTE_META_SYM] as RouteMeta | undefined
-    if (!meta) continue
+    if (!meta)
+      continue
 
     const path = joinPath(prefix, meta.subPath)
     routes.push({
@@ -75,7 +80,8 @@ function collectRoutesFromController(
         const handler = (inst as any)[meta.propertyKey] as
           | ((c: Context, n: Next) => Promise<void>)
           | undefined
-        if (!handler) return next()
+        if (!handler)
+          return next()
         return handler.call(inst, ctx, next)
       },
     })

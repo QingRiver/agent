@@ -1,9 +1,9 @@
-import Router from '@koa/router'
 import type { HttpMethod } from '@koa/router'
 import type { Middleware } from 'koa'
+import type { RouterConfig } from './registry'
+import Router from '@koa/router'
 import { get, isFunction } from 'radash'
 import { routerConfigs } from './routeConfig'
-import type { RouterConfig } from './registry'
 
 function registerRoute(router: Router, config: RouterConfig): void {
   const method = config.method.toLowerCase() as HttpMethod

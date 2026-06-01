@@ -18,7 +18,8 @@ function mergedRedact(keys?: string[]): Set<string> {
 }
 
 function isKoaContext(x: unknown): x is Context {
-  if (!isObject(x)) return false
+  if (!isObject(x))
+    return false
   const o = x as Record<string, unknown>
   return isString(o.method) && isString(o.url) && 'status' in o
 }

@@ -1,8 +1,8 @@
+import type { SanitizeOptions } from './sanitize'
 import { inspect } from 'node:util'
 import { isPromise } from 'radash'
 import { copyMethodSymbols } from './functionMeta'
 import { summarizeValue } from './sanitize'
-import type { SanitizeOptions } from './sanitize'
 
 export interface DebugOptions extends SanitizeOptions {
   /**

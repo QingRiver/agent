@@ -5,9 +5,19 @@ export default antfu({
   typescript: true,
   formatters: true,
   vue: false,
-  ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**'],
+  ignores: [
+    '**/dist/**',
+    '**/coverage/**',
+    '**/node_modules/**',
+    '**/routeTree.gen.ts',
+  ],
   rules: {
     'no-console': 'off',
     'ts/no-redeclare': 'off',
+  },
+}, {
+  files: ['apps/client/src/routes/**/*.{tsx,ts}'],
+  rules: {
+    'react-refresh/only-export-components': 'off',
   },
 })
