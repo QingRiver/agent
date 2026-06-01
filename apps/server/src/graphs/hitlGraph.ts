@@ -1,10 +1,10 @@
+import type { LangGraphRunnableConfig } from '@langchain/langgraph'
 import {
   Annotation,
+  interrupt,
   MemorySaver,
   StateGraph,
-  interrupt,
 } from '@langchain/langgraph'
-import type { LangGraphRunnableConfig } from '@langchain/langgraph'
 import { sleep } from 'radash'
 
 export interface ApprovalDecision {
@@ -12,9 +12,9 @@ export interface ApprovalDecision {
   reason?: string
 }
 
-export type HitlWorkflowResult =
-  | { status: 'rejected', reason: string }
-  | { status: 'approved', action: string, toolInput: string }
+export type HitlWorkflowResult
+  = | { status: 'rejected', reason: string }
+    | { status: 'approved', action: string, toolInput: string }
 
 export interface HumanApprovalInterrupt {
   status: 'wait_for_human_approval'

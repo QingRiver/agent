@@ -1,3 +1,5 @@
+import { fetchEventSource } from '@microsoft/fetch-event-source'
+
 export interface SseMessage {
   type: 'start' | 'update' | 'done' | 'error'
   data?: Record<string, unknown>
@@ -15,40 +17,21 @@ export async function streamSimpleGraph({
   onMessage,
   signal,
 }: StreamSimpleGraphOptions): Promise<void> {
-  const response = await fetch(SSE_URL, signal ? { signal } : undefined)
-
-  if (!response.ok)
-    throw new Error(`SSE request failed: ${response.status} ${response.statusText}`)
-
-  const reader = response.body?.getReader()
-  if (!reader)
-    throw new Error('ReadableStream not supported')
-
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done)
-      break
-
-    buffer += decoder.decode(value, { stream: true })
-    const frames = buffer.split('\n\n')
-    buffer = frames.pop() ?? ''
-
-    for (const frame of frames) {
-      const line = frame
-        .split('\n')
-        .find(row => row.startsWith('data: '))
-
-      if (!line)
-        continue
-
-      const payload = line.slice(6).trim()
-      if (payload === '[DONE]')
+  await fetchEventSource(SSE_URL, {
+    signal,
+    async onopen(response) {
+      const contentType = response.headers.get('content-type') ?? ''
+      if (response.ok && contentType.includes('text/event-stream'))
         return
-
-      onMessage(JSON.parse(payload) as SseMessage)
-    }
-  }
+      throw new Error(`SSE request failed: ${response.status} ${response.statusText}`)
+    },
+    onmessage(ev) {
+      if (ev.data === '[DONE]')
+        return
+      onMessage(JSON.parse(ev.data) as SseMessage)
+    },
+    onerror(err) {
+      throw err
+    },
+  })
 }

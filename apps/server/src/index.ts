@@ -6,6 +6,7 @@ import Koa from 'koa'
 import bodyParser from 'koa-bodyparser'
 import serve from 'koa-static'
 import { logger } from './middleware/logger'
+import { sseResponder } from './middleware/sseResponder'
 import { router } from './router/index'
 
 const app = new Koa()
@@ -14,6 +15,7 @@ const port = process.env.PORT || 3000
 app.use(bodyParser()) // 解析请求体中间件
 app.use(serve('public')) // 静态文件服务
 app.use(logger)
+app.use(sseResponder)
 app.use(router)
 
 const certificatesDir = path.resolve(process.cwd(), 'certificates')

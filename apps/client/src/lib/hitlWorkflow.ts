@@ -2,11 +2,7 @@ import { consumeSse } from './parseSse'
 
 export interface HitlSseEvent {
   type: string
-  phase?: string
-  step?: number
   threadId?: string
-  /** @deprecated 与 threadId 相同，兼容旧事件 */
-  sessionId?: string
   data?: unknown
   message?: string
 }
@@ -23,9 +19,8 @@ export async function startHitlWorkflow(
 ): Promise<void> {
   const url = `/api/hitl/workflow/sse?input=${encodeURIComponent(input)}`
   const response = await fetch(url, signal ? { signal } : undefined)
-
-  if (!response.ok)
-    throw new Error(`Start workflow failed: ${response.status}`)
+  if (!response.body)
+    throw new Error('Start workflow failed: empty response body')
 
   await consumeSse(response, payload => onEvent(payload as HitlSseEvent))
 }
@@ -45,9 +40,8 @@ export async function resumeHitlWorkflow(
     init.signal = signal
 
   const response = await fetch(`/api/hitl/workflow/${threadId}/resume`, init)
-
-  if (!response.ok)
-    throw new Error(`Resume workflow failed: ${response.status}`)
+  if (!response.body)
+    throw new Error('Resume workflow failed: empty response body')
 
   await consumeSse(response, payload => onEvent(payload as HitlSseEvent))
 }

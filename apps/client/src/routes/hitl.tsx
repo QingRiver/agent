@@ -24,34 +24,44 @@ function HitlPage() {
   }, [])
 
   const formatEvent = useCallback((event: HitlSseEvent): string => {
-    if (event.type === 'start')
-      return `[start] phase=${event.phase ?? '-'}`
-    if (event.type === 'step')
-      return `[step ${event.step ?? '?'}] ${JSON.stringify(event.data)}`
+    if (event.type === 'start' || event.type === 'done')
+      return `[${event.type}]`
+    if (event.type === 'thread')
+      return `[thread] threadId=${event.threadId}`
+    if (event.type === 'update')
+      return `[update] ${JSON.stringify(event.data)}`
     if (event.type === 'waiting')
-      return `[waiting] threadId=${event.threadId ?? event.sessionId} action="${event.data}"`
+      return `[waiting] action="${event.data}"`
     if (event.type === 'final')
       return `[final] ${JSON.stringify(event.data)}`
     if (event.type === 'error')
       return `[error] ${event.message}`
-    if (event.type === 'phase_done')
-      return `[phase_done] ${event.phase}`
     return JSON.stringify(event)
   }, [])
 
   const handleEvent = useCallback((event: HitlSseEvent) => {
     appendLine(formatEvent(event))
 
-    const threadId = event.threadId ?? event.sessionId
-    if (event.type === 'waiting' && threadId) {
+    if (event.type === 'thread' && event.threadId)
+      setPendingThreadId(event.threadId)
+
+    if (event.type === 'waiting') {
       waitingRef.current = true
-      setPendingThreadId(threadId)
       setPendingAction(typeof event.data === 'string' ? event.data : String(event.data))
       setStatus('waiting')
     }
 
     if (event.type === 'final')
       setStatus('done')
+
+    // start 阶段结束时的 done 不应覆盖 waiting
+    if (event.type === 'done' && !waitingRef.current)
+      setStatus('done')
+
+    if (event.type === 'error') {
+      setError(event.message ?? 'unknown error')
+      setStatus('error')
+    }
   }, [appendLine, formatEvent])
 
   const runWorkflow = useCallback(async () => {
