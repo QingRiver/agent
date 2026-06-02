@@ -4,7 +4,7 @@
 
 ## 前置条件
 
-- Node.js >= 20
+- Node.js >= 22
 - [pnpm](https://pnpm.io/)
 - [mkcert](https://github.com/FiloSottile/mkcert)（证书也会给 client 开发服务器复用）
 
@@ -20,16 +20,18 @@ pnpm --filter server dev
 
 默认地址：`https://localhost:3000`（环境变量 `PORT` 可改）
 
+`pnpm dev` 会先执行 [scripts/dev.ts](scripts/dev.ts) 预检：Node 版本、`.env` 中 `OPENAI_API_KEY` / `OPENAI_BASE_URL`、`certificates/` 证书，通过后启动 `tsx watch src/index.ts`。
+
 ### 环境变量
 
 在 `apps/server/.env` 中配置（勿提交到 git）：
 
-| 变量              | 说明                                                                     |
-| ----------------- | ------------------------------------------------------------------------ |
-| `PORT`            | 监听端口，默认 `3000`                                                    |
-| `OPENAI_API_KEY`  | DeepSeek API Key（[控制台申请](https://platform.deepseek.com/api_keys)） |
-| `OPENAI_MODEL`    | 默认 `deepseek-v4-flash`（亦可 `deepseek-v4-pro`）                       |
-| `OPENAI_BASE_URL` | 默认 `https://api.deepseek.com`（OpenAI 兼容）                           |
+| 变量              | 说明                                                               |
+| ----------------- | ------------------------------------------------------------------ |
+| `PORT`            | 监听端口，默认 `3000`                                              |
+| `OPENAI_API_KEY`  | **dev 必填**；[控制台申请](https://platform.deepseek.com/api_keys) |
+| `OPENAI_BASE_URL` | **dev 必填**；如 `https://api.deepseek.com`                        |
+| `OPENAI_MODEL`    | 可选，默认 `deepseek-v4-flash`                                     |
 
 复制模板：`cp apps/server/.env.example apps/server/.env`
 
@@ -139,7 +141,7 @@ bodyParser → koa-static(public) → logger → sseResponder → router
 
 | 命令        | 说明                        |
 | ----------- | --------------------------- |
-| `pnpm dev`  | `tsx watch` 开发            |
+| `pnpm dev`  | 预检后 `tsx watch` 开发     |
 | `pnpm cert` | mkcert 生成 `certificates/` |
 
 ## 技术栈

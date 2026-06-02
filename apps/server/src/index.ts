@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import fs from 'node:fs'
 import http2 from 'node:http2'
 import path from 'node:path'
@@ -8,7 +9,6 @@ import serve from 'koa-static'
 import { logger } from './middleware/logger'
 import { sseResponder } from './middleware/sseResponder'
 import { router } from './router/index'
-import 'dotenv/config'
 
 const app = new Koa()
 const port = process.env.PORT || 3000

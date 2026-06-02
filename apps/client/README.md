@@ -64,8 +64,7 @@ apps/client
 │   │   ├── streamSimpleGraph.ts   # simpleGraph SSE
 │   │   ├── streamWeatherGraph.ts  # weather SSE
 │   │   ├── parseWeatherUpdate.ts  # LangGraph update → 聊天气泡
-│   │   ├── parseSse.ts            # 通用 SSE 消费（HITL）
-│   │   └── hitlWorkflow.ts        # HITL 启动 / 恢复 API
+│   │   └── hitlWorkflow.ts        # HITL 启动 / 恢复 SSE（fetch-event-source）
 │   ├── routeTree.gen.ts           # 插件生成，勿手改
 │   ├── main.tsx
 │   └── index.css

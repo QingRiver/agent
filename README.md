@@ -11,7 +11,7 @@ packages/          # 共享包（预留）
 
 ## 前置条件
 
-- Node.js >= 20
+- Node.js >= 22（`pnpm --filter server dev` 会校验）
 - [pnpm](https://pnpm.io/)
 - [mkcert](https://github.com/FiloSottile/mkcert)（本地 HTTPS 证书，server / client 共用）
 
@@ -42,9 +42,9 @@ OPENAI_BASE_URL=https://api.deepseek.com
 
 | 变量              | 必填         | 说明                                               |
 | ----------------- | ------------ | -------------------------------------------------- |
-| `OPENAI_API_KEY`  | Weather 必填 | DeepSeek API Key                                   |
+| `OPENAI_API_KEY`  | **dev 必填** | DeepSeek API Key                                   |
+| `OPENAI_BASE_URL` | **dev 必填** | 如 `https://api.deepseek.com`                      |
 | `OPENAI_MODEL`    | 否           | 默认 `deepseek-v4-flash`，可改为 `deepseek-v4-pro` |
-| `OPENAI_BASE_URL` | 否           | 默认 `https://api.deepseek.com`                    |
 | `PORT`            | 否           | 默认 `3000`                                        |
 
 服务启动时会 `import 'dotenv/config'`，自动加载 `apps/server/.env`（在 `apps/server` 目录执行 `pnpm dev` 时生效）。

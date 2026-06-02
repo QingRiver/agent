@@ -11,6 +11,9 @@
     "chatbot"
   ],
   "main": "index.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "pnpm --parallel --filter server --filter client dev",
     "lint": "pnpm exec eslint apps",

@@ -1,3 +1,7 @@
+import { sleep } from 'radash'
+
+const OPEN_METEO_TIMEOUT_MS = 10_000
+
 interface GeocodingResult {
   name: string
   country: string
@@ -45,17 +49,28 @@ function weatherCodeLabel(code: number): string {
   return WEATHER_CODE_LABEL[code] ?? `天气代码 ${code}`
 }
 
+/** radash 无 timeout，用 sleep + Promise.race 实现超时拒绝 */
+function withTimeout<T>(promise: Promise<T>, ms = OPEN_METEO_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    sleep(ms).then(() => {
+      throw new Error(`Open-Meteo 请求超时（${ms / 1000}s）`)
+    }),
+  ])
+}
+
+async function fetchOpenMeteo<T>(url: string): Promise<T> {
+  const response = await withTimeout(fetch(url))
+  if (!response.ok)
+    throw new Error(`Open-Meteo 请求失败: ${response.status}`)
+  return await response.json() as T
+}
+
 export async function getCoordinates(cityName: string): Promise<GeocodingResult | null> {
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=zh`
-
-  const response = await fetch(url)
-  if (!response.ok)
-    throw new Error(`地理编码请求失败: ${response.status}`)
-
-  const data = await response.json() as GeocodingResponse
+  const data = await fetchOpenMeteo<GeocodingResponse>(url)
   if (!data.results?.length)
     return null
-
   return data.results[0]!
 }
 
@@ -64,15 +79,9 @@ export async function getCurrentWeather(
   longitude: number,
 ): Promise<ForecastCurrent> {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`
-
-  const response = await fetch(url)
-  if (!response.ok)
-    throw new Error(`天气预报请求失败: ${response.status}`)
-
-  const data = await response.json() as ForecastResponse
+  const data = await fetchOpenMeteo<ForecastResponse>(url)
   if (!data.current)
     throw new Error('天气预报无 current 数据')
-
   return data.current
 }
 

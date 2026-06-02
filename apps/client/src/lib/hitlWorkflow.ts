@@ -1,4 +1,4 @@
-import { consumeSse } from './parseSse'
+import { fetchEventSource } from '@microsoft/fetch-event-source'
 
 export interface HitlSseEvent {
   type: string
@@ -12,17 +12,48 @@ export interface ApprovalDecision {
   reason?: string
 }
 
+interface StreamHitlSseOptions {
+  method?: 'GET' | 'POST'
+  headers?: Record<string, string>
+  body?: string
+  signal?: AbortSignal
+}
+
+async function streamHitlSse(
+  url: string,
+  onEvent: (event: HitlSseEvent) => void,
+  options: StreamHitlSseOptions = {},
+): Promise<void> {
+  const { method, headers, body, signal } = options
+  await fetchEventSource(url, {
+    method,
+    headers,
+    body,
+    ...(signal ? { signal } : {}),
+    async onopen(response) {
+      const contentType = response.headers.get('content-type') ?? ''
+      if (response.ok && contentType.includes('text/event-stream'))
+        return
+      throw new Error(`SSE request failed: ${response.status} ${response.statusText}`)
+    },
+    onmessage(ev) {
+      if (ev.data === '[DONE]')
+        return
+      onEvent(JSON.parse(ev.data) as HitlSseEvent)
+    },
+    onerror(err) {
+      throw err
+    },
+  })
+}
+
 export async function startHitlWorkflow(
   input: string,
   onEvent: (event: HitlSseEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const url = `/api/hitl/workflow/sse?input=${encodeURIComponent(input)}`
-  const response = await fetch(url, signal ? { signal } : undefined)
-  if (!response.body)
-    throw new Error('Start workflow failed: empty response body')
-
-  await consumeSse(response, payload => onEvent(payload as HitlSseEvent))
+  await streamHitlSse(url, onEvent, { signal })
 }
 
 export async function resumeHitlWorkflow(
@@ -31,17 +62,10 @@ export async function resumeHitlWorkflow(
   onEvent: (event: HitlSseEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const init: RequestInit = {
+  await streamHitlSse(`/api/hitl/workflow/${threadId}/resume`, onEvent, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(decision),
-  }
-  if (signal)
-    init.signal = signal
-
-  const response = await fetch(`/api/hitl/workflow/${threadId}/resume`, init)
-  if (!response.body)
-    throw new Error('Resume workflow failed: empty response body')
-
-  await consumeSse(response, payload => onEvent(payload as HitlSseEvent))
+    signal,
+  })
 }

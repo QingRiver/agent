@@ -37,12 +37,8 @@ const getWeatherTool = tool(
 const tools = [getWeatherTool]
 
 const llm = new ChatOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  model: process.env.OPENAI_MODEL ?? 'deepseek-v4-flash',
+  model: process.env.OPENAI_MODEL ?? '',
   temperature: 0,
-  ...(process.env.OPENAI_BASE_URL
-    ? { configuration: { baseURL: process.env.OPENAI_BASE_URL } }
-    : {}),
 })
 
 const llmWithTools = llm.bindTools(tools)

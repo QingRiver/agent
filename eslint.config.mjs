@@ -20,4 +20,10 @@ export default antfu({
   rules: {
     'react-refresh/only-export-components': 'off',
   },
+}, {
+  // dotenv 必须在 router/graph 加载前执行，不可被 import 排序挪到文件末尾
+  files: ['apps/server/src/index.ts'],
+  rules: {
+    'perfectionist/sort-imports': 'off',
+  },
 })
