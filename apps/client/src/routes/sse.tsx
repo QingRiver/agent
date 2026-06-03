@@ -1,5 +1,5 @@
 import type { SseMessage } from '../lib/streamSimpleGraph'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useCallback, useRef, useState } from 'react'
 import { streamSimpleGraph } from '../lib/streamSimpleGraph'
 
@@ -76,7 +76,10 @@ function SsePage() {
           {' '}
           <code className="rounded bg-slate-800 px-1.5 py-0.5">GET /sample/simpleGraph/sse</code>
           {' '}
-          并流式打印后端事件。
+          并流式打印后端事件。AG-UI 版见
+          {' '}
+          <Link to="/simple" className="text-emerald-400 hover:underline">/simple</Link>
+          。
         </p>
 
         <div className="mt-4 flex flex-wrap gap-3">

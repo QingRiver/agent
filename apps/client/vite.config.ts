@@ -32,8 +32,15 @@ export default defineConfig({
   server: {
     ...(https ? { https } : {}),
     proxy: {
+      // 更具体的路径必须写在 /api 之前
+      '/api/copilotkit': {
+        target: 'https://127.0.0.1:3000',
+        changeOrigin: true,
+        secure: false,
+        rewrite: path => path.replace(/^\/api\/copilotkit/, '/copilotkit'),
+      },
       '/api': {
-        target: 'https://localhost:3000',
+        target: 'https://127.0.0.1:3000',
         changeOrigin: true,
         secure: false,
         rewrite: path => path.replace(/^\/api/, ''),

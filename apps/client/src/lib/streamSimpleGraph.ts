@@ -1,10 +1,7 @@
+import type { SseMessage } from './sseMessage'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 
-export interface SseMessage {
-  type: 'start' | 'update' | 'done' | 'error'
-  data?: Record<string, unknown>
-  message?: string
-}
+export type { SseMessage } from './sseMessage'
 
 export interface StreamSimpleGraphOptions {
   onMessage: (message: SseMessage) => void

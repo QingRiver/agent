@@ -16,8 +16,12 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter server --filter client dev",
-    "lint": "pnpm exec eslint apps",
-    "format": "pnpm exec eslint apps  --fix"
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "pnpm exec eslint apps packages",
+    "format": "pnpm exec eslint apps packages --fix"
+  },
+  "dependencies": {
+    "radash": "catalog:"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^9.0.0",
@@ -27,5 +31,10 @@
     "eslint-plugin-format": "^2.0.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7"
+  },
+  "pnpm": {
+    "overrides": {
+      "rxjs": "7.8.2"
+    }
   }
 }

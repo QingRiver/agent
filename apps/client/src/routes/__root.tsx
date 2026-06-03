@@ -19,13 +19,25 @@ function RootLayout() {
             to="/sse"
             className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
           >
-            LangGraph SSE
+            SSE
+          </Link>
+          <Link
+            to="/simple"
+            className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
+          >
+            Simple
           </Link>
           <Link
             to="/weather"
             className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
           >
-            Weather Agent
+            Weather
+          </Link>
+          <Link
+            to="/weather/sse"
+            className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
+          >
+            Weather SSE
           </Link>
           <Link
             to="/hitl"

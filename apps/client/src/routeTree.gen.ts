@@ -11,8 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WeatherRouteImport } from './routes/weather'
 import { Route as SseRouteImport } from './routes/sse'
+import { Route as SimpleRouteImport } from './routes/simple'
 import { Route as HitlRouteImport } from './routes/hitl'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as WeatherIndexRouteImport } from './routes/weather.index'
+import { Route as WeatherSseRouteImport } from './routes/weather.sse'
 
 const WeatherRoute = WeatherRouteImport.update({
   id: '/weather',
@@ -22,6 +25,11 @@ const WeatherRoute = WeatherRouteImport.update({
 const SseRoute = SseRouteImport.update({
   id: '/sse',
   path: '/sse',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SimpleRoute = SimpleRouteImport.update({
+  id: '/simple',
+  path: '/simple',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HitlRoute = HitlRouteImport.update({
@@ -34,39 +42,73 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WeatherIndexRoute = WeatherIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => WeatherRoute,
+} as any)
+const WeatherSseRoute = WeatherSseRouteImport.update({
+  id: '/sse',
+  path: '/sse',
+  getParentRoute: () => WeatherRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/hitl': typeof HitlRoute
+  '/simple': typeof SimpleRoute
   '/sse': typeof SseRoute
-  '/weather': typeof WeatherRoute
+  '/weather': typeof WeatherRouteWithChildren
+  '/weather/sse': typeof WeatherSseRoute
+  '/weather/': typeof WeatherIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/hitl': typeof HitlRoute
+  '/simple': typeof SimpleRoute
   '/sse': typeof SseRoute
-  '/weather': typeof WeatherRoute
+  '/weather/sse': typeof WeatherSseRoute
+  '/weather': typeof WeatherIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/hitl': typeof HitlRoute
+  '/simple': typeof SimpleRoute
   '/sse': typeof SseRoute
-  '/weather': typeof WeatherRoute
+  '/weather': typeof WeatherRouteWithChildren
+  '/weather/sse': typeof WeatherSseRoute
+  '/weather/': typeof WeatherIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/hitl' | '/sse' | '/weather'
+  fullPaths:
+    | '/'
+    | '/hitl'
+    | '/simple'
+    | '/sse'
+    | '/weather'
+    | '/weather/sse'
+    | '/weather/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/hitl' | '/sse' | '/weather'
-  id: '__root__' | '/' | '/hitl' | '/sse' | '/weather'
+  to: '/' | '/hitl' | '/simple' | '/sse' | '/weather/sse' | '/weather'
+  id:
+    | '__root__'
+    | '/'
+    | '/hitl'
+    | '/simple'
+    | '/sse'
+    | '/weather'
+    | '/weather/sse'
+    | '/weather/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HitlRoute: typeof HitlRoute
+  SimpleRoute: typeof SimpleRoute
   SseRoute: typeof SseRoute
-  WeatherRoute: typeof WeatherRoute
+  WeatherRoute: typeof WeatherRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -85,6 +127,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/simple': {
+      id: '/simple'
+      path: '/simple'
+      fullPath: '/simple'
+      preLoaderRoute: typeof SimpleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/hitl': {
       id: '/hitl'
       path: '/hitl'
@@ -99,14 +148,42 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/weather/': {
+      id: '/weather/'
+      path: '/'
+      fullPath: '/weather/'
+      preLoaderRoute: typeof WeatherIndexRouteImport
+      parentRoute: typeof WeatherRoute
+    }
+    '/weather/sse': {
+      id: '/weather/sse'
+      path: '/sse'
+      fullPath: '/weather/sse'
+      preLoaderRoute: typeof WeatherSseRouteImport
+      parentRoute: typeof WeatherRoute
+    }
   }
 }
+
+interface WeatherRouteChildren {
+  WeatherSseRoute: typeof WeatherSseRoute
+  WeatherIndexRoute: typeof WeatherIndexRoute
+}
+
+const WeatherRouteChildren: WeatherRouteChildren = {
+  WeatherSseRoute: WeatherSseRoute,
+  WeatherIndexRoute: WeatherIndexRoute,
+}
+
+const WeatherRouteWithChildren =
+  WeatherRoute._addFileChildren(WeatherRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HitlRoute: HitlRoute,
+  SimpleRoute: SimpleRoute,
   SseRoute: SseRoute,
-  WeatherRoute: WeatherRoute,
+  WeatherRoute: WeatherRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

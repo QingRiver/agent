@@ -10,19 +10,25 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "tsx scripts/dev.ts",
+    "typecheck": "tsc --noEmit",
     "cert": "mkdir -p certificates && mkcert -key-file certificates/localhost-key.pem -cert-file certificates/localhost.pem localhost 127.0.0.1 ::1"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.9",
-    "@langchain/core": "^1.1.48",
-    "@langchain/langgraph": "^1.3.2",
-    "@langchain/openai": "^1.4.7",
-    "dotenv": "^17.4.2",
-    "hono": "^4.12.7",
-    "radash": "^12.1.1",
-    "zod": "^4.4.3"
+    "@ag-ui/client": "catalog:",
+    "@ag-ui/core": "catalog:",
+    "@agent/graph": "workspace:*",
+    "@agent/tools": "workspace:*",
+    "@copilotkit/runtime": "catalog:",
+    "@hono/node-server": "catalog:",
+    "@langchain/core": "catalog:",
+    "@langchain/langgraph": "catalog:",
+    "@langchain/openai": "catalog:",
+    "dotenv": "catalog:",
+    "hono": "catalog:",
+    "rxjs": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "tsx": "^4.22.4"
+    "tsx": "catalog:"
   }
 }

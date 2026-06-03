@@ -10,20 +10,32 @@ function HomePage() {
       <div className="w-full rounded-2xl border border-slate-800 bg-slate-900/60 p-8">
         <h1 className="text-3xl font-semibold tracking-tight">Agent Client</h1>
         <p className="mt-3 text-slate-300">
-          使用 TanStack Router 访问 LangGraph SSE 或人在回路（HITL）演示页面。
+          LangGraph 纯 SSE、CopilotKit AG-UI 与人在回路（HITL）演示。
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
             to="/sse"
             className="inline-block rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400"
           >
-            LangGraph SSE
+            Simple SSE
+          </Link>
+          <Link
+            to="/simple"
+            className="inline-block rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-800"
+          >
+            Simple AG-UI
           </Link>
           <Link
             to="/weather"
             className="inline-block rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-800"
           >
-            Weather Agent
+            Weather AG-UI
+          </Link>
+          <Link
+            to="/weather/sse"
+            className="inline-block rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-800"
+          >
+            Weather SSE
           </Link>
           <Link
             to="/hitl"

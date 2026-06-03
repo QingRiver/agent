@@ -21,16 +21,16 @@ description: >-
 
 | Layer | Location | Responsibility |
 | ----- | -------- | -------------- |
-| Graph | [weatherGraph.ts](../../../apps/server/src/graphs/weatherGraph.ts) | LangGraph ReAct：`agent` ↔ `tools` |
-| Tool impl | [openMeteo.ts](../../../apps/server/src/tools/openMeteo.ts) | `fetchWeatherByCity` — Open-Meteo 地理编码 + 实况 |
-| Tool binding | `weatherGraph.ts` | `tool(...)` + `ToolNode` 注册 `get_weather` |
+| Graph | [packages/graph/src/weatherGraph.ts](../../../packages/graph/src/weatherGraph.ts) | LangGraph ReAct：`agent` ↔ `tools` |
+| Tool impl | [packages/tools](../../../packages/tools) | `import { openMeteo } from '@agent/tools'` |
+| Server wire-up | [graphs/index.ts](../../../apps/server/src/graphs/index.ts) | `*.compile({ checkpointer })` |
 
-**Do not** put Open-Meteo HTTP logic in `graphs/`; keep external APIs in `tools/`.
+**Do not** put Open-Meteo HTTP logic in `@agent/graph`; keep external APIs in `@agent/tools`.
 
 ## Adding a new sample endpoint
 
-1. Implement graph in `apps/server/src/graphs/`.
-2. Implement Agent tools in `apps/server/src/tools/` when calling external APIs.
+1. Implement graph in `packages/graph/src/`.
+2. Implement external tools in `packages/tools/` when calling APIs.
 3. Add handler on `SampleController` with `@Get(...)`.
 4. For streaming: `return createSseResponse(await graphApp.stream(input, { streamMode: 'updates' }))` — [createSseResponse](../../../apps/server/src/utils/sse.ts) wraps errors and `[DONE]`.
 5. Client: add route under `apps/client/src/routes/` and lib helper if needed.

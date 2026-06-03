@@ -1,12 +1,12 @@
 import type { BaseMessage } from '@langchain/core/messages'
 import process from 'node:process'
-import { AIMessage, HumanMessage } from '@langchain/core/messages'
+import { openMeteo } from '@agent/tools'
+import { AIMessage } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { Annotation, StateGraph } from '@langchain/langgraph'
 import { ToolNode } from '@langchain/langgraph/prebuilt'
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
-import { fetchWeatherByCity } from '../tools/openMeteo'
 
 const WeatherState = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
@@ -18,7 +18,7 @@ const WeatherState = Annotation.Root({
 const getWeatherTool = tool(
   async ({ location }) => {
     try {
-      return await fetchWeatherByCity(location)
+      return await openMeteo.fetchWeatherByCity(location)
     }
     catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -55,15 +55,9 @@ function shouldContinue(state: typeof WeatherState.State): 'tools' | '__end__' {
   return '__end__'
 }
 
-const workflow = new StateGraph(WeatherState)
+export const weatherGraph = new StateGraph(WeatherState)
   .addNode('agent', chatbot)
   .addNode('tools', new ToolNode(tools))
   .addEdge('__start__', 'agent')
   .addConditionalEdges('agent', shouldContinue)
   .addEdge('tools', 'agent')
-
-export const weatherGraphApp = workflow.compile()
-
-export function buildWeatherInput(userText: string) {
-  return { messages: [new HumanMessage(userText)] }
-}

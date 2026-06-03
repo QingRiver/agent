@@ -1,6 +1,8 @@
 # server
 
-基于 [Hono](https://hono.dev/) + [@hono/node-server](https://github.com/honojs/node-server) 的 HTTP/2 HTTPS 服务：装饰器注册路由、LangGraph 示例图、SSE 流式输出。开发环境使用 [tsx](https://github.com/privatenumber/tsx) 直接运行 TypeScript。
+基于 [Hono](https://hono.dev/) + [@hono/node-server](https://github.com/honojs/node-server) 的 HTTP/2 HTTPS 服务：LangGraph 图、AG-UI 适配层、CopilotRuntime。开发环境使用 [tsx](https://github.com/privatenumber/tsx) 直接运行 TypeScript。
+
+LangGraph 与 CopilotKit 的接法说明见 wiki：[CopilotKit Runtime × LangGraph × AG-UI](../../wiki/CopilotKit-Runtime-LangGraph-AGUI.md)（官方 `@copilotkit/runtime/langgraph` vs 本仓库 `src/agui`）。
 
 ## 前置条件
 
@@ -35,119 +37,80 @@ pnpm --filter server dev
 
 复制模板：`cp apps/server/.env.example apps/server/.env`
 
-服务入口已 `import 'dotenv/config'`，启动时自动加载 `.env`。
-
 ## API
 
-| 方法   | 路径                              | 说明                                             |
-| ------ | --------------------------------- | ------------------------------------------------ |
-| `GET`  | `/`                               | 心跳：路径、时间戳、`protocol`（如 `h2`）        |
-| `GET`  | `/:param`                         | 动态参数路由                                     |
-| `GET`  | `/sample/simpleGraph`             | 同步执行 LangGraph，返回最终 state               |
-| `GET`  | `/sample/simpleGraph/sse`         | SSE 流式推送 LangGraph `updates` 事件            |
-| `GET`  | `/sample/weather`                 | Weather ReAct Agent，仅 SSE；query `message`     |
-| `GET`  | `/hitl/workflow/sse`              | HITL 工作流启动，SSE；query `input`（可选）      |
-| `POST` | `/hitl/workflow/:threadId/resume` | HITL 审批恢复，SSE；body `{ approved, reason? }` |
+| 方法   | 路径                      | 说明                                                    |
+| ------ | ------------------------- | ------------------------------------------------------- |
+| `GET`  | `/`、`/heartbeat`         | 心跳 JSON                                               |
+| `GET`  | `/:param`                 | 动态参数                                                |
+| `GET`  | `/sample/simpleGraph`     | 同步 invoke simpleGraph                                 |
+| `POST` | `/api/agent/:agentId/run` | AG-UI SSE（`agentId`: `hitl` \| `simple` \| `weather`） |
+| `*`    | `/copilotkit/*`           | CopilotRuntime（前端 CopilotKit 使用）                  |
 
 ### curl 示例
 
-自签证书需加 `-k`：
-
 ```bash
 # 心跳
-curl -sk https://localhost:3000/
+curl -sk https://localhost:3000/heartbeat
 
-# 动态参数
-curl -sk https://localhost:3000/world
+# CopilotKit runtime 信息
+curl -sk https://localhost:3000/copilotkit/info
 
-# LangGraph 同步
-curl -sk https://localhost:3000/sample/simpleGraph
-
-# LangGraph SSE（流式）
-curl -sk -N https://localhost:3000/sample/simpleGraph/sse
-
-# Weather Agent SSE
-curl -sk -N "https://localhost:3000/sample/weather?message=北京天气"
-
-# HITL 启动
-curl -sk -N "https://localhost:3000/hitl/workflow/sse"
-
-# HITL 恢复（替换 threadId）
-curl -sk -N -X POST "https://localhost:3000/hitl/workflow/<threadId>/resume" \
-  -H "Content-Type: application/json" \
-  -d '{"approved":true}'
+# AG-UI agent run（hitl）
+curl -sk -N -X POST https://localhost:3000/api/agent/hitl/run \
+  -H 'Content-Type: application/json' \
+  -d '{"threadId":"t1","runId":"r1","messages":[{"id":"m1","role":"user","content":"开始"}]}'
 ```
 
-### SSE 事件格式
+SSE 帧：`event: agent_event`，`data` 为 AG-UI `BaseEvent` JSON。
 
-每条消息为 `data: <json>\n\n`，例如：
-
-- `{ "type": "start" }`
-- `{ "type": "update", "data": { "node_a": { "messages": [...] } } }`
-- `{ "type": "done" }`
-- 结束帧：`data: [DONE]\n\n`
+HITL 挂起时，finalize 会依次发出 `CUSTOM`（`name: on_interrupt`，`value` 为审批载荷）与 `RUN_FINISHED`（`outcome.type: interrupt`）。客户端用 CopilotKit `useInterrupt` + `resolve(decision)`，经 `forwardedProps.command.resume` 恢复为 `Command({ resume })`（不再伪造 `human_approval` TOOL_CALL）。
 
 ## 项目结构
 
 ```text
 src/
-├── index.ts                 # Hono + HTTP/2 入口
-├── controller/
-│   ├── default.ts           # 心跳、动态参数
-│   ├── sample.ts            # simpleGraph / weather SSE
-│   └── hitl.ts              # 人在回路工作流 SSE
+├── index.ts
 ├── graphs/
-│   ├── simpleGraph.ts       # 两节点示例图
-│   ├── weatherGraph.ts      # ReAct Agent（绑定 get_weather 工具）
-│   └── hitlGraph.ts         # interrupt + MemorySaver 挂起/恢复
-├── tools/
-│   └── openMeteo.ts         # get_weather：Open-Meteo 地理编码与实况
-├── middleware/
-│   └── logger.ts            # 请求日志（query 已解码，中文可读）
-├── router/
-│   ├── decorator.ts         # @Controller / @Get / @Post
-│   ├── registry.ts          # 扫描控制器、排序注册
-│   ├── routeConfig.ts       # 注册的 Controller 列表
-│   └── index.ts             # 注册到 Hono 实例
-├── types.ts                 # AppEnv（Http2Bindings）
-└── utils/
-    ├── debug.ts             # @Debug 方法装饰器
-    ├── sanitize.ts
-    └── sse.ts               # createSseStream / createSseResponse
-certificates/                # mkcert 证书（gitignore）
+│   ├── index.ts         # 注入 checkpointer，绑定 @agent/graph
+│   └── memoryCheckpointer.ts
+├── agent/
+│   ├── index.ts         # getAgent、agents 注册表
+│   ├── hitl.ts
+│   ├── simple.ts
+│   └── weather.ts
+├── agui/
+│   ├── stream/fromLangGraphEvents.ts   # graph.streamEvents(v2) → Observable
+│   ├── map/langGraphEventToAgUi.ts
+│   ├── pipeline/runGraphAguiStream.ts  # RxJS：RUN 生命周期 + finalize
+│   ├── interrupt/emitInterrupt.ts      # CUSTOM(on_interrupt) + outcome.interrupt
+│   ├── runGraphAsAguiStream.ts
+│   └── LangGraphAguiAgent.ts
+├── copilot/
+│   ├── runtime.ts
+│   └── honoBridge.ts    # /copilotkit
+├── controller/
+│   ├── agent.ts         # POST /api/agent/:agentId/run（AG-UI SSE）
+│   ├── default.ts       # 心跳
+│   └── sample.ts        # LangGraph 示例
+├── middleware/logger.ts
+└── router/
+certificates/
 ```
-
-## 路由机制
-
-1. `@Controller(prefix)` 声明类级前缀，`@Get('/sub')` 声明方法路由。
-2. 在 `routeConfig.ts` 的 `collectRoutesFromControllers([...])` 中注册 Controller。
-3. 静态路由优先于 `/:param`（`exclusive: 'specificity'` + 注册前排序）。
-
-### 新增接口
-
-1. 在 `src/controller/` 添加或扩展 Controller。
-2. 图逻辑放 `src/graphs/`；对外 API / Agent 工具放 `src/tools/`。
-3. 在 `src/router/routeConfig.ts` 的 `collectRoutesFromControllers([...])` 注册 Controller。
-4. SSE 路由：`return createSseResponse(await graphApp.stream(..., { streamMode: 'updates' }))`。
-5. 保存后 `tsx watch` 自动重载。
 
 ## 中间件顺序
 
 ```text
-logger → serveStatic(public) → Hono 路由
+logger → serveStatic(public) → copilotKit → decoratorRoutes（含 AgentController）
 ```
-
-## 脚本
-
-| 命令        | 说明                        |
-| ----------- | --------------------------- |
-| `pnpm dev`  | 预检后 `tsx watch` 开发     |
-| `pnpm cert` | mkcert 生成 `certificates/` |
 
 ## 技术栈
 
 - Hono 4、`@hono/node-server`
-- `@langchain/langgraph`、`@langchain/openai`（`simpleGraph`、`weatherGraph`）
+- `@ag-ui/client`、`@ag-ui/core`、`@copilotkit/runtime`
+- `@langchain/langgraph`、`@langchain/openai`
 - HTTP/2（TLS，`allowHTTP1: true`）
-- TypeScript Stage 3 装饰器 + tsx
-- Radash（工具库）
+
+## Lint
+
+仓库根目录：`pnpm lint`（覆盖 `apps/server`）。

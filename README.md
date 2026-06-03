@@ -6,7 +6,9 @@
 apps/
   server/          # Koa 3 HTTP/2 HTTPS API（装饰器路由、LangGraph）
   client/          # Vite + React + TanStack Router + Tailwind
-packages/          # 共享包（预留）
+packages/
+  graph/           # @agent/graph — LangGraph 演示图
+  tools/           # @agent/tools — Open-Meteo 等工具
 ```
 
 ## 前置条件
@@ -88,18 +90,18 @@ pnpm --filter client typecheck
 | 层级   | 技术                                                |
 | ------ | --------------------------------------------------- |
 | 根目录 | TypeScript、ESLint（@antfu/eslint-config）、Vitest  |
-| Server | Hono 4、`@hono/node-server`、LangGraph、Radash、tsx |
-| Client | React 19、Vite 8、TanStack Router、Tailwind CSS 4   |
+| Server | Hono 4、AG-UI、`@copilotkit/runtime`、LangGraph、tsx |
+| Client | React 19、CopilotKit、TanStack Router、Tailwind CSS 4 |
 
 ## 联调说明
 
-- Client 通过 Vite 代理将 `/api/*` 转发到 Server（去掉 `/api` 前缀）。
+- Client：`/api/copilotkit` → server `/copilotkit`（CopilotKit）；`/api/*` → 其余 API。
 - 演示页面（先完成上文 **env 配置** 再访问 `/weather`）：
 
-| 页面                             | 说明                                 |
-| -------------------------------- | ------------------------------------ |
-| `https://localhost:5173/sse`     | 简单两节点图 SSE                     |
-| `https://localhost:5173/weather` | Weather Agent 聊天气泡 + 工具调用    |
-| `https://localhost:5173/hitl`    | LangGraph `interrupt` + 人工审批恢复 |
+| 页面                             | 说明                                                    |
+| -------------------------------- | ------------------------------------------------------- |
+| `https://localhost:5173/sse`     | `simple` Agent · CopilotChat + AG-UI 流                 |
+| `https://localhost:5173/weather` | `weather` Agent · ReAct + Open-Meteo 工具               |
+| `https://localhost:5173/hitl`    | `hitl` Agent · `useInterrupt` 审批 + `Command(resume)` |
 
-Server 代码分层：`graphs/` 编排 LangGraph，`tools/` 放 Agent 工具实现（如 Open-Meteo）。
+Server：`graphs/` 图定义 · `agui/` 协议转换 · `copilot/` CopilotRuntime · `POST /api/agent/:agentId/run` 调试 SSE。
