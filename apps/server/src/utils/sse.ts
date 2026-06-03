@@ -1,6 +1,13 @@
 import { Readable } from 'node:stream'
 import { z } from 'zod'
 
+const SSE_HEADERS: Record<string, string> = {
+  'Content-Type': 'text/event-stream; charset=utf-8',
+  'Cache-Control': 'no-cache, no-transform',
+  'Connection': 'keep-alive',
+  'X-Accel-Buffering': 'no',
+}
+
 export interface SseStreamMeta {
   /** 合并进首个 `{ type: 'start' }` 事件 */
   start?: Record<string, unknown>
@@ -63,4 +70,13 @@ export function createSseStream(
   }
 
   return Readable.from(encode())
+}
+
+/** 将 AsyncIterable 业务事件流转为 Hono/Fetch `Response`（SSE） */
+export function createSseResponse(
+  events: AsyncIterable<unknown>,
+  meta: SseStreamMeta = {},
+): Response {
+  const body = Readable.toWeb(createSseStream(events, meta)) as ReadableStream<Uint8Array>
+  return new Response(body, { status: 200, headers: SSE_HEADERS })
 }

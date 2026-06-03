@@ -1,4 +1,5 @@
-import type { Context } from 'koa'
+import type { Context } from 'hono'
+import type { AppEnv } from '../types'
 import { isArray, isFunction, isObject, isString, isSymbol } from 'radash'
 
 const DEFAULT_REDACT = new Set(['password', 'token', 'authorization', 'cookie', 'set-cookie'])
@@ -17,20 +18,20 @@ function mergedRedact(keys?: string[]): Set<string> {
   ])
 }
 
-function isKoaContext(x: unknown): x is Context {
+function isHonoContext(x: unknown): x is Context<AppEnv> {
   if (!isObject(x))
     return false
   const o = x as Record<string, unknown>
-  return isString(o.method) && isString(o.url) && 'status' in o
+  return o.req != null && typeof (o.req as { method?: string }).method === 'string'
 }
 
-function summarizeKoaContext(ctx: Context, maxStringLen: number): Record<string, unknown> {
+function summarizeHonoContext(ctx: Context<AppEnv>, maxStringLen: number): Record<string, unknown> {
+  const url = new URL(ctx.req.url)
   return {
-    kind: 'Koa.Context',
-    method: ctx.method,
-    path: ctx.path,
-    url: truncate(String(ctx.url), maxStringLen),
-    status: ctx.status,
+    kind: 'Hono.Context',
+    method: ctx.req.method,
+    path: url.pathname,
+    url: truncate(url.toString(), maxStringLen),
   }
 }
 
@@ -64,8 +65,8 @@ export function summarizeValue(value: unknown, options: SanitizeOptions = {}, de
   if (isFunction(value))
     return `[Function ${value.name || 'anonymous'}]`
 
-  if (isKoaContext(value))
-    return summarizeKoaContext(value, maxStringLen)
+  if (isHonoContext(value))
+    return summarizeHonoContext(value, maxStringLen)
 
   if (isArray(value)) {
     const cap = Math.min(value.length, 20)

@@ -1,6 +1,6 @@
 # server
 
-基于 [Koa 3](https://koajs.com/) 的 HTTP/2 HTTPS 服务：装饰器注册路由、LangGraph 示例图、SSE 流式输出。开发环境使用 [tsx](https://github.com/privatenumber/tsx) 直接运行 TypeScript。
+基于 [Hono](https://hono.dev/) + [@hono/node-server](https://github.com/honojs/node-server) 的 HTTP/2 HTTPS 服务：装饰器注册路由、LangGraph 示例图、SSE 流式输出。开发环境使用 [tsx](https://github.com/privatenumber/tsx) 直接运行 TypeScript。
 
 ## 前置条件
 
@@ -91,7 +91,7 @@ curl -sk -N -X POST "https://localhost:3000/hitl/workflow/<threadId>/resume" \
 
 ```text
 src/
-├── index.ts                 # Koa + HTTP/2 入口
+├── index.ts                 # Hono + HTTP/2 入口
 ├── controller/
 │   ├── default.ts           # 心跳、动态参数
 │   ├── sample.ts            # simpleGraph / weather SSE
@@ -103,17 +103,17 @@ src/
 ├── tools/
 │   └── openMeteo.ts         # get_weather：Open-Meteo 地理编码与实况
 ├── middleware/
-│   ├── logger.ts            # 请求日志（query 已解码，中文可读）
-│   └── sseResponder.ts      # 将 AsyncIterable 包装为 text/event-stream
+│   └── logger.ts            # 请求日志（query 已解码，中文可读）
 ├── router/
 │   ├── decorator.ts         # @Controller / @Get / @Post
 │   ├── registry.ts          # 扫描控制器、排序注册
 │   ├── routeConfig.ts       # 注册的 Controller 列表
-│   └── index.ts             # @koa/router（exclusive: specificity）
+│   └── index.ts             # 注册到 Hono 实例
+├── types.ts                 # AppEnv（Http2Bindings）
 └── utils/
     ├── debug.ts             # @Debug 方法装饰器
     ├── sanitize.ts
-    └── sse.ts               # SSE 流封装
+    └── sse.ts               # createSseStream / createSseResponse
 certificates/                # mkcert 证书（gitignore）
 ```
 
@@ -128,13 +128,13 @@ certificates/                # mkcert 证书（gitignore）
 1. 在 `src/controller/` 添加或扩展 Controller。
 2. 图逻辑放 `src/graphs/`；对外 API / Agent 工具放 `src/tools/`。
 3. 在 `src/router/routeConfig.ts` 的 `collectRoutesFromControllers([...])` 注册 Controller。
-4. SSE 路由：`ctx.body = graphApp.stream(..., { streamMode: 'updates' })`，由 `sseResponder` 统一封装。
+4. SSE 路由：`return createSseResponse(await graphApp.stream(..., { streamMode: 'updates' }))`。
 5. 保存后 `tsx watch` 自动重载。
 
 ## 中间件顺序
 
 ```text
-bodyParser → koa-static(public) → logger → sseResponder → router
+logger → serveStatic(public) → Hono 路由
 ```
 
 ## 脚本
@@ -146,7 +146,7 @@ bodyParser → koa-static(public) → logger → sseResponder → router
 
 ## 技术栈
 
-- Koa 3、`@koa/router`
+- Hono 4、`@hono/node-server`
 - `@langchain/langgraph`、`@langchain/openai`（`simpleGraph`、`weatherGraph`）
 - HTTP/2（TLS，`allowHTTP1: true`）
 - TypeScript Stage 3 装饰器 + tsx

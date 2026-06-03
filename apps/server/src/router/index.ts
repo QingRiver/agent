@@ -1,34 +1,27 @@
-import type { HttpMethod } from '@koa/router'
-import type { Middleware } from 'koa'
+import type { Hono } from 'hono'
+import type { AppEnv } from '../types'
 import type { RouterConfig } from './registry'
-import Router from '@koa/router'
-import { get, isFunction } from 'radash'
 import { routerConfigs } from './routeConfig'
 
-function registerRoute(router: Router, config: RouterConfig): void {
-  const method = config.method.toLowerCase() as HttpMethod
-  const register = get(router, method)
-  if (!isFunction(register))
-    throw new Error(`Unsupported HTTP method: ${config.method}`)
-
-  register.call(router, config.path, config.handler)
+const METHOD_REGISTRARS: Record<
+  RouterConfig['method'],
+  (app: Hono<AppEnv>, path: string, handler: RouterConfig['handler']) => void
+> = {
+  get: (app, path, handler) => app.get(path, handler),
+  post: (app, path, handler) => app.post(path, handler),
+  put: (app, path, handler) => app.put(path, handler),
+  delete: (app, path, handler) => app.delete(path, handler),
+  patch: (app, path, handler) => app.patch(path, handler),
+  options: (app, path, handler) => app.options(path, handler),
+  head: (app, path, handler) => app.head(path, handler),
+  all: (app, path, handler) => app.all(path, handler),
 }
 
-function createRouter(): Router {
-  const router = new Router({ exclusive: 'specificity' })
-
-  for (const config of routerConfigs)
-    registerRoute(router, config)
-
-  return router
-}
-
-const koaRouter = createRouter()
-const routes = koaRouter.routes() as Middleware
-const allowedMethods = koaRouter.allowedMethods() as Middleware
-
-export const router: Middleware = async (ctx, next) => {
-  await routes(ctx, async () => {
-    await allowedMethods(ctx, next)
-  })
+export function registerRoutes(app: Hono<AppEnv>): void {
+  for (const config of routerConfigs) {
+    const register = METHOD_REGISTRARS[config.method]
+    if (!register)
+      throw new Error(`Unsupported HTTP method: ${config.method}`)
+    register(app, config.path, config.handler)
+  }
 }

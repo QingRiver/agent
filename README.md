@@ -85,11 +85,11 @@ pnpm --filter client typecheck
 
 ## 技术栈
 
-| 层级   | 技术                                               |
-| ------ | -------------------------------------------------- |
-| 根目录 | TypeScript、ESLint（@antfu/eslint-config）、Vitest |
-| Server | Koa 3、`@koa/router`、LangGraph、Radash、tsx       |
-| Client | React 19、Vite 8、TanStack Router、Tailwind CSS 4  |
+| 层级   | 技术                                                |
+| ------ | --------------------------------------------------- |
+| 根目录 | TypeScript、ESLint（@antfu/eslint-config）、Vitest  |
+| Server | Hono 4、`@hono/node-server`、LangGraph、Radash、tsx |
+| Client | React 19、Vite 8、TanStack Router、Tailwind CSS 4   |
 
 ## 联调说明
 

@@ -1,5 +1,7 @@
-import type { Context, Next } from 'koa'
+import type { Context, Next } from 'hono'
 import type { TLSSocket } from 'node:tls'
+import type { AppEnv } from '../types'
+import { createMiddleware } from 'hono/factory'
 import { get } from 'radash'
 
 const RESET = '\x1B[0m'
@@ -33,31 +35,28 @@ function colorLatency(ms: number): string {
   return colorize(`${ms}ms`, tier.color)
 }
 
-/** 用已解码的 path / query 拼日志 URL，避免 %E6%B7%B1 等编码 */
-function formatRequestUrl(ctx: Context): string {
-  const entries = Object.entries(ctx.query)
-  if (entries.length === 0)
-    return ctx.path
+function formatRequestUrl(c: Context<AppEnv>): string {
+  const url = new URL(c.req.url)
+  if (!url.search)
+    return url.pathname
 
-  const search = entries
-    .flatMap(([key, value]) => {
-      if (Array.isArray(value))
-        return value.map(v => `${key}=${v}`)
-      if (value == null)
-        return []
-      return [`${key}=${value}`]
-    })
+  const search = [...url.searchParams.entries()]
+    .flatMap(([key, value]) => [`${key}=${value}`])
     .join('&')
 
-  return search ? `${ctx.path}?${search}` : ctx.path
+  return `${url.pathname}?${search}`
 }
 
-export async function logger(ctx: Context, next: Next) {
+function alpnProtocol(c: Context<AppEnv>): string {
+  const socket = c.env.incoming.socket as TLSSocket | undefined
+  return socket?.alpnProtocol || 'http/1.1'
+}
+
+export const logger = createMiddleware<AppEnv>(async (c: Context<AppEnv>, next: Next) => {
   const start = Date.now()
   await next()
   const ms = Date.now() - start
-  const protocol = (ctx.req.socket as TLSSocket).alpnProtocol || 'http/1.1'
-  const method = colorMethod(ctx.method)
+  const method = colorMethod(c.req.method)
   const latency = colorLatency(ms)
-  console.log(`${method} ${formatRequestUrl(ctx)} - ${latency} - Protocol: ${protocol}`)
-}
+  console.log(`${method} ${formatRequestUrl(c)} - ${latency} - Protocol: ${alpnProtocol(c)}`)
+})

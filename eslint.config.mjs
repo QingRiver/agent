@@ -10,6 +10,7 @@ export default antfu({
     '**/coverage/**',
     '**/node_modules/**',
     '**/routeTree.gen.ts',
+    '**/wiki/**',
   ],
   rules: {
     'no-console': 'off',

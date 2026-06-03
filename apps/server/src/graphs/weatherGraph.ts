@@ -1,6 +1,6 @@
 import type { BaseMessage } from '@langchain/core/messages'
 import process from 'node:process'
-import { HumanMessage, isAIMessage } from '@langchain/core/messages'
+import { AIMessage, HumanMessage } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { Annotation, StateGraph } from '@langchain/langgraph'
 import { ToolNode } from '@langchain/langgraph/prebuilt'
@@ -50,7 +50,7 @@ async function chatbot(state: typeof WeatherState.State) {
 
 function shouldContinue(state: typeof WeatherState.State): 'tools' | '__end__' {
   const lastMessage = state.messages.at(-1)
-  if (lastMessage && isAIMessage(lastMessage) && lastMessage.tool_calls?.length)
+  if (lastMessage && AIMessage.isInstance(lastMessage) && lastMessage.tool_calls?.length)
     return 'tools'
   return '__end__'
 }

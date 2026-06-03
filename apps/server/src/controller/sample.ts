@@ -1,32 +1,34 @@
-import type { Context } from 'koa'
+import type { Context } from 'hono'
+import type { AppEnv } from '../types'
 import { simpleGraphApp } from '../graphs/simpleGraph'
 import { buildWeatherInput, weatherGraphApp } from '../graphs/weatherGraph'
 import { Controller, Get } from '../router/decorator'
+import { createSseResponse } from '../utils/sse'
 
 @Controller('/sample')
 export class SampleController {
   @Get('/simpleGraph')
-  async simpleGraph(ctx: Context) {
-    ctx.body = await simpleGraphApp.invoke({ messages: [] })
+  async simpleGraph(c: Context<AppEnv>): Promise<Response> {
+    return c.json(await simpleGraphApp.invoke({ messages: [] }))
   }
 
   @Get('/simpleGraph/sse')
-  async simpleGraphSse(ctx: Context) {
-    ctx.body = await simpleGraphApp.stream(
+  async simpleGraphSse(_c: Context<AppEnv>): Promise<Response> {
+    const stream = await simpleGraphApp.stream(
       { messages: [] },
       { streamMode: 'updates' },
     )
+    return createSseResponse(stream)
   }
 
   @Get('/weather')
-  async weather(ctx: Context) {
-    const message = typeof ctx.query.message === 'string' && ctx.query.message
-      ? ctx.query.message
-      : '北京今天天气怎么样？'
+  async weather(c: Context<AppEnv>): Promise<Response> {
+    const message = c.req.query('message') ?? '北京今天天气怎么样？'
 
-    ctx.body = await weatherGraphApp.stream(
+    const stream = await weatherGraphApp.stream(
       buildWeatherInput(message),
       { streamMode: 'updates' },
     )
+    return createSseResponse(stream)
   }
 }

@@ -1,4 +1,4 @@
-import type { HttpMethod } from '@koa/router'
+export type HttpMethod = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head' | 'all'
 
 /** Class-level prefix from `@Controller` */
 export const PREFIX_SYM = Symbol.for('controllerPrefix')
@@ -29,16 +29,30 @@ export function Controller(prefix: string) {
   }
 }
 
+function appendRouteMeta(
+  target: object,
+  meta: RouteMeta,
+): void {
+  const existing = (target as any)[ROUTE_META_SYM] as RouteMeta | RouteMeta[] | undefined
+  if (existing == null) {
+    ;(target as any)[ROUTE_META_SYM] = meta
+    return
+  }
+  const list = Array.isArray(existing) ? existing : [existing]
+  list.push(meta)
+  ;(target as any)[ROUTE_META_SYM] = list
+}
+
 export function Route(method: HttpMethod, subPath: string) {
   return function <This, Args extends unknown[], Return>(
     target: (this: This, ...args: Args) => Return,
     context: ClassMethodDecoratorContext<This, (this: This, ...args: Args) => Return>,
   ): void {
-    ;(target as any)[ROUTE_META_SYM] = {
+    appendRouteMeta(target, {
       method,
       subPath,
       propertyKey: context.name,
-    } as RouteMeta
+    })
   }
 }
 

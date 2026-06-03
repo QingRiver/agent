@@ -1,16 +1,16 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    environment: "node",
+    environment: 'node',
     globals: true,
-    include: ["packages/**/*.test.ts"],
+    include: ['packages/**/*.test.ts'],
     coverage: {
-      provider: "v8",
-      reporter: ["json", "lcov", "text", "clover"],
-      reportsDirectory: "coverage",
-      include: ["packages/*/src/**/*.ts"],
-      exclude: ["**/*.test.ts", "**/node_modules/**"],
+      provider: 'v8',
+      reporter: ['json', 'lcov', 'text', 'clover'],
+      reportsDirectory: 'coverage',
+      include: ['packages/*/src/**/*.ts'],
+      exclude: ['**/*.test.ts', '**/node_modules/**'],
     },
   },
-});
+})

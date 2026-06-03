@@ -1,34 +1,38 @@
 import 'dotenv/config'
 import fs from 'node:fs'
-import http2 from 'node:http2'
 import path from 'node:path'
 import process from 'node:process'
-import Koa from 'koa'
-import bodyParser from 'koa-bodyparser'
-import serve from 'koa-static'
+import { createSecureServer } from 'node:http2'
+import { serve } from '@hono/node-server'
+import { serveStatic } from '@hono/node-server/serve-static'
+import { Hono } from 'hono'
 import { logger } from './middleware/logger'
-import { sseResponder } from './middleware/sseResponder'
-import { router } from './router/index'
+import { registerRoutes } from './router/index'
+import type { AppEnv } from './types'
 
-const app = new Koa()
-const port = process.env.PORT || 3000
+const port = Number(process.env.PORT) || 3000
 
-app.use(bodyParser()) // 解析请求体中间件
-app.use(serve('public')) // 静态文件服务
-app.use(logger)
-app.use(sseResponder)
-app.use(router)
+const app = new Hono<AppEnv>()
+
+app.use('*', logger)
+
+const publicDir = path.resolve(process.cwd(), 'public')
+if (fs.existsSync(publicDir))
+  app.use('*', serveStatic({ root: publicDir }))
+
+registerRoutes(app)
 
 const certificatesDir = path.resolve(process.cwd(), 'certificates')
-const server = http2.createSecureServer(
-  {
+
+serve({
+  fetch: app.fetch,
+  port,
+  createServer: createSecureServer,
+  serverOptions: {
     key: fs.readFileSync(path.join(certificatesDir, 'localhost-key.pem')),
     cert: fs.readFileSync(path.join(certificatesDir, 'localhost.pem')),
-    allowHTTP1: true, // 允许 HTTP/1.1 回退
+    allowHTTP1: true,
   },
-  app.callback(),
-)
-
-server.listen(port, () => {
-  console.log(`HTTP/2 Server is running on https://localhost:${port}`)
+}, (info) => {
+  console.log(`HTTP/2 Server is running on https://localhost:${info.port}`)
 })

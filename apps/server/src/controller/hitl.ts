@@ -1,4 +1,5 @@
-import type { Context } from 'koa'
+import type { Context } from 'hono'
+import type { AppEnv } from '../types'
 import { randomUUID } from 'node:crypto'
 import { Command } from '@langchain/langgraph'
 import { z } from 'zod'
@@ -8,6 +9,7 @@ import {
   hitlThreadConfig,
 } from '../graphs/hitlGraph'
 import { Controller, Get, Post } from '../router/decorator'
+import { createSseResponse } from '../utils/sse'
 
 @Controller('/hitl')
 export class HitlController {
@@ -19,10 +21,8 @@ export class HitlController {
   static readonly #threadIdParamSchema = z.uuid()
 
   @Get('/workflow/sse')
-  async workflowStartSse(ctx: Context) {
-    const input = typeof ctx.query.input === 'string' && ctx.query.input
-      ? ctx.query.input
-      : '向账户 0x123... 转账 100 ETH'
+  async workflowStartSse(c: Context<AppEnv>): Promise<Response> {
+    const input = c.req.query('input')?.trim() || '向账户 0x123... 转账 100 ETH'
 
     const threadId = randomUUID()
     const config = hitlThreadConfig(threadId)
@@ -49,22 +49,21 @@ export class HitlController {
       }
     }
 
-    ctx.body = events()
+    return createSseResponse(events())
   }
 
   @Post('/workflow/:threadId/resume')
-  async workflowResumeSse(ctx: Context) {
-    async function* events() {
-      const threadId = HitlController.#threadIdParamSchema.parse(ctx.params.threadId)
-      const approval = HitlController.#approvalBodySchema.parse(ctx.request.body)
+  async workflowResumeSse(c: Context<AppEnv>): Promise<Response> {
+    const threadId = HitlController.#threadIdParamSchema.parse(c.req.param('threadId'))
+    const approval = HitlController.#approvalBodySchema.parse(await c.req.json())
 
+    async function* events() {
       yield { type: 'thread', threadId }
 
       const config = hitlThreadConfig(threadId)
       const snapshot = await hitlGraphApp.getState(config)
-      if (!getInterruptPayload(snapshot)) {
+      if (!getInterruptPayload(snapshot))
         throw new Error('thread not found or not waiting for approval')
-      }
 
       const stream = await hitlGraphApp.stream(
         new Command({
@@ -85,6 +84,6 @@ export class HitlController {
       }
     }
 
-    ctx.body = events()
+    return createSseResponse(events())
   }
 }

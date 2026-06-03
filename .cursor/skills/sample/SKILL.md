@@ -32,7 +32,7 @@ description: >-
 1. Implement graph in `apps/server/src/graphs/`.
 2. Implement Agent tools in `apps/server/src/tools/` when calling external APIs.
 3. Add handler on `SampleController` with `@Get(...)`.
-4. For streaming: `ctx.body = await graphApp.stream(input, { streamMode: 'updates' })` — [sseResponder](../../../apps/server/src/middleware/sseResponder.ts) + [createSseStream](../../../apps/server/src/utils/sse.ts) wrap errors and `[DONE]`.
+4. For streaming: `return createSseResponse(await graphApp.stream(input, { streamMode: 'updates' }))` — [createSseResponse](../../../apps/server/src/utils/sse.ts) wraps errors and `[DONE]`.
 5. Client: add route under `apps/client/src/routes/` and lib helper if needed.
 
 ## Weather agent
