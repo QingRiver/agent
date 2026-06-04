@@ -2,7 +2,7 @@
 
 基于 [Hono](https://hono.dev/) + [@hono/node-server](https://github.com/honojs/node-server) 的 HTTP/2 HTTPS 服务：LangGraph 图、AG-UI 适配层、CopilotRuntime。开发环境使用 [tsx](https://github.com/privatenumber/tsx) 直接运行 TypeScript。
 
-LangGraph 与 CopilotKit 的接法说明见 wiki：[CopilotKit Runtime × LangGraph × AG-UI](../../wiki/CopilotKit-Runtime-LangGraph-AGUI.md)（官方 `@copilotkit/runtime/langgraph` vs 本仓库 `src/agui`）。
+LangGraph 与 CopilotKit 的接法说明见 wiki：[CopilotKit Runtime × LangGraph × AG-UI](../../wiki/CopilotKit-Runtime-LangGraph-AGUI.md)。AG-UI 流统一走 `streamEvents(v3)` + `@agent/graph` `AguiTransformer`（各 `src/agent/*Agent.ts` + `streamGraphAguiEvents.ts`）。
 
 ## 前置条件
 
@@ -44,7 +44,7 @@ pnpm --filter server dev
 | `GET`  | `/`、`/heartbeat`         | 心跳 JSON                                               |
 | `GET`  | `/:param`                 | 动态参数                                                |
 | `GET`  | `/sample/simpleGraph`     | 同步 invoke simpleGraph                                 |
-| `POST` | `/api/agent/:agentId/run` | AG-UI SSE（`agentId`: `hitl` \| `simple` \| `weather`） |
+| `POST` | `/api/agent/:agentId/run` | AG-UI SSE（`hitl` \| `simple` \| `simpleToolCall` \| `weather`） |
 | `*`    | `/copilotkit/*`           | CopilotRuntime（前端 CopilotKit 使用）                  |
 
 ### curl 示例
@@ -64,7 +64,7 @@ curl -sk -N -X POST https://localhost:3000/api/agent/hitl/run \
 
 SSE 帧：`event: agent_event`，`data` 为 AG-UI `BaseEvent` JSON。
 
-HITL 挂起时，finalize 会依次发出 `CUSTOM`（`name: on_interrupt`，`value` 为审批载荷）与 `RUN_FINISHED`（`outcome.type: interrupt`）。客户端用 CopilotKit `useInterrupt` + `resolve(decision)`，经 `forwardedProps.command.resume` 恢复为 `Command({ resume })`（不再伪造 `human_approval` TOOL_CALL）。
+HITL（`hitl` agent）经 `AguiTransformer` v3 投影：挂起时发出 `STATE_SNAPSHOT`、`CUSTOM(on_interrupt)`（CopilotKit 兼容）与 `RUN_FINISHED`（`outcome.type: interrupt`，`interrupts[].reason` 为 `confirmation`）。恢复：`forwardedProps.command.resume` 或 `RunAgentInput.resume[]` → `Command({ resume })`。
 
 ## 项目结构
 
@@ -72,20 +72,12 @@ HITL 挂起时，finalize 会依次发出 `CUSTOM`（`name: on_interrupt`，`val
 src/
 ├── index.ts
 ├── graphs/
-│   ├── index.ts         # 注入 checkpointer，绑定 @agent/graph
-│   └── memoryCheckpointer.ts
+│   └── memoryCheckpointer.ts     # 开发环境 MemorySaver
 ├── agent/
-│   ├── index.ts         # getAgent、agents 注册表
-│   ├── hitl.ts
-│   ├── simple.ts
-│   └── weather.ts
-├── agui/
-│   ├── stream/fromLangGraphEvents.ts   # graph.streamEvents(v2) → Observable
-│   ├── map/langGraphEventToAgUi.ts
-│   ├── pipeline/runGraphAguiStream.ts  # RxJS：RUN 生命周期 + finalize
-│   ├── interrupt/emitInterrupt.ts      # CUSTOM(on_interrupt) + outcome.interrupt
-│   ├── runGraphAsAguiStream.ts
-│   └── LangGraphAguiAgent.ts
+│   ├── index.ts                  # getAgent 注册表
+│   ├── streamGraphAguiEvents.ts  # v3 编排：aguiEvents → BaseEvent
+│   ├── graphTransformerAguiAgent.ts
+│   └── *Agent.ts                 # 图 compile + stream 输入 + CopilotKit 导出
 ├── copilot/
 │   ├── runtime.ts
 │   └── honoBridge.ts    # /copilotkit
@@ -108,7 +100,7 @@ logger → serveStatic(public) → copilotKit → decoratorRoutes（含 AgentCon
 
 - Hono 4、`@hono/node-server`
 - `@ag-ui/client`、`@ag-ui/core`、`@copilotkit/runtime`
-- `@langchain/langgraph`、`@langchain/openai`
+- `@langchain/langgraph`
 - HTTP/2（TLS，`allowHTTP1: true`）
 
 ## Lint

@@ -1,8 +1,7 @@
-import { useAgentContext } from '@copilotkit/react-core/v2'
+import { CopilotChat, useAgentContext } from '@copilotkit/react-core/v2'
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import { CopilotAgentShell } from '../components/copilot/CopilotAgentShell'
-import { HitlCopilotChat } from '../components/hitl/HitlCopilotChat'
 import { HitlInterruptUi } from '../components/hitl/HitlInterruptUi'
 import { AGENT_IDS } from '../lib/agentIds'
 
@@ -48,12 +47,23 @@ function HitlPage() {
           {' '}
           <code className="rounded bg-slate-800 px-1.5 py-0.5">useInterrupt</code>
           {' '}
+          ·
+          {' '}
+          <code className="rounded bg-slate-800 px-1.5 py-0.5">AguiTransformer</code>
+          {' '}
+          中断投影
+          {' '}
           · AG-UI
           {' '}
           <code className="rounded bg-slate-800 px-1.5 py-0.5">/copilotkit</code>
         </>
       )}
-      chat={<HitlCopilotChat placeholder="输入消息启动 HITL 流程…" />}
+      chat={(
+        <CopilotChat
+          agentId={AGENT_IDS.hitl}
+          labels={{ chatInputPlaceholder: '输入消息启动 HITL 流程…' }}
+        />
+      )}
     >
       <HitlInterruptUi />
       <HitlContextPanel />

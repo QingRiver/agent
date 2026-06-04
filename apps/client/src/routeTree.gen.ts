@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WeatherRouteImport } from './routes/weather'
 import { Route as SseRouteImport } from './routes/sse'
+import { Route as SimpleToolCallRouteImport } from './routes/simple-tool-call'
 import { Route as SimpleRouteImport } from './routes/simple'
 import { Route as HitlRouteImport } from './routes/hitl'
 import { Route as IndexRouteImport } from './routes/index'
@@ -25,6 +26,11 @@ const WeatherRoute = WeatherRouteImport.update({
 const SseRoute = SseRouteImport.update({
   id: '/sse',
   path: '/sse',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SimpleToolCallRoute = SimpleToolCallRouteImport.update({
+  id: '/simple-tool-call',
+  path: '/simple-tool-call',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SimpleRoute = SimpleRouteImport.update({
@@ -57,6 +63,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/hitl': typeof HitlRoute
   '/simple': typeof SimpleRoute
+  '/simple-tool-call': typeof SimpleToolCallRoute
   '/sse': typeof SseRoute
   '/weather': typeof WeatherRouteWithChildren
   '/weather/sse': typeof WeatherSseRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/hitl': typeof HitlRoute
   '/simple': typeof SimpleRoute
+  '/simple-tool-call': typeof SimpleToolCallRoute
   '/sse': typeof SseRoute
   '/weather/sse': typeof WeatherSseRoute
   '/weather': typeof WeatherIndexRoute
@@ -75,6 +83,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/hitl': typeof HitlRoute
   '/simple': typeof SimpleRoute
+  '/simple-tool-call': typeof SimpleToolCallRoute
   '/sse': typeof SseRoute
   '/weather': typeof WeatherRouteWithChildren
   '/weather/sse': typeof WeatherSseRoute
@@ -86,17 +95,26 @@ export interface FileRouteTypes {
     | '/'
     | '/hitl'
     | '/simple'
+    | '/simple-tool-call'
     | '/sse'
     | '/weather'
     | '/weather/sse'
     | '/weather/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/hitl' | '/simple' | '/sse' | '/weather/sse' | '/weather'
+  to:
+    | '/'
+    | '/hitl'
+    | '/simple'
+    | '/simple-tool-call'
+    | '/sse'
+    | '/weather/sse'
+    | '/weather'
   id:
     | '__root__'
     | '/'
     | '/hitl'
     | '/simple'
+    | '/simple-tool-call'
     | '/sse'
     | '/weather'
     | '/weather/sse'
@@ -107,6 +125,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HitlRoute: typeof HitlRoute
   SimpleRoute: typeof SimpleRoute
+  SimpleToolCallRoute: typeof SimpleToolCallRoute
   SseRoute: typeof SseRoute
   WeatherRoute: typeof WeatherRouteWithChildren
 }
@@ -125,6 +144,13 @@ declare module '@tanstack/react-router' {
       path: '/sse'
       fullPath: '/sse'
       preLoaderRoute: typeof SseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/simple-tool-call': {
+      id: '/simple-tool-call'
+      path: '/simple-tool-call'
+      fullPath: '/simple-tool-call'
+      preLoaderRoute: typeof SimpleToolCallRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/simple': {
@@ -182,6 +208,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HitlRoute: HitlRoute,
   SimpleRoute: SimpleRoute,
+  SimpleToolCallRoute: SimpleToolCallRoute,
   SseRoute: SseRoute,
   WeatherRoute: WeatherRouteWithChildren,
 }

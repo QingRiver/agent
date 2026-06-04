@@ -17,13 +17,15 @@ description: >-
 | `GET` | `/sample/simpleGraph/sse` | SSE | `streamMode: 'updates'` |
 | `GET` | `/sample/weather` | **SSE only** | Weather ReAct agent; query `message` (default: 北京今天天气怎么样？) |
 
+AG-UI CopilotKit 路径：`POST /copilotkit/*` + 各 `*Agent.ts`（见 `apps/server/src/agent/index.ts`），不经 sample 路由。
+
 ## Code layout
 
 | Layer | Location | Responsibility |
 | ----- | -------- | -------------- |
 | Graph | [packages/graph/src/weatherGraph.ts](../../../packages/graph/src/weatherGraph.ts) | LangGraph ReAct：`agent` ↔ `tools` |
 | Tool impl | [packages/tools](../../../packages/tools) | `import { openMeteo } from '@agent/tools'` |
-| Server wire-up | [graphs/index.ts](../../../apps/server/src/graphs/index.ts) | `*.compile({ checkpointer })` |
+| Server agent | [agent/weatherAgent.ts](../../../apps/server/src/agent/weatherAgent.ts) | `compile` + AG-UI 流；sample 路由复用 `weatherGraphApp` |
 
 **Do not** put Open-Meteo HTTP logic in `@agent/graph`; keep external APIs in `@agent/tools`.
 

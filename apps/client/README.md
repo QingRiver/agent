@@ -8,7 +8,7 @@ Vite + React + TanStack Router 前端。演示 **纯 LangGraph SSE**（`fetch-ev
 - [TanStack Router](https://tanstack.com/router)
 - Tailwind CSS 4
 - `@microsoft/fetch-event-source`（sample SSE）
-- `@copilotkit/react-core`、`@copilotkit/react-ui`（HITL / simple / weather AG-UI）
+- `@copilotkit/react-core`（HITL / simple / weather AG-UI）
 
 ## 快速开始
 
@@ -29,8 +29,9 @@ pnpm dev
 | 路径           | 调用方式   | 后端入口                         |
 | -------------- | ---------- | -------------------------------- |
 | `/sse`         | 纯 SSE     | `GET /sample/simpleGraph/sse`    |
-| `/simple`      | CopilotKit | `simple` agent                   |
-| `/weather/sse` | 纯 SSE     | `GET /sample/weather?message=`   |
+| `/simple`            | CopilotKit | `simple` agent                   |
+| `/simple-tool-call`  | CopilotKit | `simpleToolCall` agent           |
+| `/weather/sse`       | 纯 SSE     | `GET /sample/weather?message=`   |
 | `/weather`     | CopilotKit | `weather` agent                  |
 | `/hitl`        | CopilotKit | `hitl` agent + 审批 tool call UI |
 
@@ -39,7 +40,7 @@ pnpm dev
 ```text
 src/
 ├── routes/sse.tsx | simple.tsx | weather.tsx | weather.index.tsx | weather.sse.tsx | hitl.tsx
-├── lib/streamSimpleGraph.ts | streamWeatherGraph.ts | parseWeatherUpdate.ts
+├── lib/streamSampleSse.ts | parseWeatherUpdate.ts | hitlContracts.ts
 ├── components/
 │   ├── copilot/CopilotAgentShell.tsx
 │   ├── weather/WeatherChatBubble.tsx

@@ -1,6 +1,7 @@
 export const AGENT_IDS = {
   hitl: 'hitl',
   simple: 'simple',
+  simpleToolCall: 'simpleToolCall',
   weather: 'weather',
 } as const
 

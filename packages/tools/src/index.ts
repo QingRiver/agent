@@ -1,10 +1,10 @@
-export {
+import {
   fetchWeatherByCity,
   getCoordinates,
   getCurrentWeather,
 } from './openMeteo.js'
 
-import {
+export {
   fetchWeatherByCity,
   getCoordinates,
   getCurrentWeather,

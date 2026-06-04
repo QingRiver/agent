@@ -14,6 +14,10 @@ packages/
 ## 前置条件
 
 - Node.js >= 22（`pnpm --filter server dev` 会校验）
+
+## 编码规范
+
+- **消费 `AsyncIterable`**：使用标准库 `Array.fromAsync(iterable)`，不要自写 `collectAsync` 等包装。项目以 Node 22+ 为基线，可直接依赖该 API（测试、文档示例同理）。
 - [pnpm](https://pnpm.io/)
 - [mkcert](https://github.com/FiloSottile/mkcert)（本地 HTTPS 证书，server / client 共用）
 
@@ -104,4 +108,4 @@ pnpm --filter client typecheck
 | `https://localhost:5173/weather` | `weather` Agent · ReAct + Open-Meteo 工具               |
 | `https://localhost:5173/hitl`    | `hitl` Agent · `useInterrupt` 审批 + `Command(resume)` |
 
-Server：`graphs/` 图定义 · `agui/` 协议转换 · `copilot/` CopilotRuntime · `POST /api/agent/:agentId/run` 调试 SSE。
+Server：`agent/` 各图 compile + v3 AG-UI 流 · `copilot/` CopilotRuntime · `POST /api/agent/:agentId/run` 调试 SSE。

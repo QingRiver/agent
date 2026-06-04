@@ -41,6 +41,16 @@ function WeatherAguiPage() {
           ReAct 天气 Agent · CopilotKit
           {' '}
           <code className="rounded bg-slate-800 px-1.5 py-0.5">weather</code>
+          {' '}
+          ·
+          {' '}
+          <code className="rounded bg-slate-800 px-1.5 py-0.5">streamEvents(v3)</code>
+          {' '}
+          +
+          {' '}
+          <code className="rounded bg-slate-800 px-1.5 py-0.5">AguiTransformer</code>
+          {' '}
+          AG-UI 投影。纯 LangGraph SSE 见同页签栏「SSE」。
         </>
       )}
       placeholder="问天气，例如：上海今天天气如何？"

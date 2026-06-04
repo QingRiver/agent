@@ -1,7 +1,12 @@
-import type { ApprovalInterruptValue } from '../components/hitl/ApprovalCard'
 import { z } from 'zod'
 
-/** 与 server / `packages/graph` `ApprovalInterruptPayload` 一致（CUSTOM on_interrupt value） */
+/** 与 `packages/graph` `ApprovalInterruptPayload` 一致（CUSTOM on_interrupt value 或 interrupt metadata） */
+export interface ApprovalInterruptValue {
+  type: 'approval'
+  message: string
+  details: string
+}
+
 export const approvalInterruptValueSchema = z.object({
   type: z.literal('approval'),
   message: z.string(),

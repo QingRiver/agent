@@ -1,5 +1,5 @@
 import { Annotation, StateGraph } from '@langchain/langgraph'
-import { sleep } from 'radash'
+import { llmLog } from './utils'
 
 const GraphState = Annotation.Root({
   messages: Annotation<string[]>({
@@ -9,13 +9,13 @@ const GraphState = Annotation.Root({
 })
 
 async function nodeA() {
-  await sleep(1000)
-  return { messages: ['来自节点 A 的响应'] }
+  const response = await llmLog('来自节点 A 的响应')
+  return { messages: [response] }
 }
 
 async function nodeB() {
-  await sleep(1000)
-  return { messages: ['来自节点 B 的流程结束'] }
+  const response = await llmLog('来自节点 B 的流程结束')
+  return { messages: [response] }
 }
 
 export const simpleGraph = new StateGraph(GraphState)

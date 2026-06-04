@@ -1,7 +1,7 @@
-import type { SseMessage } from '../lib/streamSimpleGraph'
+import type { SseMessage } from '../lib/streamSampleSse'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useCallback, useRef, useState } from 'react'
-import { streamSimpleGraph } from '../lib/streamSimpleGraph'
+import { streamSimpleGraph } from '../lib/streamSampleSse'
 
 export const Route = createFileRoute('/sse')({
   component: SsePage,

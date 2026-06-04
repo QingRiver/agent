@@ -6,6 +6,7 @@ export default antfu({
   formatters: true,
   vue: false,
   ignores: [
+    '**/*.md',
     '**/dist/**',
     '**/coverage/**',
     '**/node_modules/**',

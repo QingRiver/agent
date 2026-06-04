@@ -28,6 +28,12 @@ function RootLayout() {
             Simple
           </Link>
           <Link
+            to="/simple-tool-call"
+            className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
+          >
+            Tool Call
+          </Link>
+          <Link
             to="/weather"
             className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
           >

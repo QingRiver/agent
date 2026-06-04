@@ -1,6 +1,6 @@
 import type { Context } from 'hono'
 import type { AppEnv } from '../types'
-import { buildWeatherInput, simpleGraphApp, weatherGraphApp } from '../graphs/index'
+import { buildMessagesInput, simpleGraphApp, weatherGraphApp } from '../agent'
 import { devThreadConfig } from '../graphs/memoryCheckpointer'
 import { Controller, Get } from '../router/decorator'
 import { createSseResponse } from '../utils/sse'
@@ -26,7 +26,7 @@ export class SampleController {
     const message = c.req.query('message') ?? '北京今天天气怎么样？'
 
     const stream = await weatherGraphApp.stream(
-      buildWeatherInput(message),
+      buildMessagesInput(message),
       { ...devThreadConfig(), streamMode: 'updates' },
     )
     return createSseResponse(stream)

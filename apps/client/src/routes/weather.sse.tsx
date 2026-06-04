@@ -1,10 +1,10 @@
 import type { WeatherChatMessage } from '../lib/parseWeatherUpdate'
-import type { SseMessage } from '../lib/streamWeatherGraph'
+import type { SseMessage } from '../lib/streamSampleSse'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { WeatherChatBubble } from '../components/weather/WeatherChatBubble'
 import { createUserMessage, parseWeatherUpdate } from '../lib/parseWeatherUpdate'
-import { streamWeatherGraph } from '../lib/streamWeatherGraph'
+import { streamWeatherGraph } from '../lib/streamSampleSse'
 
 export const Route = createFileRoute('/weather/sse')({
   component: WeatherSsePage,

@@ -7,8 +7,8 @@ packages:
   - 'packages/*'
 
 catalog:
-  '@ag-ui/client': 0.0.53
-  '@ag-ui/core': 0.0.53
+  '@ag-ui/client': 0.0.55
+  '@ag-ui/core': 0.0.55
   '@copilotkit/react-core': ^1.59.2
   '@copilotkit/react-ui': ^1.59.2
   '@copilotkit/runtime': ^1.59.2
@@ -31,6 +31,7 @@ catalog:
   react-dom: ^19.2.6
   rxjs: ^7.8.2
   tailwindcss: ^4.3.0
+  ts-pattern: ^5.9.0
   tsx: ^4.22.4
   typescript: ~6.0.2
   vite: ^8.0.12

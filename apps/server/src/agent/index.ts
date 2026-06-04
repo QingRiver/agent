@@ -1,24 +1,27 @@
-import type { LangGraphAguiAgent } from '../agui/LangGraphAguiAgent'
-import { hitlAgent } from './hitl'
-import { simpleAgent } from './simple'
-import { weatherAgent } from './weather'
+import type { AbstractAgent } from '@ag-ui/client'
+import { hitlAgent } from './hitlAgent'
+import { simpleAgent } from './simpleAgent'
+import { simpleToolCallAgent } from './simpleToolCallAgent'
+import { weatherAgent } from './weatherAgent'
 
-const AGENT_IDS = ['hitl', 'simple', 'weather'] as const
+const AGENT_IDS = ['hitl', 'simple', 'simpleToolCall', 'weather'] as const
 type AgentId = typeof AGENT_IDS[number]
 
-export { hitlAgent } from './hitl'
-export { simpleAgent } from './simple'
-export { weatherAgent } from './weather'
+export { buildMessagesInput } from './extractLastUserMessage'
+export { hitlAgent } from './hitlAgent'
+export { simpleAgent, simpleGraphApp } from './simpleAgent'
+export { simpleToolCallAgent } from './simpleToolCallAgent'
+export { weatherAgent, weatherGraphApp } from './weatherAgent'
 
-const agents: Record<AgentId, LangGraphAguiAgent> = {
+const agents: Record<AgentId, AbstractAgent> = {
   hitl: hitlAgent,
   simple: simpleAgent,
+  simpleToolCall: simpleToolCallAgent,
   weather: weatherAgent,
 }
 
-export function getAgent(agentId: string): LangGraphAguiAgent {
-  if (!AGENT_IDS.includes(agentId as AgentId)) {
+export function getAgent(agentId: string): AbstractAgent {
+  if (!AGENT_IDS.includes(agentId as AgentId))
     throw new Error(`Unknown agent: ${agentId}`)
-  }
   return agents[agentId as AgentId]
 }

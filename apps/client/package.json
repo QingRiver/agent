@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@copilotkit/react-core": "catalog:",
-    "@copilotkit/react-ui": "catalog:",
     "@microsoft/fetch-event-source": "catalog:",
     "@tanstack/react-router": "catalog:",
     "react": "catalog:",

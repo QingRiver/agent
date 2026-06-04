@@ -15,7 +15,6 @@ export function HitlInterruptUi() {
 
       return (
         <ApprovalCard
-          variant="bubble"
           title={payload.message}
           content={payload.details}
           onApprove={() => resolve({ approved: true })}

@@ -10,7 +10,7 @@ import '@copilotkit/react-core/v2/styles.css'
 interface CopilotAgentShellProps {
   agentId: AgentId
   title: string
-  description: ReactNode
+  description?: ReactNode
   children?: ReactNode
   /** 替换默认 CopilotChat */
   chat?: ReactNode
@@ -32,7 +32,9 @@ export function CopilotAgentShell({
       <main className="mx-auto max-w-3xl p-6">
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
           <h1 className="text-2xl font-semibold">{title}</h1>
-          <p className="mt-2 text-sm text-slate-400">{description}</p>
+          {description != null && (
+            <p className="mt-2 text-sm text-slate-400">{description}</p>
+          )}
           {children}
           <CopilotRuntimeReady>
             <div className="mt-4 overflow-hidden rounded-xl border border-slate-800">
