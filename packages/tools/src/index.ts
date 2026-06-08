@@ -1,18 +1,5 @@
-import {
-  fetchWeatherByCity,
-  getCoordinates,
-  getCurrentWeather,
-} from './openMeteo.js'
+import { obsidian } from './obsidian'
+import { openMeteo } from './openMeteo'
 
-export {
-  fetchWeatherByCity,
-  getCoordinates,
-  getCurrentWeather,
-} from './openMeteo.js'
-
-/** Open-Meteo 地理编码 + 实况查询 */
-export const openMeteo = {
-  fetchWeatherByCity,
-  getCoordinates,
-  getCurrentWeather,
-}
+export type { ObsidianSearchResponse, ObsidianSearchResult } from './obsidian'
+export { obsidian, openMeteo }

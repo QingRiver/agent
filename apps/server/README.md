@@ -2,7 +2,7 @@
 
 基于 [Hono](https://hono.dev/) + [@hono/node-server](https://github.com/honojs/node-server) 的 HTTP/2 HTTPS 服务：LangGraph 图、AG-UI 适配层、CopilotRuntime。开发环境使用 [tsx](https://github.com/privatenumber/tsx) 直接运行 TypeScript。
 
-LangGraph 与 CopilotKit 的接法说明见 wiki：[CopilotKit Runtime × LangGraph × AG-UI](../../wiki/CopilotKit-Runtime-LangGraph-AGUI.md)。AG-UI 流统一走 `streamEvents(v3)` + `@agent/graph` `AguiTransformer`（各 `src/agent/*Agent.ts` + `streamGraphAguiEvents.ts`）。
+LangGraph 与 CopilotKit 的接法见 wiki：[事件映射](../../wiki/LangGraph-v3-AGUI-事件映射.md)、[HITL](../../wiki/LangGraph-v3-AGUI-HITL.md)。AG-UI 流统一走 `streamEvents(v3)` + `@agent/graph` `AguiTransformer`（各 `src/agent/*Agent.ts` + `streamGraphAguiEvents.ts`）。
 
 ## 前置条件
 

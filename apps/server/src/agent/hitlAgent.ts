@@ -1,11 +1,11 @@
 import type { RunAgentInput } from '@ag-ui/core'
 import type { HitlWorkflowResult } from '@agent/graph'
+import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
 import { aguiTransformerFactory, hitlGraph, resolveResumeFromRunAgentInput } from '@agent/graph'
 import { Command } from '@langchain/langgraph'
 import { devMemoryCheckpointer } from '../graphs/memoryCheckpointer'
 import { extractLastUserMessage } from './extractLastUserMessage'
 import { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
-import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
 import { streamGraphAguiEvents } from './streamGraphAguiEvents'
 
 const hitlGraphAguiApp = hitlGraph.compile({

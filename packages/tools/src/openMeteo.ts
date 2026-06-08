@@ -66,7 +66,7 @@ async function fetchOpenMeteo<T>(url: string): Promise<T> {
   return await response.json() as T
 }
 
-export async function getCoordinates(cityName: string): Promise<GeocodingResult | null> {
+async function getCoordinates(cityName: string): Promise<GeocodingResult | null> {
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=zh`
   const data = await fetchOpenMeteo<GeocodingResponse>(url)
   if (!data.results?.length)
@@ -74,7 +74,7 @@ export async function getCoordinates(cityName: string): Promise<GeocodingResult 
   return data.results[0]!
 }
 
-export async function getCurrentWeather(
+async function getCurrentWeather(
   latitude: number,
   longitude: number,
 ): Promise<ForecastCurrent> {
@@ -86,7 +86,7 @@ export async function getCurrentWeather(
 }
 
 /** 按城市名查询当前天气，返回供 LLM 使用的文本 */
-export async function fetchWeatherByCity(cityName: string): Promise<string> {
+async function fetchWeatherByCity(cityName: string): Promise<string> {
   const place = await getCoordinates(cityName)
   if (!place)
     return `找不到城市「${cityName}」，请检查名称或尝试英文名。`
@@ -99,4 +99,10 @@ export async function fetchWeatherByCity(cityName: string): Promise<string> {
     `- 气温：${current.temperature_2m}°C`,
     `- 状况：${condition}`,
   ].join('\n')
+}
+
+export const openMeteo = {
+  fetchWeatherByCity,
+  getCoordinates,
+  getCurrentWeather,
 }

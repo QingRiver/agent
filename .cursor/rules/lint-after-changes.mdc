@@ -1,0 +1,27 @@
+---
+description: 代码修改后必须运行 pnpm run lint 并通过
+alwaysApply: true
+---
+
+# Lint 门禁
+
+完成任何代码修改后，**必须**在仓库根目录执行：
+
+```bash
+pnpm run lint
+```
+
+## 要求
+
+- 在宣称任务完成、提交或交付 PR 之前，lint 必须 **0 error**。
+- 若存在可自动修复的问题，先运行 `pnpm run format`（即 `eslint --fix`），再重新 `pnpm run lint` 确认。
+- 不要跳过 lint；不要用 `--no-verify` 等方式绕过（除非用户明确要求）。
+
+## 范围
+
+根目录 `pnpm run lint` 覆盖 `apps/` 与 `packages/`（见根 `package.json` 的 `lint` script）。
+
+## 与其他检查的关系
+
+- 改了 TypeScript：在 lint 通过后，相关包还应 `pnpm typecheck`（或根目录 `pnpm typecheck`）。
+- 改了测试相关逻辑：在 lint 通过后运行 `pnpm test`（或对应测试文件）。

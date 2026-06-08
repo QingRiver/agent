@@ -11,11 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WeatherRouteImport } from './routes/weather'
 import { Route as SseRouteImport } from './routes/sse'
-import { Route as SimpleToolCallRouteImport } from './routes/simple-tool-call'
-import { Route as SimpleRouteImport } from './routes/simple'
-import { Route as HitlRouteImport } from './routes/hitl'
+import { Route as AguiRouteImport } from './routes/agui'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as WeatherIndexRouteImport } from './routes/weather.index'
 import { Route as WeatherSseRouteImport } from './routes/weather.sse'
 
 const WeatherRoute = WeatherRouteImport.update({
@@ -28,30 +25,15 @@ const SseRoute = SseRouteImport.update({
   path: '/sse',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SimpleToolCallRoute = SimpleToolCallRouteImport.update({
-  id: '/simple-tool-call',
-  path: '/simple-tool-call',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SimpleRoute = SimpleRouteImport.update({
-  id: '/simple',
-  path: '/simple',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HitlRoute = HitlRouteImport.update({
-  id: '/hitl',
-  path: '/hitl',
+const AguiRoute = AguiRouteImport.update({
+  id: '/agui',
+  path: '/agui',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
-} as any)
-const WeatherIndexRoute = WeatherIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => WeatherRoute,
 } as any)
 const WeatherSseRoute = WeatherSseRouteImport.update({
   id: '/sse',
@@ -61,71 +43,37 @@ const WeatherSseRoute = WeatherSseRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/hitl': typeof HitlRoute
-  '/simple': typeof SimpleRoute
-  '/simple-tool-call': typeof SimpleToolCallRoute
+  '/agui': typeof AguiRoute
   '/sse': typeof SseRoute
   '/weather': typeof WeatherRouteWithChildren
   '/weather/sse': typeof WeatherSseRoute
-  '/weather/': typeof WeatherIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/hitl': typeof HitlRoute
-  '/simple': typeof SimpleRoute
-  '/simple-tool-call': typeof SimpleToolCallRoute
+  '/agui': typeof AguiRoute
   '/sse': typeof SseRoute
+  '/weather': typeof WeatherRouteWithChildren
   '/weather/sse': typeof WeatherSseRoute
-  '/weather': typeof WeatherIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/hitl': typeof HitlRoute
-  '/simple': typeof SimpleRoute
-  '/simple-tool-call': typeof SimpleToolCallRoute
+  '/agui': typeof AguiRoute
   '/sse': typeof SseRoute
   '/weather': typeof WeatherRouteWithChildren
   '/weather/sse': typeof WeatherSseRoute
-  '/weather/': typeof WeatherIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/hitl'
-    | '/simple'
-    | '/simple-tool-call'
-    | '/sse'
-    | '/weather'
-    | '/weather/sse'
-    | '/weather/'
+  fullPaths: '/' | '/agui' | '/sse' | '/weather' | '/weather/sse'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/hitl'
-    | '/simple'
-    | '/simple-tool-call'
-    | '/sse'
-    | '/weather/sse'
-    | '/weather'
-  id:
-    | '__root__'
-    | '/'
-    | '/hitl'
-    | '/simple'
-    | '/simple-tool-call'
-    | '/sse'
-    | '/weather'
-    | '/weather/sse'
-    | '/weather/'
+  to: '/' | '/agui' | '/sse' | '/weather' | '/weather/sse'
+  id: '__root__' | '/' | '/agui' | '/sse' | '/weather' | '/weather/sse'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  HitlRoute: typeof HitlRoute
-  SimpleRoute: typeof SimpleRoute
-  SimpleToolCallRoute: typeof SimpleToolCallRoute
+  AguiRoute: typeof AguiRoute
   SseRoute: typeof SseRoute
   WeatherRoute: typeof WeatherRouteWithChildren
 }
@@ -146,25 +94,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SseRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/simple-tool-call': {
-      id: '/simple-tool-call'
-      path: '/simple-tool-call'
-      fullPath: '/simple-tool-call'
-      preLoaderRoute: typeof SimpleToolCallRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/simple': {
-      id: '/simple'
-      path: '/simple'
-      fullPath: '/simple'
-      preLoaderRoute: typeof SimpleRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/hitl': {
-      id: '/hitl'
-      path: '/hitl'
-      fullPath: '/hitl'
-      preLoaderRoute: typeof HitlRouteImport
+    '/agui': {
+      id: '/agui'
+      path: '/agui'
+      fullPath: '/agui'
+      preLoaderRoute: typeof AguiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -173,13 +107,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/weather/': {
-      id: '/weather/'
-      path: '/'
-      fullPath: '/weather/'
-      preLoaderRoute: typeof WeatherIndexRouteImport
-      parentRoute: typeof WeatherRoute
     }
     '/weather/sse': {
       id: '/weather/sse'
@@ -193,12 +120,10 @@ declare module '@tanstack/react-router' {
 
 interface WeatherRouteChildren {
   WeatherSseRoute: typeof WeatherSseRoute
-  WeatherIndexRoute: typeof WeatherIndexRoute
 }
 
 const WeatherRouteChildren: WeatherRouteChildren = {
   WeatherSseRoute: WeatherSseRoute,
-  WeatherIndexRoute: WeatherIndexRoute,
 }
 
 const WeatherRouteWithChildren =
@@ -206,9 +131,7 @@ const WeatherRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  HitlRoute: HitlRoute,
-  SimpleRoute: SimpleRoute,
-  SimpleToolCallRoute: SimpleToolCallRoute,
+  AguiRoute: AguiRoute,
   SseRoute: SseRoute,
   WeatherRoute: WeatherRouteWithChildren,
 }

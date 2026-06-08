@@ -1,9 +1,9 @@
 import type { RunAgentInput } from '@ag-ui/core'
+import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
 import { aguiTransformerFactory, weatherGraph } from '@agent/graph'
 import { devMemoryCheckpointer } from '../graphs/memoryCheckpointer'
 import { buildMessagesInput, extractLastUserMessage } from './extractLastUserMessage'
 import { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
-import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
 import { streamGraphAguiEvents } from './streamGraphAguiEvents'
 
 export const weatherGraphApp = weatherGraph.compile({

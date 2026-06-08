@@ -1,5 +1,6 @@
 export const AGENT_IDS = {
   hitl: 'hitl',
+  obsidian: 'obsidian',
   simple: 'simple',
   simpleToolCall: 'simpleToolCall',
   weather: 'weather',

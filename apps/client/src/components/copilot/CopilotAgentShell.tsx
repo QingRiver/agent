@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import type { AgentId } from '../../lib/agentIds'
 import {
   CopilotChat,
@@ -7,6 +7,10 @@ import {
 import { CopilotRuntimeReady } from './CopilotRuntimeReady'
 import '@copilotkit/react-core/v2/styles.css'
 
+function NoCopyButton(_props: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return null
+}
+
 interface CopilotAgentShellProps {
   agentId: AgentId
   title: string
@@ -14,6 +18,8 @@ interface CopilotAgentShellProps {
   children?: ReactNode
   /** 替换默认 CopilotChat */
   chat?: ReactNode
+  /** 切换 agent 时传入以重置 CopilotChat 会话 */
+  chatKey?: string
   chatClassName?: string
   placeholder?: string
 }
@@ -24,6 +30,7 @@ export function CopilotAgentShell({
   description,
   children,
   chat,
+  chatKey,
   chatClassName = 'h-full min-h-[24rem]',
   placeholder = '输入消息…',
 }: CopilotAgentShellProps) {
@@ -40,9 +47,14 @@ export function CopilotAgentShell({
             <div className="mt-4 overflow-hidden rounded-xl border border-slate-800">
               {chat ?? (
                 <CopilotChat
+                  key={chatKey ?? agentId}
                   agentId={agentId}
                   className={chatClassName}
                   labels={{ chatInputPlaceholder: placeholder }}
+                  messageView={{
+                    assistantMessage: { copyButton: NoCopyButton },
+                    userMessage: { copyButton: NoCopyButton },
+                  }}
                 />
               )}
             </div>

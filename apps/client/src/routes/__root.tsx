@@ -22,34 +22,16 @@ function RootLayout() {
             SSE
           </Link>
           <Link
-            to="/simple"
+            to="/agui"
             className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
           >
-            Simple
-          </Link>
-          <Link
-            to="/simple-tool-call"
-            className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
-          >
-            Tool Call
-          </Link>
-          <Link
-            to="/weather"
-            className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
-          >
-            Weather
+            AG-UI
           </Link>
           <Link
             to="/weather/sse"
             className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
           >
             Weather SSE
-          </Link>
-          <Link
-            to="/hitl"
-            className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
-          >
-            人在回路
           </Link>
         </nav>
       </header>

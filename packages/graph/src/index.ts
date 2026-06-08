@@ -5,6 +5,11 @@ export type {
 } from './hitl/types.js'
 
 export { hitlGraph } from './hitlGraph.js'
+export {
+  MAX_SEARCH_RESULTS,
+  OBSIDIAN_SEARCH_TOOL_NAME,
+  obsidianGraph,
+} from './obsidianGraph.js'
 export { simpleGraph } from './simpleGraph.js'
 export {
   FETCH_USER_ORDER_TOOL_NAME,

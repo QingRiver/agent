@@ -1,29 +1,33 @@
 import type { RunAgentInput } from '@ag-ui/core'
 import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
-import { aguiTransformerFactory, simpleToolCallGraph } from '@agent/graph'
+import { aguiTransformerFactory, obsidianGraph } from '@agent/graph'
 import { devMemoryCheckpointer } from '../graphs/memoryCheckpointer'
 import { buildMessagesInput, extractLastUserMessage } from './extractLastUserMessage'
 import { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
 import { streamGraphAguiEvents } from './streamGraphAguiEvents'
 
-const simpleToolCallGraphAguiApp = simpleToolCallGraph.compile({
+export const obsidianGraphApp = obsidianGraph.compile({
+  checkpointer: devMemoryCheckpointer,
+})
+
+const obsidianGraphAguiApp = obsidianGraph.compile({
   checkpointer: devMemoryCheckpointer,
   transformers: [aguiTransformerFactory],
 })
 
-function streamSimpleToolCallEvents(input: RunAgentInput) {
+function streamObsidianEvents(input: RunAgentInput) {
   return streamGraphAguiEvents(
     input,
-    simpleToolCallGraphAguiApp as AguiTransformerGraphApp,
+    obsidianGraphAguiApp as AguiTransformerGraphApp,
     {
       resolveStreamInput: () => buildMessagesInput(extractLastUserMessage(input, {
-        defaultMessage: '取消订单 10086',
+        defaultMessage: '子集和真子集有什么区别？',
       })),
     },
   )
 }
 
-export const simpleToolCallAgent = new GraphTransformerAguiAgent(
-  { agentId: 'simpleToolCall', description: 'simpleToolCallGraph + AguiTransformer（v3）' },
-  streamSimpleToolCallEvents,
+export const obsidianAgent = new GraphTransformerAguiAgent(
+  { agentId: 'obsidian', description: 'Obsidian 检索 ReAct + AguiTransformer（v3）' },
+  streamObsidianEvents,
 )

@@ -109,3 +109,5 @@ pnpm --filter client typecheck
 | `https://localhost:5173/hitl`    | `hitl` Agent · `useInterrupt` 审批 + `Command(resume)` |
 
 Server：`agent/` 各图 compile + v3 AG-UI 流 · `copilot/` CopilotRuntime · `POST /api/agent/:agentId/run` 调试 SSE。
+
+LangGraph → AG-UI 实现说明见 wiki：[事件映射](./wiki/LangGraph-v3-AGUI-事件映射.md)、[HITL](./wiki/LangGraph-v3-AGUI-HITL.md)。

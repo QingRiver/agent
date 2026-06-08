@@ -78,7 +78,7 @@ function SsePage() {
           {' '}
           并流式打印后端事件。AG-UI 版见
           {' '}
-          <Link to="/simple" className="text-emerald-400 hover:underline">/simple</Link>
+          <Link to="/agui" className="text-emerald-400 hover:underline">/agui</Link>
           。
         </p>
 

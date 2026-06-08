@@ -20,34 +20,16 @@ function HomePage() {
             Simple SSE
           </Link>
           <Link
-            to="/simple"
+            to="/agui"
             className="inline-block rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-800"
           >
-            Simple AG-UI
-          </Link>
-          <Link
-            to="/simple-tool-call"
-            className="inline-block rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-800"
-          >
-            Simple Tool Call AG-UI
-          </Link>
-          <Link
-            to="/weather"
-            className="inline-block rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-800"
-          >
-            Weather AG-UI
+            AG-UI 演示
           </Link>
           <Link
             to="/weather/sse"
             className="inline-block rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-800"
           >
             Weather SSE
-          </Link>
-          <Link
-            to="/hitl"
-            className="inline-block rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-800"
-          >
-            人在回路
           </Link>
         </div>
       </div>
