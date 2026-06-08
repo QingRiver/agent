@@ -17,19 +17,13 @@ function HomePage() {
             to="/sse"
             className="inline-block rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400"
           >
-            Simple SSE
+            SSE 演示
           </Link>
           <Link
             to="/agui"
             className="inline-block rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-800"
           >
             AG-UI 演示
-          </Link>
-          <Link
-            to="/weather/sse"
-            className="inline-block rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-800"
-          >
-            Weather SSE
           </Link>
         </div>
       </div>

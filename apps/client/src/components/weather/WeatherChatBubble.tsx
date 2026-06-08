@@ -1,38 +1,51 @@
+import type { LucideIcon } from 'lucide-react'
 import type { WeatherChatMessage } from '../../lib/parseWeatherUpdate'
+import { AlertCircle, Bot, Package, User, Wrench } from 'lucide-react'
 
 const kindMeta: Record<
   WeatherChatMessage['kind'],
-  { label: string, avatar: string, align: 'left' | 'right', bubble: string }
+  {
+    label: string
+    Icon: LucideIcon
+    align: 'left' | 'right'
+    bubble: string
+    avatar: string
+  }
 > = {
   'user': {
     label: '你',
-    avatar: '你',
+    Icon: User,
     align: 'right',
     bubble: 'bg-emerald-600 text-white rounded-2xl rounded-tr-sm',
+    avatar: 'bg-emerald-500/20 text-emerald-300',
   },
   'assistant': {
     label: 'AI',
-    avatar: 'AI',
+    Icon: Bot,
     align: 'left',
     bubble: 'bg-slate-800 text-slate-100 rounded-2xl rounded-tl-sm border border-slate-700',
+    avatar: 'bg-slate-700 text-slate-200',
   },
   'tool-call': {
     label: '工具',
-    avatar: '🔧',
+    Icon: Wrench,
     align: 'left',
     bubble: 'bg-amber-950/80 text-amber-100 rounded-2xl rounded-tl-sm border border-amber-700/50',
+    avatar: 'bg-amber-500/15 text-amber-300',
   },
   'tool-result': {
     label: '工具',
-    avatar: '📦',
+    Icon: Package,
     align: 'left',
     bubble: 'bg-violet-950/60 text-violet-100 rounded-2xl rounded-tl-sm border border-violet-700/40',
+    avatar: 'bg-violet-500/15 text-violet-300',
   },
   'error': {
     label: '错误',
-    avatar: '!',
+    Icon: AlertCircle,
     align: 'left',
     bubble: 'bg-red-950/80 text-red-200 rounded-2xl rounded-tl-sm border border-red-700/50',
+    avatar: 'bg-red-500/15 text-red-300',
   },
 }
 
@@ -46,20 +59,17 @@ function kindTitle(kind: WeatherChatMessage['kind'], toolName?: string): string 
 
 export function WeatherChatBubble({ message }: { message: WeatherChatMessage }) {
   const meta = kindMeta[message.kind]
+  const { Icon } = meta
   const title = kindTitle(message.kind, message.toolName)
   const isRight = meta.align === 'right'
 
   return (
     <div className={`flex gap-2 ${isRight ? 'flex-row-reverse' : 'flex-row'}`}>
       <div
-        className={`flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-          isRight
-            ? 'bg-emerald-500/20 text-emerald-300'
-            : 'bg-slate-800 text-slate-300'
-        }`}
+        className={`flex size-9 shrink-0 items-center justify-center rounded-full ${meta.avatar}`}
         aria-hidden
       >
-        {meta.avatar}
+        <Icon className="size-4" strokeWidth={2} />
       </div>
       <div className={`max-w-[min(100%,28rem)] ${isRight ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
         <span className={`text-xs text-slate-500 ${isRight ? 'text-right' : 'text-left'}`}>

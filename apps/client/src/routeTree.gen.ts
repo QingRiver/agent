@@ -9,17 +9,10 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WeatherRouteImport } from './routes/weather'
 import { Route as SseRouteImport } from './routes/sse'
 import { Route as AguiRouteImport } from './routes/agui'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as WeatherSseRouteImport } from './routes/weather.sse'
 
-const WeatherRoute = WeatherRouteImport.update({
-  id: '/weather',
-  path: '/weather',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SseRoute = SseRouteImport.update({
   id: '/sse',
   path: '/sse',
@@ -35,58 +28,39 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WeatherSseRoute = WeatherSseRouteImport.update({
-  id: '/sse',
-  path: '/sse',
-  getParentRoute: () => WeatherRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agui': typeof AguiRoute
   '/sse': typeof SseRoute
-  '/weather': typeof WeatherRouteWithChildren
-  '/weather/sse': typeof WeatherSseRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agui': typeof AguiRoute
   '/sse': typeof SseRoute
-  '/weather': typeof WeatherRouteWithChildren
-  '/weather/sse': typeof WeatherSseRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agui': typeof AguiRoute
   '/sse': typeof SseRoute
-  '/weather': typeof WeatherRouteWithChildren
-  '/weather/sse': typeof WeatherSseRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/agui' | '/sse' | '/weather' | '/weather/sse'
+  fullPaths: '/' | '/agui' | '/sse'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/agui' | '/sse' | '/weather' | '/weather/sse'
-  id: '__root__' | '/' | '/agui' | '/sse' | '/weather' | '/weather/sse'
+  to: '/' | '/agui' | '/sse'
+  id: '__root__' | '/' | '/agui' | '/sse'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AguiRoute: typeof AguiRoute
   SseRoute: typeof SseRoute
-  WeatherRoute: typeof WeatherRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/weather': {
-      id: '/weather'
-      path: '/weather'
-      fullPath: '/weather'
-      preLoaderRoute: typeof WeatherRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/sse': {
       id: '/sse'
       path: '/sse'
@@ -108,32 +82,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/weather/sse': {
-      id: '/weather/sse'
-      path: '/sse'
-      fullPath: '/weather/sse'
-      preLoaderRoute: typeof WeatherSseRouteImport
-      parentRoute: typeof WeatherRoute
-    }
   }
 }
-
-interface WeatherRouteChildren {
-  WeatherSseRoute: typeof WeatherSseRoute
-}
-
-const WeatherRouteChildren: WeatherRouteChildren = {
-  WeatherSseRoute: WeatherSseRoute,
-}
-
-const WeatherRouteWithChildren =
-  WeatherRoute._addFileChildren(WeatherRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AguiRoute: AguiRoute,
   SseRoute: SseRoute,
-  WeatherRoute: WeatherRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

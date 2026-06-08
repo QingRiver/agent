@@ -32,10 +32,7 @@ export const AGUI_AGENTS: AguiAgentConfig[] = [
     label: 'Weather',
     description: (
       <>
-        ReAct 天气 Agent · CopilotKit weather · streamEvents(v3) + AguiTransformer AG-UI 投影。纯 LangGraph SSE 见
-        {' '}
-        /weather/sse
-        。
+        ReAct 天气 Agent · CopilotKit weather · streamEvents(v3) + AguiTransformer AG-UI 投影。纯 LangGraph SSE 见 /sse。
       </>
     ),
     placeholder: '问天气，例如：上海今天天气如何？',

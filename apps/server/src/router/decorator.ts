@@ -1,4 +1,4 @@
-export type HttpMethod = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head' | 'all'
+export type HttpMethod = 'get' | 'post'
 
 /** Class-level prefix from `@Controller` */
 export const PREFIX_SYM = Symbol.for('controllerPrefix')

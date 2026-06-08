@@ -44,8 +44,9 @@ pnpm --filter server dev
 | `GET`  | `/`、`/heartbeat`         | 心跳 JSON                                               |
 | `GET`  | `/:param`                 | 动态参数                                                |
 | `GET`  | `/sample/simpleGraph`     | 同步 invoke simpleGraph                                 |
-| `POST` | `/api/agent/:agentId/run` | AG-UI SSE（`hitl` \| `simple` \| `simpleToolCall` \| `weather`） |
-| `*`    | `/copilotkit/*`           | CopilotRuntime（前端 CopilotKit 使用）                  |
+| `GET`  | `/sample/simpleGraph/sse` | simpleGraph LangGraph SSE 演示                          |
+| `GET`  | `/sample/weather`         | weatherGraph LangGraph SSE 演示                         |
+| `*`    | `/copilotkit/*`           | CopilotRuntime（前端 CopilotKit AG-UI 使用）            |
 
 ### curl 示例
 
@@ -56,15 +57,11 @@ curl -sk https://localhost:3000/heartbeat
 # CopilotKit runtime 信息
 curl -sk https://localhost:3000/copilotkit/info
 
-# AG-UI agent run（hitl）
-curl -sk -N -X POST https://localhost:3000/api/agent/hitl/run \
-  -H 'Content-Type: application/json' \
-  -d '{"threadId":"t1","runId":"r1","messages":[{"id":"m1","role":"user","content":"开始"}]}'
+# Sample LangGraph SSE（simpleGraph）
+curl -sk -N https://localhost:3000/sample/simpleGraph/sse
 ```
 
-SSE 帧：`event: agent_event`，`data` 为 AG-UI `BaseEvent` JSON。
-
-HITL（`hitl` agent）经 `AguiTransformer` v3 投影：挂起时发出 `STATE_SNAPSHOT`、`CUSTOM(on_interrupt)`（CopilotKit 兼容）与 `RUN_FINISHED`（`outcome.type: interrupt`，`interrupts[].reason` 为 `confirmation`）。恢复：`forwardedProps.command.resume` 或 `RunAgentInput.resume[]` → `Command({ resume })`。
+AG-UI 流（`hitl`、`weather` 等 agent）统一经 `/copilotkit/*` 由 CopilotRuntime 输出；HITL 挂起时发出 `STATE_SNAPSHOT`、`CUSTOM(on_interrupt)` 与 `RUN_FINISHED`（`outcome.type: interrupt`）。恢复：`forwardedProps.command.resume` 或 `RunAgentInput.resume[]` → `Command({ resume })`。
 
 ## 项目结构
 
@@ -74,17 +71,16 @@ src/
 ├── graphs/
 │   └── memoryCheckpointer.ts     # 开发环境 MemorySaver
 ├── agent/
-│   ├── index.ts                  # getAgent 注册表
+│   ├── index.ts                  # Agent 导出
 │   ├── streamGraphAguiEvents.ts  # v3 编排：aguiEvents → BaseEvent
 │   ├── graphTransformerAguiAgent.ts
 │   └── *Agent.ts                 # 图 compile + stream 输入 + CopilotKit 导出
 ├── copilot/
-│   ├── runtime.ts
-│   └── honoBridge.ts    # /copilotkit
+│   ├── runtime.ts                # CopilotRuntime agent 注册表
+│   └── honoBridge.ts             # /copilotkit
 ├── controller/
-│   ├── agent.ts         # POST /api/agent/:agentId/run（AG-UI SSE）
 │   ├── default.ts       # 心跳
-│   └── sample.ts        # LangGraph 示例
+│   └── sample.ts        # LangGraph SSE 示例
 ├── middleware/logger.ts
 └── router/
 certificates/
@@ -93,7 +89,7 @@ certificates/
 ## 中间件顺序
 
 ```text
-logger → serveStatic(public) → copilotKit → decoratorRoutes（含 AgentController）
+logger → serveStatic(public) → copilotKit → decoratorRoutes（default、sample）
 ```
 
 ## 技术栈

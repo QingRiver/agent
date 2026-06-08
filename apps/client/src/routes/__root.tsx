@@ -27,12 +27,6 @@ function RootLayout() {
           >
             AG-UI
           </Link>
-          <Link
-            to="/weather/sse"
-            className="text-sm font-medium text-slate-300 hover:text-white [&.active]:text-emerald-400"
-          >
-            Weather SSE
-          </Link>
         </nav>
       </header>
       <Outlet />

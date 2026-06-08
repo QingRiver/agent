@@ -64,6 +64,9 @@ catalogs:
     hono:
       specifier: ^4.12.7
       version: 4.12.23
+    lucide-react:
+      specifier: ^0.542.0
+      version: 0.542.0
     radash:
       specifier: ^12.1.1
       version: 12.1.1
@@ -139,6 +142,9 @@ importers:
       '@tanstack/react-router':
         specifier: 'catalog:'
         version: 1.170.10(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      lucide-react:
+        specifier: 'catalog:'
+        version: 0.542.0(react@19.2.6)
       react:
         specifier: 'catalog:'
         version: 19.2.6
