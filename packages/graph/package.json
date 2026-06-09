@@ -15,6 +15,7 @@
     "@langchain/core": "catalog:",
     "@langchain/langgraph": "catalog:",
     "@langchain/openai": "catalog:",
+    "radash": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

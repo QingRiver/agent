@@ -27,6 +27,7 @@
     "better-sqlite3": "catalog:",
     "dotenv": "catalog:",
     "hono": "catalog:",
+    "radash": "catalog:",
     "rxjs": "catalog:",
     "zod": "catalog:"
   },

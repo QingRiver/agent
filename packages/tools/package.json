@@ -9,6 +9,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "radash": "catalog:"
+  },
   "devDependencies": {
     "@types/node": "catalog:"
   }

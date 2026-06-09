@@ -30,7 +30,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "catalog:",
     "@tanstack/router-plugin": "catalog:",
-    "@types/node": "catalog:conflicts_@types/node_h24_12_3",
+    "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",

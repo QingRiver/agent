@@ -1,6 +1,7 @@
 {
   "name": "agent",
   "version": "1.0.0",
+  "private": true,
   "packageManager": "pnpm@10.27.0",
   "description": "",
   "author": "",
@@ -10,7 +11,6 @@
     "ai",
     "chatbot"
   ],
-  "main": "index.js",
   "engines": {
     "node": ">=22"
   },
@@ -22,25 +22,14 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "dependencies": {
-    "radash": "catalog:"
-  },
   "devDependencies": {
-    "@antfu/eslint-config": "^9.0.0",
-    "@eslint-react/eslint-plugin": "^5.8.8",
-    "@types/node": "^24.12.4",
-    "eslint": "^10.4.1",
-    "eslint-plugin-format": "^2.0.1",
-    "ts-pattern": "^5.9.0",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.7"
-  },
-  "pnpm": {
-    "overrides": {
-      "rxjs": "7.8.2"
-    },
-    "onlyBuiltDependencies": [
-      "better-sqlite3"
-    ]
+    "@antfu/eslint-config": "catalog:",
+    "@eslint-react/eslint-plugin": "catalog:",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "eslint-plugin-format": "catalog:",
+    "ts-pattern": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }
