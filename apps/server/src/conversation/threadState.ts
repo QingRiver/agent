@@ -1,5 +1,5 @@
-import type { CompiledStateGraph } from '@langchain/langgraph'
-import type { AgentId, PendingInterrupt, ThreadState } from '../../shared/conversation'
+import type { CompiledStateGraph, StateSnapshot } from '@langchain/langgraph'
+import type { AgentId, PendingInterrupt } from '../../shared/conversation'
 import type { AguiGraphName } from '../graphs/graphAppFactory'
 import { PendingInterruptSchema } from '../../shared/conversation'
 import { getAguiGraphApp } from '../graphs/graphAppFactory'
@@ -11,28 +11,22 @@ interface CheckpointTask {
   }>
 }
 
-/**
- * 从 LangGraph checkpointer hydrate 执行态（单一真相源）。
- * app.sqlite 的 messages 仅是 UI 读模型投影，不承载 interrupt / 图位置。
- */
-export async function hydrateThreadState(
+export async function getThreadSnapshot(
   agentId: AgentId,
   threadId: string,
-): Promise<ThreadState> {
-  const pendingInterrupt = await readPendingInterrupt(agentId, threadId)
-  return { pendingInterrupt }
-}
-
-async function readPendingInterrupt(
-  agentId: AgentId,
-  threadId: string,
-): Promise<PendingInterrupt | null> {
+): Promise<StateSnapshot> {
   const graphName = agentIdToGraphName(agentId)
   if (!graphName)
-    return null
+    throw new Error(`Unknown agent for checkpoint hydrate: ${agentId}`)
 
   const app = getAguiGraphApp(graphName, 'auth') as unknown as CompiledStateGraph<unknown, unknown>
-  const snapshot = await app.getState({ configurable: { thread_id: threadId } })
+  return app.getState({ configurable: { thread_id: threadId } })
+}
+
+/** checkpoints.sqlite 为唯一真相源：从 LangGraph snapshot hydrate 挂起的 HITL interrupt */
+export function extractPendingInterruptFromSnapshot(
+  snapshot: StateSnapshot,
+): PendingInterrupt | null {
   const tasks = (snapshot as { tasks?: CheckpointTask[] }).tasks ?? []
 
   for (const task of tasks) {

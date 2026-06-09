@@ -1,9 +1,3 @@
-CREATE TABLE `conversation_messages` (
-	`thread_id` text PRIMARY KEY NOT NULL,
-	`messages` text NOT NULL,
-	`updated_at` integer NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE `conversation_threads` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,

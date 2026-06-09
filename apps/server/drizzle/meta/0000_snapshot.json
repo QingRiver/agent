@@ -1,40 +1,9 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8b3e5542-5b98-415b-8158-0b872918ea42",
+  "id": "4768626f-c85e-4db8-ab04-dd31babfe1c5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "conversation_messages": {
-      "name": "conversation_messages",
-      "columns": {
-        "thread_id": {
-          "name": "thread_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "messages": {
-          "name": "messages",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "conversation_threads": {
       "name": "conversation_threads",
       "columns": {

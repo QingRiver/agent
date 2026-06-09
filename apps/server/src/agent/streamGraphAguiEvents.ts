@@ -6,11 +6,11 @@ import {
   aguiRunContext,
   buildInterruptFinalizeEvents,
 } from '@agent/graph'
-import { mirrorConversationMessages } from '../conversation/messageMirror'
+import { getRequestContext } from '../context/requestContext'
+import { ConversationService } from '../service/conversation'
 
 export interface StreamGraphAguiOptions {
   resolveStreamInput: (input: RunAgentInput) => unknown
-  formatSummary?: (values: Record<string, unknown>) => string | undefined
 }
 
 /** 带 `aguiTransformerFactory` 编译的图，`streamEvents(v3)` 才有 `extensions.aguiEvents` */
@@ -26,16 +26,6 @@ export interface AguiTransformerGraphStream extends AsyncIterable<unknown> {
   interrupted: boolean
   interrupts: readonly InterruptPayload[]
   output: Promise<Record<string, unknown>>
-}
-
-function isInterruptRunFinished(e: BaseEvent): boolean {
-  return e.type === EventType.RUN_FINISHED
-    && 'outcome' in e
-    && (e as { outcome?: { type?: string } }).outcome?.type === 'interrupt'
-}
-
-function hasInterruptRunFinished(events: readonly BaseEvent[]): boolean {
-  return events.some(isInterruptRunFinished)
 }
 
 function hasAnyRunFinished(events: readonly BaseEvent[]): boolean {
@@ -93,36 +83,12 @@ export async function* streamGraphAguiEvents(
         }
       }
       else {
-        const values = await stream.output
-        if (options.formatSummary) {
-          const summary = options.formatSummary(values as Record<string, unknown>)
-          if (summary) {
-            const messageId = crypto.randomUUID()
-            yield { type: EventType.TEXT_MESSAGE_START, messageId, role: 'assistant' }
-            yield { type: EventType.TEXT_MESSAGE_CONTENT, messageId, delta: summary }
-            yield { type: EventType.TEXT_MESSAGE_END, messageId }
-          }
-        }
         yield {
           type: EventType.RUN_FINISHED,
           threadId,
           runId,
           outcome: { type: 'success' },
         }
-      }
-    }
-    else if (
-      !hasInterruptRunFinished(collected)
-      && !stream.interrupted
-      && options.formatSummary
-    ) {
-      const values = await stream.output
-      const summary = options.formatSummary(values as Record<string, unknown>)
-      if (summary) {
-        const messageId = crypto.randomUUID()
-        yield { type: EventType.TEXT_MESSAGE_START, messageId, role: 'assistant' }
-        yield { type: EventType.TEXT_MESSAGE_CONTENT, messageId, delta: summary }
-        yield { type: EventType.TEXT_MESSAGE_END, messageId }
       }
     }
   }
@@ -139,7 +105,9 @@ export async function* streamGraphAguiEvents(
     }
   }
   finally {
-    mirrorConversationMessages(input, collected)
+    const ctx = getRequestContext()
+    if (ctx.mode === 'auth' && ctx.userId)
+      ConversationService.touch(ctx.userId, input.threadId)
     delete aguiRunContext.current
   }
 }

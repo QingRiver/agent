@@ -4,7 +4,7 @@ import type {
   CreateConversationRequest,
 } from '../../shared/conversation'
 import type { AppEnv, AuthUser } from '../types'
-import { hydrateThreadState } from '../conversation/threadState'
+import { hydrateThreadBundle } from '../conversation/threadHydrate'
 import { getAuthCheckpointer } from '../db/checkpointer'
 import { ConversationService } from '../service/conversation'
 
@@ -34,9 +34,10 @@ export class ConversationHandlers {
     if (!conversation)
       return c.json({ error: 'Not found' }, 404)
 
+    const bundle = await hydrateThreadBundle(conversation.agentId, req.id)
     return c.json({
-      messages: ConversationService.getMessages(user.id, req.id),
-      threadState: await hydrateThreadState(conversation.agentId, req.id),
+      messages: bundle.messages,
+      threadState: bundle.threadState,
     })
   }
 

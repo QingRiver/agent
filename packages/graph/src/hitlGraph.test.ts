@@ -1,9 +1,12 @@
+import type { AIMessage, BaseMessage } from '@langchain/core/messages'
 import { randomUUID } from 'node:crypto'
 import { EventType } from '@ag-ui/core'
+import { HumanMessage } from '@langchain/core/messages'
 import { Command, MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it } from 'vitest'
 import { hitlGraph } from './hitlGraph.js'
 import { aguiRunContext, aguiTransformerFactory } from './stream/index.js'
+import { getAIMessageContent } from './utils/index.js'
 
 describe('hitlGraph + AguiTransformer', () => {
   const app = hitlGraph.compile({
@@ -13,11 +16,15 @@ describe('hitlGraph + AguiTransformer', () => {
 
   it('interrupt 后 resume 完成流程', async () => {
     const threadId = `hitl-${randomUUID()}`
+    const userInput = '向账户 0x123 转账 100 ETH'
 
     aguiRunContext.current = { threadId, runId: 'r1' }
     try {
       const stream1 = await app.streamEvents(
-        { input: '向账户 0x123 转账 100 ETH' },
+        {
+          input: userInput,
+          messages: [new HumanMessage(userInput)],
+        },
         { version: 'v3', configurable: { thread_id: threadId } },
       )
       const protocolDone1 = (async () => {
@@ -59,6 +66,12 @@ describe('hitlGraph + AguiTransformer', () => {
           && e.outcome?.type === 'interrupt',
       )
       expect(interruptFinished).toBeUndefined()
+
+      const snapshot = await app.getState({ configurable: { thread_id: threadId } })
+      const messages = snapshot.values.messages as BaseMessage[]
+      expect(messages).toHaveLength(2)
+      expect(messages[0]?.content).toBe(userInput)
+      expect(getAIMessageContent(messages[1]! as AIMessage)).toBe(`已批准执行：${userInput}`)
     }
     finally {
       delete aguiRunContext.current

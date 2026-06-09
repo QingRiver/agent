@@ -1,6 +1,7 @@
 import type { RunAgentInput } from '@ag-ui/core'
 import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
 import { getAguiGraphApp, getRawGraphApp } from '../graphs/graphAppFactory'
+import { buildMessagesInput, extractLastUserMessage } from './extractLastUserMessage'
 import { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
 import { streamGraphAguiEvents } from './streamGraphAguiEvents'
 
@@ -12,8 +13,12 @@ function streamSimpleEvents(input: RunAgentInput) {
     input,
     simpleGraphAguiApp,
     {
-      resolveStreamInput: () => ({ messages: [] }),
-      formatSummary: () => 'simpleGraph 流程已完成。',
+      resolveStreamInput: (inp) => {
+        const userText = extractLastUserMessage(inp, { defaultMessage: '' })
+        if (userText.trim())
+          return buildMessagesInput(userText)
+        return { messages: [] }
+      },
     },
   )
 }

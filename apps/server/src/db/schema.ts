@@ -12,9 +12,3 @@ export const conversationThreads = sqliteTable('conversation_threads', {
 }, table => [
   index('idx_conv_user_list').on(table.userId, table.pinned, table.updatedAt),
 ])
-
-export const conversationMessages = sqliteTable('conversation_messages', {
-  threadId: text('thread_id').primaryKey(),
-  messages: text('messages').notNull(),
-  updatedAt: integer('updated_at').notNull(),
-})

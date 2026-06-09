@@ -1,6 +1,5 @@
 import type {
   AgentId,
-  AgUiMessage,
   ConversationThread,
 } from '../../shared/conversation'
 import { randomUUID } from 'node:crypto'
@@ -10,7 +9,7 @@ import {
   ConversationThreadSchema,
 } from '../../shared/conversation'
 import { db } from '../db/drizzle'
-import { conversationMessages, conversationThreads } from '../db/schema'
+import { conversationThreads } from '../db/schema'
 
 function formatTitle(seq: number, createdAt: number): string {
   const d = new Date(createdAt)
@@ -75,12 +74,6 @@ export class ConversationService {
       updatedAt: now,
     }).run()
 
-    db.insert(conversationMessages).values({
-      threadId: id,
-      messages: '[]',
-      updatedAt: now,
-    }).run()
-
     return ConversationThreadSchema.parse({
       id,
       agentId,
@@ -102,66 +95,17 @@ export class ConversationService {
   }
 
   static delete(userId: string, id: string): boolean {
-    if (!ConversationService.get(userId, id))
-      return false
-
-    db.transaction((tx) => {
-      tx.delete(conversationMessages).where(eq(conversationMessages.threadId, id)).run()
-      tx
-        .delete(conversationThreads)
-        .where(and(eq(conversationThreads.id, id), eq(conversationThreads.userId, userId)))
-        .run()
-    })
-    return true
+    const result = db
+      .delete(conversationThreads)
+      .where(and(eq(conversationThreads.id, id), eq(conversationThreads.userId, userId)))
+      .run()
+    return result.changes > 0
   }
 
   static touch(userId: string, id: string): void {
     db
       .update(conversationThreads)
       .set({ updatedAt: Date.now() })
-      .where(and(eq(conversationThreads.id, id), eq(conversationThreads.userId, userId)))
-      .run()
-  }
-
-  static getMessages(userId: string, id: string): AgUiMessage[] {
-    if (!ConversationService.get(userId, id))
-      return []
-
-    const row = db
-      .select({ messages: conversationMessages.messages })
-      .from(conversationMessages)
-      .where(eq(conversationMessages.threadId, id))
-      .get()
-
-    if (!row)
-      return []
-
-    try {
-      const parsed = JSON.parse(row.messages) as unknown
-      return Array.isArray(parsed) ? parsed as AgUiMessage[] : []
-    }
-    catch {
-      return []
-    }
-  }
-
-  static saveMessages(userId: string, id: string, messages: AgUiMessage[]): void {
-    if (!ConversationService.get(userId, id))
-      return
-
-    const now = Date.now()
-    db
-      .insert(conversationMessages)
-      .values({ threadId: id, messages: JSON.stringify(messages), updatedAt: now })
-      .onConflictDoUpdate({
-        target: conversationMessages.threadId,
-        set: { messages: JSON.stringify(messages), updatedAt: now },
-      })
-      .run()
-
-    db
-      .update(conversationThreads)
-      .set({ updatedAt: now })
       .where(and(eq(conversationThreads.id, id), eq(conversationThreads.userId, userId)))
       .run()
   }

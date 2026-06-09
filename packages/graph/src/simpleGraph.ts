@@ -1,8 +1,9 @@
+import type { BaseMessage } from '@langchain/core/messages'
 import { Annotation, StateGraph } from '@langchain/langgraph'
 import { llmLog } from './utils'
 
 const GraphState = Annotation.Root({
-  messages: Annotation<string[]>({
+  messages: Annotation<BaseMessage[]>({
     reducer: (x, y) => x.concat(y),
     default: () => [],
   }),

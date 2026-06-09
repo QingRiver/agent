@@ -1,8 +1,10 @@
+import type { BaseMessage } from '@langchain/core/messages'
 import type {
   ApprovalDecision,
   ApprovalInterruptPayload,
   HitlWorkflowResult,
 } from './hitl/types.js'
+import { AIMessage } from '@langchain/core/messages'
 import {
   Annotation,
   interrupt,
@@ -11,6 +13,10 @@ import {
 import { sleep } from 'radash'
 
 const HitlState = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: (x, y) => x.concat(y),
+    default: () => [],
+  }),
   input: Annotation<string>({
     reducer: (_, next) => next,
     default: () => '',
@@ -42,11 +48,13 @@ async function humanApproval(state: typeof HitlState.State) {
 
 async function execute(state: typeof HitlState.State) {
   if (!state.approval?.approved) {
+    const reason = state.approval?.reason ?? '用户拒绝'
     return {
       result: {
         status: 'rejected' as const,
-        reason: state.approval?.reason ?? '用户拒绝',
+        reason,
       },
+      messages: [new AIMessage(`已拒绝：${reason}`)],
     }
   }
   await sleep(500)
@@ -56,6 +64,7 @@ async function execute(state: typeof HitlState.State) {
       action: 'execute_tool',
       toolInput: state.input,
     },
+    messages: [new AIMessage(`已批准执行：${state.input}`)],
   }
 }
 

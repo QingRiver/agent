@@ -4,7 +4,7 @@ import { match, P } from 'ts-pattern'
 import { simpleGraph } from './simpleGraph'
 import { normalizeMessages } from './utils'
 
-const input = { messages: [] as string[] }
+const input = { messages: [] }
 
 interface LifecycleEventData { event: string, graph_name: string }
 
