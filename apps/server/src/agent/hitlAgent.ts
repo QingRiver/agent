@@ -1,17 +1,12 @@
 import type { RunAgentInput } from '@ag-ui/core'
 import type { HitlWorkflowResult } from '@agent/graph'
 import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
-import { aguiTransformerFactory, hitlGraph, resolveResumeFromRunAgentInput } from '@agent/graph'
+import { resolveResumeFromRunAgentInput } from '@agent/graph'
 import { Command } from '@langchain/langgraph'
-import { devMemoryCheckpointer } from '../graphs/memoryCheckpointer'
+import { getAguiGraphApp } from '../graphs/graphAppFactory'
 import { extractLastUserMessage } from './extractLastUserMessage'
 import { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
 import { streamGraphAguiEvents } from './streamGraphAguiEvents'
-
-const hitlGraphAguiApp = hitlGraph.compile({
-  checkpointer: devMemoryCheckpointer,
-  transformers: [aguiTransformerFactory],
-})
 
 function formatHitlResult(result: HitlWorkflowResult | undefined): string {
   if (!result)
@@ -22,9 +17,10 @@ function formatHitlResult(result: HitlWorkflowResult | undefined): string {
 }
 
 function streamHitlEvents(input: RunAgentInput) {
+  const hitlGraphAguiApp = getAguiGraphApp('hitl') as AguiTransformerGraphApp
   return streamGraphAguiEvents(
     input,
-    hitlGraphAguiApp as AguiTransformerGraphApp,
+    hitlGraphAguiApp,
     {
       resolveStreamInput: (inp) => {
         const resume = resolveResumeFromRunAgentInput(inp)

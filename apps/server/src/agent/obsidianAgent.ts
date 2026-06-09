@@ -1,24 +1,17 @@
 import type { RunAgentInput } from '@ag-ui/core'
 import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
-import { aguiTransformerFactory, obsidianGraph } from '@agent/graph'
-import { devMemoryCheckpointer } from '../graphs/memoryCheckpointer'
+import { getAguiGraphApp, getRawGraphApp } from '../graphs/graphAppFactory'
 import { buildMessagesInput, extractLastUserMessage } from './extractLastUserMessage'
 import { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
 import { streamGraphAguiEvents } from './streamGraphAguiEvents'
 
-export const obsidianGraphApp = obsidianGraph.compile({
-  checkpointer: devMemoryCheckpointer,
-})
-
-const obsidianGraphAguiApp = obsidianGraph.compile({
-  checkpointer: devMemoryCheckpointer,
-  transformers: [aguiTransformerFactory],
-})
+export const obsidianGraphApp = getRawGraphApp('obsidianRaw', 'guest')
 
 function streamObsidianEvents(input: RunAgentInput) {
+  const obsidianGraphAguiApp = getAguiGraphApp('obsidian') as AguiTransformerGraphApp
   return streamGraphAguiEvents(
     input,
-    obsidianGraphAguiApp as AguiTransformerGraphApp,
+    obsidianGraphAguiApp,
     {
       resolveStreamInput: () => buildMessagesInput(extractLastUserMessage(input, {
         defaultMessage: '子集和真子集有什么区别？',

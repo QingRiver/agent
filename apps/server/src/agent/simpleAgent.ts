@@ -1,23 +1,16 @@
 import type { RunAgentInput } from '@ag-ui/core'
 import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
-import { aguiTransformerFactory, simpleGraph } from '@agent/graph'
-import { devMemoryCheckpointer } from '../graphs/memoryCheckpointer'
+import { getAguiGraphApp, getRawGraphApp } from '../graphs/graphAppFactory'
 import { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
 import { streamGraphAguiEvents } from './streamGraphAguiEvents'
 
-export const simpleGraphApp = simpleGraph.compile({
-  checkpointer: devMemoryCheckpointer,
-})
-
-const simpleGraphAguiApp = simpleGraph.compile({
-  checkpointer: devMemoryCheckpointer,
-  transformers: [aguiTransformerFactory],
-})
+export const simpleGraphApp = getRawGraphApp('simpleRaw', 'guest')
 
 function streamSimpleEvents(input: RunAgentInput) {
+  const simpleGraphAguiApp = getAguiGraphApp('simple') as AguiTransformerGraphApp
   return streamGraphAguiEvents(
     input,
-    simpleGraphAguiApp as AguiTransformerGraphApp,
+    simpleGraphAguiApp,
     {
       resolveStreamInput: () => ({ messages: [] }),
       formatSummary: () => 'simpleGraph 流程已完成。',

@@ -1,20 +1,15 @@
 import type { RunAgentInput } from '@ag-ui/core'
 import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
-import { aguiTransformerFactory, simpleToolCallGraph } from '@agent/graph'
-import { devMemoryCheckpointer } from '../graphs/memoryCheckpointer'
+import { getAguiGraphApp } from '../graphs/graphAppFactory'
 import { buildMessagesInput, extractLastUserMessage } from './extractLastUserMessage'
 import { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
 import { streamGraphAguiEvents } from './streamGraphAguiEvents'
 
-const simpleToolCallGraphAguiApp = simpleToolCallGraph.compile({
-  checkpointer: devMemoryCheckpointer,
-  transformers: [aguiTransformerFactory],
-})
-
 function streamSimpleToolCallEvents(input: RunAgentInput) {
+  const simpleToolCallGraphAguiApp = getAguiGraphApp('simpleToolCall') as AguiTransformerGraphApp
   return streamGraphAguiEvents(
     input,
-    simpleToolCallGraphAguiApp as AguiTransformerGraphApp,
+    simpleToolCallGraphAguiApp,
     {
       resolveStreamInput: () => buildMessagesInput(extractLastUserMessage(input, {
         defaultMessage: '取消订单 10086',

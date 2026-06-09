@@ -69,7 +69,8 @@ AG-UI 流（`hitl`、`weather` 等 agent）统一经 `/copilotkit/*` 由 Copilot
 src/
 ├── index.ts
 ├── graphs/
-│   └── memoryCheckpointer.ts     # 开发环境 MemorySaver
+│   ├── checkpointer.ts           # 游客 MemorySaver / 登录 SqliteSaver
+│   └── threadConfig.ts           # SSE 演示用 thread_id
 ├── agent/
 │   ├── index.ts                  # Agent 导出
 │   ├── streamGraphAguiEvents.ts  # v3 编排：aguiEvents → BaseEvent

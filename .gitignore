@@ -145,6 +145,9 @@ vite.config.ts.timestamp-*
 .DS_Store
 **/.DS_Store
 apps/server/certificates/
+apps/server/data/*.sqlite
+apps/server/data/*.sqlite-wal
+apps/server/data/*.sqlite-shm
 
 # @agent/graph test debug dumps (fileLog / resetFileLog)
 packages/graph/src/debug/

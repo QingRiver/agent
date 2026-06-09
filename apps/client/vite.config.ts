@@ -39,6 +39,11 @@ export default defineConfig({
         secure: false,
         rewrite: path => path.replace(/^\/api\/copilotkit/, '/copilotkit'),
       },
+      '/api/auth': {
+        target: 'https://127.0.0.1:3000',
+        changeOrigin: true,
+        secure: false,
+      },
       '/api': {
         target: 'https://127.0.0.1:3000',
         changeOrigin: true,

@@ -1,7 +1,7 @@
 import type { Context } from 'hono'
 import type { AppEnv } from '../types'
 import { buildMessagesInput, simpleGraphApp, weatherGraphApp } from '../agent'
-import { devThreadConfig } from '../graphs/memoryCheckpointer'
+import { devThreadConfig } from '../graphs/threadConfig'
 import { Controller, Get } from '../router/decorator'
 import { createSseResponse } from '../utils/sse'
 

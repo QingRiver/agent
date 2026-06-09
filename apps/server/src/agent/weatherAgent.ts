@@ -1,24 +1,17 @@
 import type { RunAgentInput } from '@ag-ui/core'
 import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
-import { aguiTransformerFactory, weatherGraph } from '@agent/graph'
-import { devMemoryCheckpointer } from '../graphs/memoryCheckpointer'
+import { getAguiGraphApp, getRawGraphApp } from '../graphs/graphAppFactory'
 import { buildMessagesInput, extractLastUserMessage } from './extractLastUserMessage'
 import { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
 import { streamGraphAguiEvents } from './streamGraphAguiEvents'
 
-export const weatherGraphApp = weatherGraph.compile({
-  checkpointer: devMemoryCheckpointer,
-})
-
-const weatherGraphAguiApp = weatherGraph.compile({
-  checkpointer: devMemoryCheckpointer,
-  transformers: [aguiTransformerFactory],
-})
+export const weatherGraphApp = getRawGraphApp('weatherRaw', 'guest')
 
 function streamWeatherEvents(input: RunAgentInput) {
+  const weatherGraphAguiApp = getAguiGraphApp('weather') as AguiTransformerGraphApp
   return streamGraphAguiEvents(
     input,
-    weatherGraphAguiApp as AguiTransformerGraphApp,
+    weatherGraphAguiApp,
     {
       resolveStreamInput: () => buildMessagesInput(extractLastUserMessage(input, {
         stateKeys: ['message'],

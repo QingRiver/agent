@@ -21,12 +21,17 @@
     "@hono/node-server": "catalog:",
     "@langchain/core": "catalog:",
     "@langchain/langgraph": "catalog:",
+    "@langchain/langgraph-checkpoint": "catalog:",
+    "@langchain/langgraph-checkpoint-sqlite": "catalog:",
+    "better-auth": "catalog:",
+    "better-sqlite3": "catalog:",
     "dotenv": "catalog:",
     "hono": "catalog:",
     "rxjs": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "catalog:",
     "tsx": "catalog:"
   }
 }

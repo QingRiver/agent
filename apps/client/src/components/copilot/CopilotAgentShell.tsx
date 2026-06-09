@@ -4,6 +4,7 @@ import {
   CopilotChat,
   CopilotKitProvider,
 } from '@copilotkit/react-core/v2'
+import { useAuth } from '../../hooks/useAuth'
 import { CopilotRuntimeReady } from './CopilotRuntimeReady'
 import '@copilotkit/react-core/v2/styles.css'
 
@@ -34,8 +35,15 @@ export function CopilotAgentShell({
   chatClassName = 'h-full min-h-[24rem]',
   placeholder = '输入消息…',
 }: CopilotAgentShellProps) {
+  const { token } = useAuth()
+  const sessionKey = token ?? 'guest'
+
   return (
-    <CopilotKitProvider runtimeUrl="/api/copilotkit">
+    <CopilotKitProvider
+      key={sessionKey}
+      runtimeUrl="/api/copilotkit"
+      headers={token ? { Authorization: `Bearer ${token}` } : undefined}
+    >
       <main className="mx-auto max-w-3xl p-6">
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
           <h1 className="text-2xl font-semibold">{title}</h1>

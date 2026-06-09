@@ -10,12 +10,24 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SseRouteImport } from './routes/sse'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as AguiRouteImport } from './routes/agui'
 import { Route as IndexRouteImport } from './routes/index'
 
 const SseRoute = SseRouteImport.update({
   id: '/sse',
   path: '/sse',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AguiRoute = AguiRouteImport.update({
@@ -32,30 +44,38 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agui': typeof AguiRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/sse': typeof SseRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agui': typeof AguiRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/sse': typeof SseRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agui': typeof AguiRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/sse': typeof SseRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/agui' | '/sse'
+  fullPaths: '/' | '/agui' | '/login' | '/register' | '/sse'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/agui' | '/sse'
-  id: '__root__' | '/' | '/agui' | '/sse'
+  to: '/' | '/agui' | '/login' | '/register' | '/sse'
+  id: '__root__' | '/' | '/agui' | '/login' | '/register' | '/sse'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AguiRoute: typeof AguiRoute
+  LoginRoute: typeof LoginRoute
+  RegisterRoute: typeof RegisterRoute
   SseRoute: typeof SseRoute
 }
 
@@ -66,6 +86,20 @@ declare module '@tanstack/react-router' {
       path: '/sse'
       fullPath: '/sse'
       preLoaderRoute: typeof SseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agui': {
@@ -88,6 +122,8 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AguiRoute: AguiRoute,
+  LoginRoute: LoginRoute,
+  RegisterRoute: RegisterRoute,
   SseRoute: SseRoute,
 }
 export const routeTree = rootRouteImport
