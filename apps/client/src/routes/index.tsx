@@ -1,4 +1,4 @@
-import type { AgentId } from '@server/shared/conversation'
+import type { AgentId } from '../lib/api-types'
 import { createFileRoute } from '@tanstack/react-router'
 import { ConversationSidebar } from '../components/conversation/ConversationSidebar'
 import { ConversationChat } from '../components/copilot/ConversationChat'

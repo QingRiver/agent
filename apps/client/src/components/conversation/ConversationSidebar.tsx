@@ -1,5 +1,5 @@
-import type { ConversationThread } from '@server/shared/conversation'
 import type { UseConversationsResult } from '../../hooks/useConversations'
+import type { ConversationThread } from '../../lib/api-types'
 import { MessageSquarePlus } from 'lucide-react'
 import { useState } from 'react'
 import { ConversationListItem } from './ConversationListItem'

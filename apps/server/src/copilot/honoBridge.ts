@@ -1,5 +1,5 @@
 import type { Context, Next } from 'hono'
-import type { CheckpointerMode } from '../graphs/checkpointer'
+import type { CheckpointerMode } from '../db/checkpointer'
 import { createCopilotRuntimeHandler } from '@copilotkit/runtime/v2'
 import { getAuth } from '../auth/auth'
 import { resolveDevCorsOrigin } from '../auth/devOrigins'

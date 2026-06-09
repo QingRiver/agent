@@ -1,5 +1,5 @@
-import { conversationOwnedByUser } from './repository'
+import { ConversationService } from '../service/conversation'
 
 export function assertThreadOwnedByUser(userId: string, threadId: string): boolean {
-  return conversationOwnedByUser(userId, threadId)
+  return ConversationService.ownedByUser(userId, threadId)
 }

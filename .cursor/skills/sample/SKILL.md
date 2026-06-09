@@ -1,13 +1,13 @@
 ---
 name: sample
 description: >-
-  Conventions for @Controller('/sample') routes in apps/server. Use when adding
-  or changing sample LangGraph demos.
+  Conventions for /sample Hono routes in apps/server. Use when adding or changing
+  sample LangGraph demos.
 ---
 
 # Sample controller routes
 
-`SampleController` lives at [apps/server/src/controller/sample.ts](apps/server/src/controller/sample.ts).
+Routes: [apps/server/src/routes/sample.ts](apps/server/src/routes/sample.ts). Handlers: [apps/server/src/handlers/sample.ts](apps/server/src/handlers/sample.ts).
 
 ## Routes
 
@@ -33,7 +33,7 @@ AG-UI CopilotKit 路径：`POST /copilotkit/*` + 各 `*Agent.ts`（见 `apps/ser
 
 1. Implement graph in `packages/graph/src/`.
 2. Implement external tools in `packages/tools/` when calling APIs.
-3. Add handler on `SampleController` with `@Get(...)`.
+3. Add handler in `handlers/sample.ts` and register on `sampleRoutes` with `.get(...)`.
 4. For streaming: `return createSseResponse(await graphApp.stream(input, { streamMode: 'updates' }))` — [createSseResponse](../../../apps/server/src/utils/sse.ts) wraps errors and `[DONE]`.
 5. Client: add route under `apps/client/src/routes/` and lib helper if needed.
 

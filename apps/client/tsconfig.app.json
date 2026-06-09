@@ -10,7 +10,7 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "paths": {
-      "@server/shared/*": ["../server/shared/*"]
+      "@server/api": ["../server/src/routes/index.ts"]
     },
     "types": ["vite/client"],
     "allowImportingTsExtensions": true,

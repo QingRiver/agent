@@ -1,5 +1,5 @@
-import type { AgUiMessage } from '@server/shared/conversation'
 import type { AgentId } from '../../lib/agentIds'
+import type { AgUiMessage } from '../../lib/api-types'
 import {
   CopilotChat,
   CopilotChatConfigurationProvider,

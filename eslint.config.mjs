@@ -7,6 +7,7 @@ export default antfu({
   vue: false,
   ignores: [
     '**/*.md',
+    '**/drizzle/**',
     '**/dist/**',
     '**/coverage/**',
     '**/node_modules/**',

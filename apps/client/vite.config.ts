@@ -26,7 +26,7 @@ const https = loadDevHttps()
 export default defineConfig({
   resolve: {
     alias: {
-      '@server/shared': path.resolve(dir, '../server/shared'),
+      '@server/api': path.resolve(dir, '../server/src/routes/index.ts'),
     },
   },
   plugins: [

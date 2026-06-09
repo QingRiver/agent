@@ -12,7 +12,7 @@ import { resolveDevCorsOrigin } from './auth/devOrigins'
 import { bootstrapDatabases } from './db/bootstrap'
 import { copilotKitMiddleware } from './copilot/honoBridge'
 import { logger } from './middleware/logger'
-import { registerRoutes } from './router/index'
+import { apiRoutes } from './routes'
 import type { AppEnv } from './types'
 
 const port = Number(process.env.PORT) || 3000
@@ -46,7 +46,7 @@ app.use('*', async (c, next) => {
 })
 
 app.use('*', copilotKitMiddleware)
-registerRoutes(app)
+app.route('/', apiRoutes)
 
 app.onError((err, c) => {
   console.error('[server]', err)

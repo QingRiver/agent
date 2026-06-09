@@ -1,7 +1,8 @@
 import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
+import { randomUUID } from 'node:crypto'
 import { MemorySaver } from '@langchain/langgraph'
 import { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite'
-import { checkpointDbPath } from '../db/sqlite'
+import { checkpointDbPath } from './sqlite'
 
 export type CheckpointerMode = 'guest' | 'auth'
 
@@ -18,4 +19,9 @@ export function getAuthCheckpointer(): SqliteSaver {
 
 export function getCheckpointer(mode: CheckpointerMode): BaseCheckpointSaver {
   return mode === 'auth' ? authCheckpointer : guestCheckpointer
+}
+
+/** 带 checkpointer 的图调用必须提供 thread_id */
+export function devThreadConfig(threadId = randomUUID()) {
+  return { configurable: { thread_id: threadId } }
 }

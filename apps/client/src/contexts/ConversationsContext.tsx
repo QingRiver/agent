@@ -1,5 +1,5 @@
-import type { AgentId, AgUiMessage, ThreadState } from '@server/shared/conversation'
 import type { ReactNode } from 'react'
+import type { AgentId, AgUiMessage, ThreadState } from '../lib/api-types'
 import type { UseConversationsResult } from './conversations-types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'

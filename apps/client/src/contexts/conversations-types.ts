@@ -1,4 +1,4 @@
-import type { AgentId, AgUiMessage, ConversationThread, ThreadState } from '@server/shared/conversation'
+import type { AgentId, AgUiMessage, ConversationThread, ThreadState } from '../lib/api-types'
 
 export interface UseConversationsResult {
   conversations: ConversationThread[]

@@ -2,7 +2,7 @@ import type { BaseEvent, RunAgentInput } from '@ag-ui/core'
 import type { AgUiMessage } from '../../shared/conversation'
 import { EventType } from '@ag-ui/core'
 import { getRequestContext } from '../context/requestContext'
-import { saveConversationMessages } from './repository'
+import { ConversationService } from '../service/conversation'
 
 function extractAssistantMessages(events: readonly BaseEvent[]): AgUiMessage[] {
   const out: AgUiMessage[] = []
@@ -63,5 +63,5 @@ export function mirrorConversationMessages(
     (input.messages ?? []) as AgUiMessage[],
     collected,
   )
-  saveConversationMessages(ctx.userId, input.threadId, messages)
+  ConversationService.saveMessages(ctx.userId, input.threadId, messages)
 }

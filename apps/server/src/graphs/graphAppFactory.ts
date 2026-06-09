@@ -1,6 +1,6 @@
 import type { CompiledStateGraph } from '@langchain/langgraph'
 import type { AguiTransformerGraphApp } from '../agent/streamGraphAguiEvents'
-import type { CheckpointerMode } from './checkpointer'
+import type { CheckpointerMode } from '../db/checkpointer'
 import {
   aguiTransformerFactory,
   hitlGraph,
@@ -10,7 +10,7 @@ import {
   weatherGraph,
 } from '@agent/graph'
 import { getRequestContext } from '../context/requestContext'
-import { getCheckpointer } from './checkpointer'
+import { getCheckpointer } from '../db/checkpointer'
 
 export type AguiGraphName
   = | 'simple'

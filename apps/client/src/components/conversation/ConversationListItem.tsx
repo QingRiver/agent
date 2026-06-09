@@ -1,4 +1,4 @@
-import type { ConversationThread } from '@server/shared/conversation'
+import type { ConversationThread } from '../../lib/api-types'
 import { Pin, PinOff, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { getAguiAgent } from '../../lib/aguiAgents'

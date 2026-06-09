@@ -1,4 +1,4 @@
-import type { CheckpointerMode } from '../graphs/checkpointer'
+import type { CheckpointerMode } from '../db/checkpointer'
 import { AsyncLocalStorage } from 'node:async_hooks'
 
 export interface RequestContext {

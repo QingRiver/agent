@@ -1,4 +1,4 @@
-import type { AgentId } from '@server/shared/conversation'
+import type { AgentId } from '../../lib/api-types'
 import { useState } from 'react'
 import { AGUI_AGENTS } from '../../lib/aguiAgents'
 import { Button } from '../ui/button'
