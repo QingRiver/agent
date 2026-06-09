@@ -7,6 +7,11 @@ export interface ApprovalInterruptValue {
   details: string
 }
 
+export interface ApprovalDecision {
+  approved: boolean
+  reason?: string
+}
+
 export const approvalInterruptValueSchema = z.object({
   type: z.literal('approval'),
   message: z.string(),

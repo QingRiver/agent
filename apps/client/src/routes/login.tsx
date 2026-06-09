@@ -24,7 +24,7 @@ function LoginPage() {
     setPending(true)
     try {
       await signIn(email, password)
-      await navigate({ to: '/agui' })
+      await navigate({ to: '/' })
     }
     catch (err) {
       setError(err instanceof Error ? err.message : '登录失败')

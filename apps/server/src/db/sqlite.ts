@@ -27,6 +27,10 @@ export function authDb(): Database.Database {
   return openDatabase('auth.sqlite')
 }
 
+export function appDb(): Database.Database {
+  return openDatabase('app.sqlite')
+}
+
 export function checkpointDbPath(): string {
   ensureDataDir()
   return path.join(dataDir, 'checkpoints.sqlite')

@@ -24,6 +24,11 @@ const https = loadDevHttps()
 
 // https://vite.dev/config/
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@server/shared': path.resolve(dir, '../server/shared'),
+    },
+  },
   plugins: [
     tanstackRouter({ target: 'react', autoCodeSplitting: true }),
     react(),
@@ -41,7 +46,8 @@ export default defineConfig({
       },
       '/api/auth': {
         target: 'https://127.0.0.1:3000',
-        changeOrigin: true,
+        // 保留浏览器 Origin（localhost:5173），供 better-auth trustedOrigins 校验
+        changeOrigin: false,
         secure: false,
       },
       '/api': {

@@ -6,6 +6,7 @@ import {
   aguiRunContext,
   buildInterruptFinalizeEvents,
 } from '@agent/graph'
+import { mirrorConversationMessages } from '../conversation/messageMirror'
 
 export interface StreamGraphAguiOptions {
   resolveStreamInput: (input: RunAgentInput) => unknown
@@ -55,6 +56,8 @@ export async function* streamGraphAguiEvents(
     input,
   }
 
+  const collected: BaseEvent[] = []
+
   try {
     aguiRunContext.current = { threadId, runId }
 
@@ -63,8 +66,6 @@ export async function* streamGraphAguiEvents(
       version: 'v3',
       configurable: { thread_id: threadId },
     })
-
-    const collected: BaseEvent[] = []
 
     const protocolDone = (async () => {
       for await (const _ of stream) { /* drain protocol to drive transformer */ }
@@ -86,8 +87,10 @@ export async function* streamGraphAguiEvents(
           runId,
           interrupts: stream.interrupts,
           snapshot: snapshot as Record<string, unknown>,
-        }))
+        })) {
+          collected.push(ev)
           yield ev
+        }
       }
       else {
         const values = await stream.output
@@ -136,6 +139,7 @@ export async function* streamGraphAguiEvents(
     }
   }
   finally {
+    mirrorConversationMessages(input, collected)
     delete aguiRunContext.current
   }
 }

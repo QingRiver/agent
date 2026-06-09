@@ -2,6 +2,7 @@ import process from 'node:process'
 import { betterAuth } from 'better-auth'
 import { bearer } from 'better-auth/plugins'
 import { authDb } from '../db/sqlite'
+import { DEV_TRUSTED_HOSTS } from './devOrigins'
 
 function createAuth() {
   return betterAuth({
@@ -10,11 +11,7 @@ function createAuth() {
     plugins: [bearer()],
     baseURL: process.env.BETTER_AUTH_URL ?? 'https://localhost:3000',
     secret: process.env.BETTER_AUTH_SECRET ?? 'dev-secret-change-me-in-production',
-    trustedOrigins: [
-      'https://localhost:5173',
-      'http://localhost:5173',
-      'https://localhost:3000',
-    ],
+    trustedOrigins: [...DEV_TRUSTED_HOSTS],
   })
 }
 

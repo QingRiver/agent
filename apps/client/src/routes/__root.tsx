@@ -1,4 +1,5 @@
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
+import { RequireAuth } from '../components/auth/RequireAuth'
 import { UserAvatarMenu } from '../components/auth/UserAvatarMenu'
 
 export const Route = createRootRoute({
@@ -14,26 +15,22 @@ function RootLayout() {
             to="/"
             className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
           >
-            Home
+            Chat
           </Link>
           <Link
-            to="/sse"
+            to="/dev"
             className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
           >
-            SSE
-          </Link>
-          <Link
-            to="/agui"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
-          >
-            AG-UI
+            Dev
           </Link>
           <div className="ml-auto">
             <UserAvatarMenu />
           </div>
         </nav>
       </header>
-      <Outlet />
+      <RequireAuth>
+        <Outlet />
+      </RequireAuth>
     </div>
   )
 }

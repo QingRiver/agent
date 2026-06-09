@@ -25,7 +25,7 @@ function RegisterPage() {
     setPending(true)
     try {
       await signUp(email, password, name)
-      await navigate({ to: '/agui' })
+      await navigate({ to: '/' })
     }
     catch (err) {
       setError(err instanceof Error ? err.message : '注册失败')

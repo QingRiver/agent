@@ -1,8 +1,16 @@
 import type { Context } from 'hono'
-import type { AppEnv } from '../types'
-import type { RouteMeta } from './decorator'
+import type { AppEnv, AuthUser } from '../types'
+import type { RequestSchemaMeta, RouteMeta } from './decorator'
 import { flat, isFunction } from 'radash'
-import { joinPath, PREFIX_SYM, ROUTE_META_SYM } from './decorator'
+import { getRequiredUser } from '../middleware/requireAuth'
+import {
+  AUTH_REQUIRED_SYM,
+  joinPath,
+  PREFIX_SYM,
+  REQUEST_SCHEMA_SYM,
+  ROUTE_META_SYM,
+} from './decorator'
+import { parseValidatedRequest } from './parseRequest'
 
 export type HttpMethod = RouteMeta['method']
 
@@ -64,16 +72,48 @@ function collectRoutesFromController(
     const metas = Array.isArray(rawMeta) ? rawMeta : [rawMeta]
     for (const meta of metas) {
       const path = joinPath(prefix, meta.subPath)
+      const authRequired = (Ctor as any)[AUTH_REQUIRED_SYM] === true
+        || (fn as any)[AUTH_REQUIRED_SYM] === true
+
+      const requestSchema = (fn as any)[REQUEST_SCHEMA_SYM] as RequestSchemaMeta | undefined
+
       routes.push({
         method: meta.method,
         path,
         handler: async (c: Context<AppEnv>) => {
           const handler = (inst as any)[meta.propertyKey] as
-            | ((ctx: Context<AppEnv>) => Promise<Response>)
+            | ((ctx: Context<AppEnv>, user: AuthUser, req: unknown) => Promise<Response> | Response)
+            | ((ctx: Context<AppEnv>, req: unknown) => Promise<Response> | Response)
+            | ((ctx: Context<AppEnv>, user: AuthUser) => Promise<Response> | Response)
+            | ((ctx: Context<AppEnv>) => Promise<Response> | Response)
             | undefined
           if (!handler)
             return c.notFound()
-          return handler.call(inst, c)
+
+          let validated: unknown | undefined
+          if (requestSchema) {
+            const parsed = await parseValidatedRequest(c, requestSchema)
+            if (parsed instanceof Response)
+              return parsed
+            validated = parsed
+          }
+
+          if (authRequired) {
+            const user = getRequiredUser(c)
+            if (user instanceof Response)
+              return user
+            if (requestSchema) {
+              return (handler as (ctx: Context<AppEnv>, user: AuthUser, req: unknown) => Promise<Response> | Response)
+                .call(inst, c, user, validated)
+            }
+            return (handler as (ctx: Context<AppEnv>, user: AuthUser) => Promise<Response> | Response)
+              .call(inst, c, user)
+          }
+          if (requestSchema) {
+            return (handler as (ctx: Context<AppEnv>, req: unknown) => Promise<Response> | Response)
+              .call(inst, c, validated)
+          }
+          return (handler as (ctx: Context<AppEnv>) => Promise<Response> | Response).call(inst, c)
         },
       })
     }

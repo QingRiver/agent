@@ -53,7 +53,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(() => ({
     user,
     token,
-    isGuest: !user,
     isLoading,
     signIn,
     signUp,

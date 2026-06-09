@@ -8,6 +8,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { getAuth } from './auth/auth'
+import { resolveDevCorsOrigin } from './auth/devOrigins'
 import { bootstrapDatabases } from './db/bootstrap'
 import { copilotKitMiddleware } from './copilot/honoBridge'
 import { logger } from './middleware/logger'
@@ -27,7 +28,7 @@ if (fs.existsSync(publicDir))
 app.use(
   '/api/auth/*',
   cors({
-    origin: ['https://localhost:5173', 'http://localhost:5173'],
+    origin: resolveDevCorsOrigin,
     credentials: true,
     allowHeaders: ['Content-Type', 'Authorization'],
     allowMethods: ['POST', 'GET', 'OPTIONS'],
