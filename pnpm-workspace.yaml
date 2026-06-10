@@ -10,6 +10,7 @@ overrides:
   rxjs: 'catalog:'
 
 catalog:
+  '@anthropic-ai/claude-agent-sdk': ^0.3.170
   '@ag-ui/client': 0.0.55
   '@ag-ui/core': 0.0.55
   '@antfu/eslint-config': ^9.0.0

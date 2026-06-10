@@ -16,6 +16,13 @@ export interface AguiAgentConfig {
 
 export const AGUI_AGENTS: AguiAgentConfig[] = [
   {
+    agentId: AGENT_IDS.claudeAgent,
+    label: 'Claude Agent',
+    description: 'Claude Agent SDK 只读探索（Read / Grep / Glob / Bash），assistant 文本与 tool_use 经 AG-UI 投影。',
+    placeholder: '例如：列出仓库根目录文件并简要总结',
+    chatClassName: 'h-[calc(100vh-320px)] min-h-[20rem]',
+  },
+  {
     agentId: AGENT_IDS.simple,
     label: 'Simple Graph',
     description: '两节点 LangGraph 经 CopilotKit simple Agent 流式输出。纯 SSE 见 /sse。',

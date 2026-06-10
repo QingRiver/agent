@@ -21,6 +21,7 @@
   "dependencies": {
     "@ag-ui/client": "catalog:",
     "@ag-ui/core": "catalog:",
+    "@agent/claude-agent": "workspace:*",
     "@agent/graph": "workspace:*",
     "@copilotkit/runtime": "catalog:",
     "@hono/node-server": "catalog:",

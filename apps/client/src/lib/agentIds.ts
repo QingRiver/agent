@@ -1,4 +1,5 @@
 export const AGENT_IDS = {
+  claudeAgent: 'claudeAgent',
   hitl: 'hitl',
   obsidian: 'obsidian',
   simple: 'simple',

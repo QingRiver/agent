@@ -1,3 +1,4 @@
+export { claudeAgent } from './claudeAgent'
 export { buildMessagesInput } from './extractLastUserMessage'
 export { hitlAgent } from './hitlAgent'
 export { obsidianAgent, obsidianGraphApp } from './obsidianAgent'

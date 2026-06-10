@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 /** 与 CopilotKit 注册的 agent id 对齐 */
 export const AGENT_ID_VALUES = [
+  'claudeAgent',
   'simple',
   'simpleToolCall',
   'weather',
