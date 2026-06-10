@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { AgentId } from './agentIds'
-import { HitlContextPanel } from '../components/agui/HitlContextPanel'
-import { WeatherContextPanel } from '../components/agui/WeatherContextPanel'
+import { HitlContextPanel } from '@components/agui/HitlContextPanel'
+import { WeatherContextPanel } from '@components/agui/WeatherContextPanel'
 import { AGENT_IDS } from './agentIds'
 
 export interface AguiAgentConfig {

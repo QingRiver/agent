@@ -1,17 +1,18 @@
-import type { AgentId } from '../../lib/api-types'
+import type { AgentId } from '@apis/api-types'
+import { Button } from '@components/ui/button'
+import { useConversations } from '@hooks/useConversations'
+import { AGUI_AGENTS } from '@lib/aguiAgents'
 import { useState } from 'react'
-import { AGUI_AGENTS } from '../../lib/aguiAgents'
-import { Button } from '../ui/button'
 
 interface NewConversationDialogProps {
   open: boolean
   onClose: () => void
-  onCreate: (agentId: AgentId) => Promise<unknown>
 }
 
-export function NewConversationDialog({ open, onClose, onCreate }: NewConversationDialogProps) {
+export function NewConversationDialog({ open, onClose }: NewConversationDialogProps) {
   const [agentId, setAgentId] = useState<AgentId>(AGUI_AGENTS[0]!.agentId)
   const [pending, setPending] = useState(false)
+  const { create } = useConversations()
 
   if (!open)
     return null
@@ -45,7 +46,7 @@ export function NewConversationDialog({ open, onClose, onCreate }: NewConversati
             onClick={async () => {
               setPending(true)
               try {
-                await onCreate(agentId)
+                await create(agentId)
                 onClose()
               }
               finally {

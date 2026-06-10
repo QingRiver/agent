@@ -1,12 +1,12 @@
-import type { AgentId } from '../lib/api-types'
+import type { AgentId } from '@apis/api-types'
+import { ConversationSidebar } from '@components/conversation/ConversationSidebar'
+import { ConversationChat } from '@components/copilot/ConversationChat'
+import { HitlInterruptUi } from '@components/hitl/HitlInterruptUi'
+import { useConversations } from '@hooks/useConversations'
+import { ChatLayout } from '@layouts/ChatLayout'
+import { AGENT_IDS } from '@lib/agentIds'
+import { getAguiAgent } from '@lib/aguiAgents'
 import { createFileRoute } from '@tanstack/react-router'
-import { ConversationSidebar } from '../components/conversation/ConversationSidebar'
-import { ConversationChat } from '../components/copilot/ConversationChat'
-import { HitlInterruptUi } from '../components/hitl/HitlInterruptUi'
-import { useConversations } from '../hooks/useConversations'
-import { ChatLayout } from '../layouts/ChatLayout'
-import { AGENT_IDS } from '../lib/agentIds'
-import { getAguiAgent } from '../lib/aguiAgents'
 
 export const Route = createFileRoute('/')({
   component: ChatPage,
@@ -57,11 +57,10 @@ function ChatPanel({
 }
 
 function ChatPage() {
-  const conversations = useConversations()
-  const { active, isLoading, error } = conversations
+  const { active, isLoading, error } = useConversations()
 
   return (
-    <ChatLayout sidebar={<ConversationSidebar conversations={conversations} />}>
+    <ChatLayout sidebar={<ConversationSidebar />}>
       {isLoading && (
         <p className="text-sm text-slate-400">加载对话列表…</p>
       )}

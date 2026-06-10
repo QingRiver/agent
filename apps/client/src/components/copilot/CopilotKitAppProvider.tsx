@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { CopilotKitProvider } from '@copilotkit/react-core/v2'
-import { useAuth } from '../../hooks/useAuth'
+import { useAuth } from '@hooks/useAuth'
 import '@copilotkit/react-core/v2/styles.css'
 
 interface CopilotKitAppProviderProps {

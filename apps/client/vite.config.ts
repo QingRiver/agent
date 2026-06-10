@@ -27,6 +27,13 @@ export default defineConfig({
   resolve: {
     alias: {
       '@server/api': path.resolve(dir, '../server/src/routes/index.ts'),
+      '@apis': path.resolve(dir, 'src/apis'),
+      '@components': path.resolve(dir, 'src/components'),
+      '@contexts': path.resolve(dir, 'src/contexts'),
+      '@hooks': path.resolve(dir, 'src/hooks'),
+      '@layouts': path.resolve(dir, 'src/layouts'),
+      '@lib': path.resolve(dir, 'src/lib'),
+      '@stores': path.resolve(dir, 'src/stores'),
     },
   },
   plugins: [

@@ -19,7 +19,7 @@ export default antfu({
     'ts/no-redeclare': 'off',
   },
 }, {
-  files: ['apps/client/src/routes/**/*.{tsx,ts}'],
+  files: ['apps/client/src/routes/**/*.{tsx,ts}', 'apps/client/src/contexts/**/*.{tsx,ts}'],
   rules: {
     'react-refresh/only-export-components': 'off',
   },

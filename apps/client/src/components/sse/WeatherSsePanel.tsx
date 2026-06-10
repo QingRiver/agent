@@ -1,9 +1,9 @@
-import type { WeatherChatMessage } from '../../lib/parseWeatherUpdate'
-import type { SseMessage } from '../../lib/streamSampleSse'
+import type { SseMessage } from '@apis/stream-sample-sse'
+import type { WeatherChatMessage } from '@lib/parseWeatherUpdate'
+import { streamWeatherGraph } from '@apis/stream-sample-sse'
+import { WeatherChatBubble } from '@components/weather/WeatherChatBubble'
+import { createUserMessage, parseWeatherUpdate } from '@lib/parseWeatherUpdate'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createUserMessage, parseWeatherUpdate } from '../../lib/parseWeatherUpdate'
-import { streamWeatherGraph } from '../../lib/streamSampleSse'
-import { WeatherChatBubble } from '../weather/WeatherChatBubble'
 
 const DEFAULT_MESSAGE = '北京今天天气怎么样？'
 

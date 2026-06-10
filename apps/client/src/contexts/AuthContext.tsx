@@ -1,8 +1,24 @@
 import type { ReactNode } from 'react'
-import type { AuthContextValue, AuthUser } from './auth-types'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { authClient, getStoredToken, setStoredToken } from '../lib/auth-client'
-import { AuthContext } from './auth-context'
+import { authClient, getStoredToken, setStoredToken } from '@apis/auth-client'
+import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
+
+export interface AuthUser {
+  id: string
+  email: string
+  name: string
+  image?: string | null
+}
+
+export interface AuthContextValue {
+  user: AuthUser | null
+  token: string | null
+  isLoading: boolean
+  signIn: (email: string, password: string) => Promise<void>
+  signUp: (email: string, password: string, name: string) => Promise<void>
+  signOut: () => Promise<void>
+}
+
+export const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)

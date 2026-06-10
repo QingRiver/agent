@@ -1,6 +1,6 @@
-import type { SseMessage } from '../../lib/streamSampleSse'
+import type { SseMessage } from '@apis/stream-sample-sse'
+import { streamSimpleGraph } from '@apis/stream-sample-sse'
 import { useCallback, useRef, useState } from 'react'
-import { streamSimpleGraph } from '../../lib/streamSampleSse'
 
 export function SimpleGraphSsePanel() {
   const [lines, setLines] = useState<string[]>([])

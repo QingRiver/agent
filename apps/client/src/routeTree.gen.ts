@@ -12,10 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SseRouteImport } from './routes/sse'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as DevRouteImport } from './routes/dev'
-import { Route as AguiRouteImport } from './routes/agui'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as DevSseRouteImport } from './routes/dev.sse'
 
 const SseRoute = SseRouteImport.update({
   id: '/sse',
@@ -32,82 +29,41 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DevRoute = DevRouteImport.update({
-  id: '/dev',
-  path: '/dev',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AguiRoute = AguiRouteImport.update({
-  id: '/agui',
-  path: '/agui',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DevSseRoute = DevSseRouteImport.update({
-  id: '/sse',
-  path: '/sse',
-  getParentRoute: () => DevRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/agui': typeof AguiRoute
-  '/dev': typeof DevRouteWithChildren
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/sse': typeof SseRoute
-  '/dev/sse': typeof DevSseRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/agui': typeof AguiRoute
-  '/dev': typeof DevRouteWithChildren
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/sse': typeof SseRoute
-  '/dev/sse': typeof DevSseRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/agui': typeof AguiRoute
-  '/dev': typeof DevRouteWithChildren
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/sse': typeof SseRoute
-  '/dev/sse': typeof DevSseRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/agui'
-    | '/dev'
-    | '/login'
-    | '/register'
-    | '/sse'
-    | '/dev/sse'
+  fullPaths: '/' | '/login' | '/register' | '/sse'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/agui' | '/dev' | '/login' | '/register' | '/sse' | '/dev/sse'
-  id:
-    | '__root__'
-    | '/'
-    | '/agui'
-    | '/dev'
-    | '/login'
-    | '/register'
-    | '/sse'
-    | '/dev/sse'
+  to: '/' | '/login' | '/register' | '/sse'
+  id: '__root__' | '/' | '/login' | '/register' | '/sse'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AguiRoute: typeof AguiRoute
-  DevRoute: typeof DevRouteWithChildren
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   SseRoute: typeof SseRoute
@@ -136,20 +92,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dev': {
-      id: '/dev'
-      path: '/dev'
-      fullPath: '/dev'
-      preLoaderRoute: typeof DevRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/agui': {
-      id: '/agui'
-      path: '/agui'
-      fullPath: '/agui'
-      preLoaderRoute: typeof AguiRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -157,30 +99,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dev/sse': {
-      id: '/dev/sse'
-      path: '/sse'
-      fullPath: '/dev/sse'
-      preLoaderRoute: typeof DevSseRouteImport
-      parentRoute: typeof DevRoute
-    }
   }
 }
 
-interface DevRouteChildren {
-  DevSseRoute: typeof DevSseRoute
-}
-
-const DevRouteChildren: DevRouteChildren = {
-  DevSseRoute: DevSseRoute,
-}
-
-const DevRouteWithChildren = DevRoute._addFileChildren(DevRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AguiRoute: AguiRoute,
-  DevRoute: DevRouteWithChildren,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   SseRoute: SseRoute,

@@ -1,9 +1,9 @@
-import type { ApprovalDecision } from '../../lib/hitlContracts'
+import type { ApprovalDecision } from '@lib/hitlContracts'
 import { useAgent, useCopilotKit, useInterrupt } from '@copilotkit/react-core/v2'
+import { useConversations } from '@hooks/useConversations'
+import { AGENT_IDS } from '@lib/agentIds'
+import { narrowApprovalInterruptValue } from '@lib/hitlContracts'
 import { useCallback, useEffect, useState } from 'react'
-import { useConversations } from '../../hooks/useConversations'
-import { AGENT_IDS } from '../../lib/agentIds'
-import { narrowApprovalInterruptValue } from '../../lib/hitlContracts'
 import { ApprovalCard } from './ApprovalCard'
 
 interface HitlInterruptUiProps {

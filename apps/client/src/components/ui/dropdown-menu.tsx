@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- shadcn re-exports Radix primitives */
+import { cn } from '@lib/utils'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
-import { cn } from '../../lib/utils'
 
 export const DropdownMenu = DropdownMenuPrimitive.Root
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger

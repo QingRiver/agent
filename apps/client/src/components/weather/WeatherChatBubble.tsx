@@ -1,5 +1,5 @@
+import type { WeatherChatMessage } from '@lib/parseWeatherUpdate'
 import type { LucideIcon } from 'lucide-react'
-import type { WeatherChatMessage } from '../../lib/parseWeatherUpdate'
 import { AlertCircle, Bot, Package, User, Wrench } from 'lucide-react'
 
 const kindMeta: Record<

@@ -1,5 +1,5 @@
-import type { AgentId } from '../../lib/agentIds'
-import type { AgUiMessage } from '../../lib/api-types'
+import type { AgUiMessage } from '@apis/api-types'
+import type { AgentId } from '@lib/agentIds'
 import {
   CopilotChat,
   CopilotChatConfigurationProvider,

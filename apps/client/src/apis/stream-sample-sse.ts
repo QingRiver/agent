@@ -1,7 +1,7 @@
-import type { SseMessage } from './sseMessage'
+import type { SseMessage } from './sse-message'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 
-export type { SseMessage } from './sseMessage'
+export type { SseMessage } from './sse-message'
 
 export interface StreamSampleSseOptions {
   path: string

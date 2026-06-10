@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { SimpleGraphSsePanel } from '../components/sse/SimpleGraphSsePanel'
-import { WeatherSsePanel } from '../components/sse/WeatherSsePanel'
+import { SimpleGraphSsePanel } from '@components/sse/SimpleGraphSsePanel'
+import { WeatherSsePanel } from '@components/sse/WeatherSsePanel'
 
 export type SseDemoId = 'simple' | 'weather'
 

@@ -1,9 +1,9 @@
-import type { ConversationThread } from '../../lib/api-types'
+import type { ConversationThread } from '@apis/api-types'
+import { Button } from '@components/ui/button'
+import { getAguiAgent } from '@lib/aguiAgents'
+import { cn } from '@lib/utils'
 import { Pin, PinOff, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import { getAguiAgent } from '../../lib/aguiAgents'
-import { cn } from '../../lib/utils'
-import { Button } from '../ui/button'
 
 interface ConversationListItemProps {
   conversation: ConversationThread

@@ -1,17 +1,13 @@
-import type { UseConversationsResult } from '../../hooks/useConversations'
-import type { ConversationThread } from '../../lib/api-types'
+import type { ConversationThread } from '@apis/api-types'
+import { useConversations } from '@hooks/useConversations'
 import { MessageSquarePlus } from 'lucide-react'
 import { useState } from 'react'
 import { ConversationListItem } from './ConversationListItem'
 import { NewConversationDialog } from './NewConversationDialog'
 
-interface ConversationSidebarProps {
-  conversations: UseConversationsResult
-}
-
-export function ConversationSidebar({ conversations }: ConversationSidebarProps) {
+export function ConversationSidebar() {
   const [dialogOpen, setDialogOpen] = useState(false)
-  const { activeId, isLoading, error, conversations: list } = conversations
+  const { conversations, activeId, isLoading, error, select, pin, unpin, remove } = useConversations()
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-950/80">
@@ -36,19 +32,19 @@ export function ConversationSidebar({ conversations }: ConversationSidebarProps)
         {error != null && (
           <p className="px-2 py-4 text-sm text-red-400">{error}</p>
         )}
-        {!isLoading && !error && list.length === 0 && (
+        {!isLoading && !error && conversations.length === 0 && (
           <p className="px-2 py-4 text-sm text-slate-500">暂无对话</p>
         )}
         <div className="mt-1 space-y-0.5">
-          {list.map((c: ConversationThread) => (
+          {conversations.map((c: ConversationThread) => (
             <ConversationListItem
               key={c.id}
               conversation={c}
               selected={c.id === activeId}
-              onSelect={() => conversations.select(c.id)}
-              onPin={() => void conversations.pin(c.id)}
-              onUnpin={() => void conversations.unpin(c.id)}
-              onDelete={() => void conversations.remove(c.id)}
+              onSelect={() => select(c.id)}
+              onPin={() => void pin(c.id)}
+              onUnpin={() => void unpin(c.id)}
+              onDelete={() => void remove(c.id)}
             />
           ))}
         </div>
@@ -57,7 +53,6 @@ export function ConversationSidebar({ conversations }: ConversationSidebarProps)
       <NewConversationDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
-        onCreate={conversations.create}
       />
     </aside>
   )

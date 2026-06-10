@@ -1,7 +1,5 @@
-import { LogOut } from 'lucide-react'
-import { useAuth } from '../../hooks/useAuth'
-import { Avatar, AvatarFallback } from '../ui/avatar'
-import { Button } from '../ui/button'
+import { Avatar, AvatarFallback } from '@components/ui/avatar'
+import { Button } from '@components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,7 +7,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
+} from '@components/ui/dropdown-menu'
+import { useAuth } from '@hooks/useAuth'
+import { LogOut } from 'lucide-react'
 
 function displayInitial(user: { name?: string, email?: string }): string {
   const source = user.name?.trim() || user.email?.trim() || '?'

@@ -10,7 +10,14 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "paths": {
-      "@server/api": ["../server/src/routes/index.ts"]
+      "@server/api": ["../server/src/routes/index.ts"],
+      "@apis/*": ["./src/apis/*"],
+      "@components/*": ["./src/components/*"],
+      "@contexts/*": ["./src/contexts/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@layouts/*": ["./src/layouts/*"],
+      "@lib/*": ["./src/lib/*"],
+      "@stores/*": ["./src/stores/*"]
     },
     "types": ["vite/client"],
     "allowImportingTsExtensions": true,
