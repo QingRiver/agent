@@ -1,9 +1,10 @@
+export { claudeAgentGraph } from './claudeAgentGraph.js'
+
 export type {
   ApprovalDecision,
   ApprovalInterruptPayload,
   HitlWorkflowResult,
 } from './hitl/types.js'
-
 export { hitlGraph } from './hitlGraph.js'
 export {
   MAX_SEARCH_RESULTS,

@@ -1,4 +1,4 @@
-import type { AgentId, AgUiMessage, ConversationThread, ThreadState } from '@apis/api-types'
+import type { AgentId, ConversationThread, ThreadState } from '@apis/api-types'
 import { Conversation } from '@apis/conversation-api'
 import { DEFAULT_AGUI_AGENT_ID } from '@lib/aguiAgents'
 import { atom, getDefaultStore } from 'jotai'
@@ -7,10 +7,9 @@ export interface UseConversationsResult {
   conversations: ConversationThread[]
   activeId: string | null
   active: ConversationThread | null
-  activeMessages: AgUiMessage[] | null
   threadState: ThreadState | null
   isLoading: boolean
-  messagesLoading: boolean
+  threadStateLoading: boolean
   error: string | null
   select: (id: string) => void
   create: (agentId: AgentId) => Promise<ConversationThread>
@@ -23,7 +22,6 @@ export interface UseConversationsResult {
 
 interface ThreadBundle {
   threadId: string
-  messages: AgUiMessage[]
   threadState: ThreadState
 }
 
@@ -40,21 +38,13 @@ export class ConversationStore {
   static readonly conversationsAtom = atom<ConversationThread[]>([])
   static readonly activeIdAtom = atom<string | null>(null)
   static readonly threadBundleAtom = atom<ThreadBundle | null>(null)
-  static readonly messagesLoadingAtom = atom(false)
+  static readonly threadBundleLoadingAtom = atom(false)
   static readonly isLoadingAtom = atom(false)
   static readonly errorAtom = atom<string | null>(null)
 
   static readonly activeAtom = atom((get) => {
     const activeId = get(ConversationStore.activeIdAtom)
     return get(ConversationStore.conversationsAtom).find(c => c.id === activeId) ?? null
-  })
-
-  static readonly activeMessagesAtom = atom((get) => {
-    const activeId = get(ConversationStore.activeIdAtom)
-    const bundle = get(ConversationStore.threadBundleAtom)
-    if (bundle?.threadId !== activeId)
-      return null
-    return bundle.messages
   })
 
   static readonly threadStateAtom = atom((get) => {
@@ -65,11 +55,11 @@ export class ConversationStore {
     return bundle.threadState
   })
 
-  static readonly showMessagesLoadingAtom = atom((get) => {
+  static readonly showThreadStateLoadingAtom = atom((get) => {
     const userId = get(ConversationStore.userIdAtom)
     const activeId = get(ConversationStore.activeIdAtom)
     const bundle = get(ConversationStore.threadBundleAtom)
-    const loading = get(ConversationStore.messagesLoadingAtom)
+    const loading = get(ConversationStore.threadBundleLoadingAtom)
     return Boolean(userId && activeId != null && (loading || bundle?.threadId !== activeId))
   })
 
@@ -84,7 +74,7 @@ export class ConversationStore {
     store.set(ConversationStore.conversationsAtom, [])
     store.set(ConversationStore.activeIdAtom, null)
     store.set(ConversationStore.threadBundleAtom, null)
-    store.set(ConversationStore.messagesLoadingAtom, false)
+    store.set(ConversationStore.threadBundleLoadingAtom, false)
     store.set(ConversationStore.isLoadingAtom, false)
     store.set(ConversationStore.errorAtom, null)
     ConversationStore.loadGeneration += 1
@@ -136,10 +126,11 @@ export class ConversationStore {
     }
   }
 
-  static async loadMessages(threadId: string): Promise<void> {
+  /** 拉取 threadState（如 HITL pendingInterrupt）；聊天消息由 copilotkit connect 恢复 */
+  static async loadThreadState(threadId: string): Promise<void> {
     const store = ConversationStore.store()
     const gen = ++ConversationStore.loadGeneration
-    store.set(ConversationStore.messagesLoadingAtom, true)
+    store.set(ConversationStore.threadBundleLoadingAtom, true)
     store.set(ConversationStore.errorAtom, null)
     try {
       const bundle = await Conversation.messages(threadId)
@@ -149,7 +140,6 @@ export class ConversationStore {
         return
       store.set(ConversationStore.threadBundleAtom, {
         threadId,
-        messages: bundle.messages,
         threadState: bundle.threadState,
       })
     }
@@ -161,13 +151,12 @@ export class ConversationStore {
       store.set(ConversationStore.errorAtom, e instanceof Error ? e.message : String(e))
       store.set(ConversationStore.threadBundleAtom, {
         threadId,
-        messages: [],
         threadState: { pendingInterrupt: null },
       })
     }
     finally {
       if (gen === ConversationStore.loadGeneration)
-        store.set(ConversationStore.messagesLoadingAtom, false)
+        store.set(ConversationStore.threadBundleLoadingAtom, false)
     }
   }
 
@@ -175,7 +164,7 @@ export class ConversationStore {
     const activeId = ConversationStore.store().get(ConversationStore.activeIdAtom)
     if (!activeId)
       return
-    await ConversationStore.loadMessages(activeId)
+    await ConversationStore.loadThreadState(activeId)
   }
 
   static async create(agentId: AgentId): Promise<ConversationThread> {

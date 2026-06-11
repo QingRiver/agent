@@ -1,5 +1,6 @@
 export { aguiRunContext } from './aguiRunContext.js'
 export {
+  AGUI_WRITER_EVENT,
   type AguiExtensions,
   type AguiFinalizeContext,
   type AguiMappedEvent,

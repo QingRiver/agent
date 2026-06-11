@@ -1,26 +1,22 @@
-import type { AgUiMessage } from '@apis/api-types'
 import type { AgentId } from '@lib/agentIds'
 import {
   CopilotChat,
   CopilotChatConfigurationProvider,
-  useAgent,
 } from '@copilotkit/react-core/v2'
-import { useEffect } from 'react'
 import { CopilotRuntimeReady } from './CopilotRuntimeReady'
 
 interface ConversationChatProps {
   agentId: AgentId
   threadId: string
-  initialMessages: AgUiMessage[]
   chatClassName?: string
   placeholder?: string
   children?: React.ReactNode
 }
 
+/** 聊天历史由 CopilotChat connect → CheckpointConnectRunner MESSAGES_SNAPSHOT 恢复 */
 export function ConversationChat({
   agentId,
   threadId,
-  initialMessages,
   chatClassName = 'h-full min-h-[24rem]',
   placeholder = '输入消息…',
   children,
@@ -32,45 +28,14 @@ export function ConversationChat({
       hasExplicitThreadId
     >
       <CopilotRuntimeReady>
-        <ChatWithHydration
+        <CopilotChat
+          key={threadId}
           agentId={agentId}
-          threadId={threadId}
-          initialMessages={initialMessages}
-          chatClassName={chatClassName}
-          placeholder={placeholder}
+          className={chatClassName}
+          labels={{ chatInputPlaceholder: placeholder }}
         />
         {children}
       </CopilotRuntimeReady>
     </CopilotChatConfigurationProvider>
-  )
-}
-
-function ChatWithHydration({
-  agentId,
-  threadId,
-  initialMessages,
-  chatClassName,
-  placeholder,
-}: {
-  agentId: AgentId
-  threadId: string
-  initialMessages: AgUiMessage[]
-  chatClassName: string
-  placeholder: string
-}) {
-  const { agent } = useAgent({ agentId })
-
-  useEffect(() => {
-    agent.threadId = threadId
-    agent.messages = structuredClone(initialMessages) as typeof agent.messages
-  }, [agent, agentId, threadId, initialMessages])
-
-  return (
-    <CopilotChat
-      key={threadId}
-      agentId={agentId}
-      className={chatClassName}
-      labels={{ chatInputPlaceholder: placeholder }}
-    />
   )
 }

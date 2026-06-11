@@ -12,9 +12,11 @@
   },
   "dependencies": {
     "@ag-ui/core": "catalog:",
-    "@anthropic-ai/claude-agent-sdk": "catalog:"
+    "@anthropic-ai/claude-agent-sdk": "catalog:",
+    "@langchain/core": "catalog:"
   },
   "devDependencies": {
+    "@langchain/anthropic": "catalog:",
     "@types/node": "catalog:",
     "tsx": "catalog:"
   }

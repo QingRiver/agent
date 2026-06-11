@@ -21,6 +21,9 @@ import { buildInterruptFinalizeEvents } from './mapInterruptToAgUi.js'
 import { mapMessagesEventDataToAgUi } from './mapMessagesToAgUi.js'
 import { mapToolsEventDataToAgUi } from './mapToolsToAgUi.js'
 
+/** LangGraph `config.writer` 解包名（与 `@agent/claude-agent` 的 `AGUI_WRITER_EVENT` 一致） */
+export const AGUI_WRITER_EVENT = 'agui'
+
 export type AguiMappedEvent
   = | AguiToolEvent
     | AguiTextMessageEvent
@@ -158,6 +161,24 @@ export class AguiTransformer implements StreamTransformer<AguiExtensions> {
       : { payload: raw }
     const name = typeof record.name === 'string' ? record.name : 'custom'
     const value = 'payload' in record ? record.payload : record
+
+    if (name === AGUI_WRITER_EVENT && value != null && typeof value === 'object' && 'type' in value) {
+      const aguiEvent = value as AguiMappedEvent
+      this.#aguiEvents.push(aguiEvent)
+      if (aguiEvent.type === EventType.TOOL_CALL_START
+        || aguiEvent.type === EventType.TOOL_CALL_ARGS
+        || aguiEvent.type === EventType.TOOL_CALL_END
+        || aguiEvent.type === EventType.TOOL_CALL_RESULT
+        || aguiEvent.type === EventType.TOOL_CALL_CHUNK) {
+        this.#toolEvents.push(aguiEvent as AguiToolEvent)
+      }
+      if (aguiEvent.type === EventType.TEXT_MESSAGE_START
+        || aguiEvent.type === EventType.TEXT_MESSAGE_CONTENT
+        || aguiEvent.type === EventType.TEXT_MESSAGE_END) {
+        this.#messageEvents.push(aguiEvent as AguiTextMessageEvent)
+      }
+      return
+    }
 
     const custom: CustomEvent = {
       type: EventType.CUSTOM,

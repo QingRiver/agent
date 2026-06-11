@@ -3,6 +3,7 @@ import type { AguiTransformerGraphApp } from '../agent/streamGraphAguiEvents'
 import type { CheckpointerMode } from '../db/checkpointer'
 import {
   aguiTransformerFactory,
+  claudeAgentGraph,
   hitlGraph,
   obsidianGraph,
   simpleGraph,
@@ -13,7 +14,8 @@ import { getRequestContext } from '../context/requestContext'
 import { getCheckpointer } from '../db/checkpointer'
 
 export type AguiGraphName
-  = | 'simple'
+  = | 'claudeAgent'
+    | 'simple'
     | 'simpleToolCall'
     | 'weather'
     | 'obsidian'
@@ -43,6 +45,12 @@ export function getAguiGraphApp(name: AguiGraphName, mode?: CheckpointerMode): A
   let compiled: AguiTransformerGraphApp
 
   switch (name) {
+    case 'claudeAgent':
+      compiled = claudeAgentGraph.compile({
+        checkpointer,
+        transformers: [aguiTransformerFactory],
+      }) as AguiTransformerGraphApp
+      break
     case 'simple':
       compiled = simpleGraph.compile({
         checkpointer,

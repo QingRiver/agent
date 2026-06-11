@@ -5,20 +5,18 @@ export function useConversations() {
   const conversations = useAtomValue(ConversationStore.conversationsAtom)
   const activeId = useAtomValue(ConversationStore.activeIdAtom)
   const active = useAtomValue(ConversationStore.activeAtom)
-  const activeMessages = useAtomValue(ConversationStore.activeMessagesAtom)
   const threadState = useAtomValue(ConversationStore.threadStateAtom)
   const isLoading = useAtomValue(ConversationStore.isLoadingAtom)
-  const messagesLoading = useAtomValue(ConversationStore.showMessagesLoadingAtom)
+  const threadStateLoading = useAtomValue(ConversationStore.showThreadStateLoadingAtom)
   const error = useAtomValue(ConversationStore.errorAtom)
 
   return {
     conversations,
     activeId,
     active,
-    activeMessages,
     threadState,
     isLoading,
-    messagesLoading,
+    threadStateLoading,
     error,
     select: ConversationStore.select,
     create: ConversationStore.create,

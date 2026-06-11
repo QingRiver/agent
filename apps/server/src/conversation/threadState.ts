@@ -51,6 +51,8 @@ export function extractPendingInterruptFromSnapshot(
 
 function agentIdToGraphName(agentId: AgentId): AguiGraphName | null {
   switch (agentId) {
+    case 'claudeAgent':
+      return 'claudeAgent'
     case 'hitl':
       return 'hitl'
     case 'simple':

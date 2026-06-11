@@ -174,12 +174,20 @@ function mapAssistantContentBlocks(content: unknown): BaseEvent[] {
 
 function mapUserToolResults(message: SDKMessage & { type: 'user' }): BaseEvent[] {
   const events: BaseEvent[] = []
+  const seen = new Set<string>()
+
+  const push = (toolUseId: string, content: unknown, isError?: boolean) => {
+    if (seen.has(toolUseId))
+      return
+    seen.add(toolUseId)
+    events.push(toolResultEvent(toolUseId, content, isError))
+  }
 
   if (message.tool_use_result != null) {
     const result = message.tool_use_result
     if (result != null && typeof result === 'object' && 'tool_use_id' in result) {
       const record = result as { tool_use_id: string, content?: unknown, is_error?: boolean }
-      events.push(toolResultEvent(record.tool_use_id, record.content ?? result, record.is_error))
+      push(record.tool_use_id, record.content ?? result, record.is_error)
     }
   }
 
@@ -192,11 +200,7 @@ function mapUserToolResults(message: SDKMessage & { type: 'user' }): BaseEvent[]
       continue
     const record = block as unknown as Record<string, unknown>
     if (record.type === 'tool_result' && typeof record.tool_use_id === 'string') {
-      events.push(toolResultEvent(
-        record.tool_use_id,
-        record.content ?? '',
-        Boolean(record.is_error),
-      ))
+      push(record.tool_use_id, record.content ?? '', Boolean(record.is_error))
     }
   }
 

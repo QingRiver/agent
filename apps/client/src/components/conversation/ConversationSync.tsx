@@ -16,7 +16,7 @@ export function ConversationSync() {
   useEffect(() => {
     if (!userId || activeId == null)
       return
-    void ConversationStore.loadMessages(activeId)
+    void ConversationStore.loadThreadState(activeId)
   }, [userId, activeId])
 
   return null

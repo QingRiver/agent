@@ -20,15 +20,6 @@ function ChatPanel({
   agentId: AgentId
 }) {
   const agent = getAguiAgent(agentId)
-  const { activeMessages, messagesLoading } = useConversations()
-
-  if (messagesLoading || activeMessages == null) {
-    return (
-      <p className="rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-400">
-        加载对话历史…
-      </p>
-    )
-  }
 
   return (
     <div className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
@@ -40,7 +31,6 @@ function ChatPanel({
         <ConversationChat
           agentId={agentId}
           threadId={threadId}
-          initialMessages={activeMessages}
           chatClassName={agent.chatClassName ?? 'h-[calc(100vh-280px)] min-h-[20rem]'}
           placeholder={agent.placeholder}
         >
