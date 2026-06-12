@@ -11,8 +11,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@agent/graph": "workspace:*",
     "@copilotkit/react-core": "catalog:",
-    "@microsoft/fetch-event-source": "catalog:",
     "@radix-ui/react-avatar": "catalog:",
     "@radix-ui/react-dropdown-menu": "catalog:",
     "@radix-ui/react-label": "catalog:",

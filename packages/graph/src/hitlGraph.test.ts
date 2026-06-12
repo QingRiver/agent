@@ -4,9 +4,9 @@ import { EventType } from '@ag-ui/core'
 import { HumanMessage } from '@langchain/core/messages'
 import { Command, MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it } from 'vitest'
-import { hitlGraph } from './hitlGraph.js'
-import { aguiRunContext, aguiTransformerFactory } from './stream/index.js'
-import { getAIMessageContent } from './utils/index.js'
+import { hitlGraph } from './hitlGraph'
+import { aguiRunContext, aguiTransformerFactory } from './stream/index'
+import { getAIMessageContent } from './utils/index'
 
 describe('hitlGraph + AguiTransformer', () => {
   const app = hitlGraph.compile({

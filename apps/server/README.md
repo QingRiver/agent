@@ -1,105 +1,108 @@
 # server
 
-基于 [Hono](https://hono.dev/) + [@hono/node-server](https://github.com/honojs/node-server) 的 HTTP/2 HTTPS 服务：LangGraph 图、AG-UI 适配层、CopilotRuntime。开发环境使用 [tsx](https://github.com/privatenumber/tsx) 直接运行 TypeScript。
-
-LangGraph 与 CopilotKit 的接法见 wiki：[事件映射](../../wiki/LangGraph-v3-AGUI-事件映射.md)、[HITL](../../wiki/LangGraph-v3-AGUI-HITL.md)。AG-UI 流统一走 `streamEvents(v3)` + `@agent/graph` `AguiTransformer`（各 `src/agent/*Agent.ts` + `streamGraphAguiEvents.ts`）。
+基于 [Hono](https://hono.dev/) + [@hono/node-server](https://github.com/honojs/node-server) 的 HTTP/2 HTTPS 服务：LangGraph 图、AG-UI 流、CopilotRuntime、会话与 checkpoint 持久化。
 
 ## 前置条件
 
 - Node.js >= 22
-- [pnpm](https://pnpm.io/)
-- [mkcert](https://github.com/FiloSottile/mkcert)（证书也会给 client 开发服务器复用）
+- pnpm、mkcert（证书与 client 共用）
 
 ## 快速开始
 
 ```bash
-# 在仓库根目录
 pnpm install
 pnpm --filter server cert
 pnpm --filter server dev
-# 或根目录：pnpm dev（同时启动 client）
+# 或根目录 pnpm dev（同时启动 client）
 ```
 
-默认地址：`https://localhost:3000`（环境变量 `PORT` 可改）
-
-`pnpm dev` 会先执行 [scripts/dev.ts](scripts/dev.ts) 预检：Node 版本、`.env` 中 `OPENAI_API_KEY` / `OPENAI_BASE_URL`、`certificates/` 证书，通过后启动 `tsx watch src/index.ts`。
+默认：`https://localhost:3000`（`PORT` 可改）。`pnpm dev` 经 [scripts/dev.ts](scripts/dev.ts) 预检 Node、`.env`、证书后 `tsx watch src/index.ts`。
 
 ### 环境变量
 
-在 `apps/server/.env` 中配置（勿提交到 git）：
-
-| 变量              | 说明                                                               |
-| ----------------- | ------------------------------------------------------------------ |
-| `PORT`            | 监听端口，默认 `3000`                                              |
-| `OPENAI_API_KEY`  | **dev 必填**；[控制台申请](https://platform.deepseek.com/api_keys) |
-| `OPENAI_BASE_URL` | **dev 必填**；如 `https://api.deepseek.com`                        |
-| `OPENAI_MODEL`    | 可选，默认 `deepseek-v4-flash`                                     |
-
-复制模板：`cp apps/server/.env.example apps/server/.env`
+见 `apps/server/.env.example`（`OPENAI_*` 等）。复制：`cp apps/server/.env.example apps/server/.env`
 
 ## API
 
-| 方法   | 路径                      | 说明                                                    |
-| ------ | ------------------------- | ------------------------------------------------------- |
-| `GET`  | `/`、`/heartbeat`         | 心跳 JSON                                               |
-| `GET`  | `/:param`                 | 动态参数                                                |
-| `GET`  | `/sample/simpleGraph`     | 同步 invoke simpleGraph                                 |
-| `GET`  | `/sample/simpleGraph/sse` | simpleGraph LangGraph SSE 演示                          |
-| `GET`  | `/sample/weather`         | weatherGraph LangGraph SSE 演示                         |
-| `*`    | `/copilotkit/*`           | CopilotRuntime（前端 CopilotKit AG-UI 使用）            |
+### 心跳
+
+| 方法 | 路径          | 说明     |
+| ---- | ------------- | -------- |
+| GET  | `/`、`/heartbeat` | JSON 心跳 |
+| GET  | `/:param`     | 动态参数 |
+
+路径前缀：经 `index.ts` 挂载为根路径（非 `/api`）；client 代理将 `/api` 转到 server 根。
+
+### 认证
+
+| 方法 | 路径           | 说明        |
+| ---- | -------------- | ----------- |
+| *    | `/api/auth/*`  | better-auth |
+
+### 会话（需登录，`Authorization: Bearer`）
+
+| 方法 | 路径                      | 说明                                      |
+| ---- | ------------------------- | ----------------------------------------- |
+| GET  | `/conversations/graphs`   | 可选 Agent 列表 `{ name, description }`   |
+| GET  | `/conversations/list`     | 当前用户会话列表                          |
+| POST | `/conversations/create`   | body: `{ agentId: GraphsName }`           |
+| GET  | `/conversations/detail`   | query: `id`                               |
+| GET  | `/conversations/messages` | query: `id` → `messages` + `threadState`  |
+| POST | `/conversations/pin` 等   | 置顶 / 取消 / 删除（删除同时 `deleteThread` checkpoint） |
+
+`agentId` 取值与 `packages/graph` 的 `Graphs` 键一致（如 `simple`、`weather`、`hitl`、`claudeAgent`）。
+
+### CopilotKit
+
+| 方法 | 路径            | 说明                                       |
+| ---- | --------------- | ------------------------------------------ |
+| *    | `/copilotkit/*` | CopilotRuntime；需登录；thread 归属校验      |
+
+AG-UI 流：`streamEvents(v3)` + `@agent/graph` `AguiTransformer`；各 agent 由 `graphAgents.ts` 注册到 `copilotRuntime`。
 
 ### curl 示例
 
 ```bash
-# 心跳
 curl -sk https://localhost:3000/heartbeat
-
-# CopilotKit runtime 信息
 curl -sk https://localhost:3000/copilotkit/info
-
-# Sample LangGraph SSE（simpleGraph）
-curl -sk -N https://localhost:3000/sample/simpleGraph/sse
+# 会话 API 需 Bearer token，见 client 登录后 DevTools
 ```
-
-AG-UI 流（`hitl`、`weather` 等 agent）统一经 `/copilotkit/*` 由 CopilotRuntime 输出；HITL 挂起时发出 `STATE_SNAPSHOT`、`CUSTOM(on_interrupt)` 与 `RUN_FINISHED`（`outcome.type: interrupt`）。恢复：`forwardedProps.command.resume` 或 `RunAgentInput.resume[]` → `Command({ resume })`。
 
 ## 项目结构
 
 ```text
 src/
-├── index.ts
-├── graphs/
-│   ├── checkpointer.ts           # 游客 MemorySaver / 登录 SqliteSaver
-│   └── threadConfig.ts           # SSE 演示用 thread_id
+├── index.ts                 # Hono 入口、auth、copilotKit、apiRoutes
 ├── agent/
-│   ├── index.ts                  # Agent 导出
-│   ├── streamGraphAguiEvents.ts  # v3 编排：aguiEvents → BaseEvent
-│   ├── graphTransformerAguiAgent.ts
-│   └── *Agent.ts                 # 图 compile + stream 输入 + CopilotKit 导出
+│   ├── graphAgents.ts       # Graphs 编译、GRAPH_AGENT_DEFINITIONS、copilotAgents
+│   ├── streamGraphAguiEvents.ts
+│   └── graphTransformerAguiAgent.ts
+├── conversation/
+│   ├── toAgUiMessages.ts    # checkpoint BaseMessage → AG-UI Message
+│   ├── threadHydrate.ts
+│   └── threadState.ts
 ├── copilot/
-│   ├── runtime.ts                # CopilotRuntime agent 注册表
-│   └── honoBridge.ts             # /copilotkit
-├── controller/
-│   ├── default.ts       # 心跳
-│   └── sample.ts        # LangGraph SSE 示例
-├── middleware/logger.ts
-└── router/
-certificates/
+│   ├── runtime.ts
+│   ├── checkpointConnectRunner.ts
+│   └── honoBridge.ts
+├── db/
+│   └── checkpointer.ts      # SqliteSaver（唯一 checkpointer）
+├── handlers/conversations.ts
+├── routes/
+│   ├── index.ts
+│   ├── conversations.ts
+│   └── default.ts
+└── service/conversation.ts
+shared/                      # 与 client 共享的 zod 契约（经 Hono 类型导出）
+packages/graph/              # 图定义（monorepo 包）
 ```
 
 ## 中间件顺序
 
 ```text
-logger → serveStatic(public) → copilotKit → decoratorRoutes（default、sample）
+logger → static → auth session → copilotKit → apiRoutes（default、conversations）
 ```
-
-## 技术栈
-
-- Hono 4、`@hono/node-server`
-- `@ag-ui/client`、`@ag-ui/core`、`@copilotkit/runtime`
-- `@langchain/langgraph`
-- HTTP/2（TLS，`allowHTTP1: true`）
 
 ## Lint
 
-仓库根目录：`pnpm lint`（覆盖 `apps/server`）。
+仓库根目录：`pnpm run lint`（覆盖 `apps/server`）。

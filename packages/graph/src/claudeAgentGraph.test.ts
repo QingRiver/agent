@@ -3,8 +3,8 @@ import { EventType } from '@ag-ui/core'
 import { AIMessage, HumanMessage } from '@langchain/core/messages'
 import { MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it, vi } from 'vitest'
-import { claudeAgentGraph } from './claudeAgentGraph.js'
-import { aguiRunContext, aguiTransformerFactory } from './stream/index.js'
+import { claudeAgentGraph } from './claudeAgentGraph'
+import { aguiRunContext, aguiTransformerFactory } from './stream/index'
 
 vi.mock('@agent/claude-agent', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent/claude-agent')>()

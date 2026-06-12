@@ -1,4 +1,4 @@
-export { aguiRunContext } from './aguiRunContext.js'
+export { aguiRunContext } from './aguiRunContext'
 export {
   AGUI_WRITER_EVENT,
   type AguiExtensions,
@@ -6,13 +6,13 @@ export {
   type AguiMappedEvent,
   AguiTransformer,
   aguiTransformerFactory,
-} from './aguiTransformer.js'
+} from './aguiTransformer'
 export {
   buildInterruptFinalizeEvents,
   INTERRUPT_REASON_CONFIRMATION,
   mapInterruptPayloadsToAgUi,
   mapInterruptPayloadToAgUi,
-} from './mapInterruptToAgUi.js'
-export { type AguiTextMessageEvent, mapMessagesEventDataToAgUi } from './mapMessagesToAgUi.js'
-export { type AguiToolEvent, mapToolsEventDataToAgUi } from './mapToolsToAgUi.js'
-export { resolveResumeFromRunAgentInput } from './resolveResumeInput.js'
+} from './mapInterruptToAgUi'
+export { type AguiTextMessageEvent, mapMessagesEventDataToAgUi } from './mapMessagesToAgUi'
+export { type AguiToolEvent, mapToolsEventDataToAgUi } from './mapToolsToAgUi'
+export { resolveResumeFromRunAgentInput } from './resolveResumeInput'

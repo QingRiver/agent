@@ -1,7 +1,6 @@
 import type { ApprovalDecision } from '@lib/hitlContracts'
 import { useAgent, useCopilotKit, useInterrupt } from '@copilotkit/react-core/v2'
 import { useConversations } from '@hooks/useConversations'
-import { AGENT_IDS } from '@lib/agentIds'
 import { narrowApprovalInterruptValue } from '@lib/hitlContracts'
 import { useCallback, useEffect, useState } from 'react'
 import { ApprovalCard } from './ApprovalCard'
@@ -18,11 +17,11 @@ interface HitlInterruptUiProps {
 export function HitlInterruptUi({ threadId }: HitlInterruptUiProps) {
   const { threadState, reloadActiveThread } = useConversations()
   const { copilotkit } = useCopilotKit()
-  const { agent } = useAgent({ agentId: AGENT_IDS.hitl })
+  const { agent } = useAgent({ agentId: 'hitl' })
   const [busy, setBusy] = useState(false)
 
   const liveElement = useInterrupt({
-    agentId: AGENT_IDS.hitl,
+    agentId: 'hitl',
     renderInChat: false,
     enabled: event => event.name === 'on_interrupt',
     render: ({ event, resolve }) => {

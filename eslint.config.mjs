@@ -17,6 +17,21 @@ export default antfu({
   rules: {
     'no-console': 'off',
     'ts/no-redeclare': 'off',
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: 'ImportDeclaration[source.value=/\\.js$/]',
+        message: 'Import paths must not include a .js extension.',
+      },
+      {
+        selector: 'ExportNamedDeclaration[source.value=/\\.js$/]',
+        message: 'Re-export paths must not include a .js extension.',
+      },
+      {
+        selector: 'ExportAllDeclaration[source.value=/\\.js$/]',
+        message: 'Re-export paths must not include a .js extension.',
+      },
+    ],
   },
 }, {
   files: ['apps/client/src/routes/**/*.{tsx,ts}', 'apps/client/src/contexts/**/*.{tsx,ts}'],

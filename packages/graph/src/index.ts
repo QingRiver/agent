@@ -1,22 +1,24 @@
-export { claudeAgentGraph } from './claudeAgentGraph.js'
+import { z } from 'zod'
+import { claudeAgentGraph } from './claudeAgentGraph'
+import { hitlGraph } from './hitlGraph'
+import { obsidianGraph } from './obsidianGraph'
+import { simpleGraph } from './simpleGraph'
+import { simpleToolCallGraph } from './simpleToolCallGraph'
+import { weatherGraph } from './weatherGraph'
 
 export type {
   ApprovalDecision,
   ApprovalInterruptPayload,
   HitlWorkflowResult,
-} from './hitl/types.js'
-export { hitlGraph } from './hitlGraph.js'
+} from './hitl/types'
 export {
   MAX_SEARCH_RESULTS,
   OBSIDIAN_SEARCH_TOOL_NAME,
-  obsidianGraph,
-} from './obsidianGraph.js'
-export { simpleGraph } from './simpleGraph.js'
+} from './obsidianGraph'
 export {
   FETCH_USER_ORDER_TOOL_NAME,
   ORDER_TOOL_PROGRESS_EVENT,
-  simpleToolCallGraph,
-} from './simpleToolCallGraph.js'
+} from './simpleToolCallGraph'
 export {
   type AguiExtensions,
   type AguiFinalizeContext,
@@ -33,5 +35,21 @@ export {
   mapMessagesEventDataToAgUi,
   mapToolsEventDataToAgUi,
   resolveResumeFromRunAgentInput,
-} from './stream/index.js'
-export { weatherGraph } from './weatherGraph.js'
+} from './stream/index'
+
+export const Graphs = {
+  claudeAgent: claudeAgentGraph,
+  simple: simpleGraph,
+  simpleToolCall: simpleToolCallGraph,
+  weather: weatherGraph,
+  obsidian: obsidianGraph,
+  hitl: hitlGraph,
+} as const
+
+export type GraphsName = keyof typeof Graphs
+
+const graphsNameValues = Object.keys(Graphs) as GraphsName[]
+
+export const GraphsNameSchema = z.enum(
+  graphsNameValues as [GraphsName, ...GraphsName[]],
+)

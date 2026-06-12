@@ -1,11 +1,11 @@
-import type { ApprovalInterruptPayload } from '../hitl/types.js'
+import type { ApprovalInterruptPayload } from '../hitl/types'
 import { EventType } from '@ag-ui/core'
 import { describe, expect, it } from 'vitest'
 import {
   buildInterruptFinalizeEvents,
   INTERRUPT_REASON_CONFIRMATION,
   mapInterruptPayloadToAgUi,
-} from './mapInterruptToAgUi.js'
+} from './mapInterruptToAgUi'
 
 describe('mapInterruptToAgUi', () => {
   it('maps ApprovalInterruptPayload to AG-UI Interrupt', () => {

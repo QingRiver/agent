@@ -1,14 +1,14 @@
 # client
 
-Vite + React + TanStack Router 前端。演示 **纯 LangGraph SSE**（`fetch-event-source`）与 **CopilotKit AG-UI** 两套调用方式。
+Vite + React + TanStack Router 前端：**登录后会话式 CopilotKit Chat**（多 Agent / 多 thread）。
 
 ## 技术栈
 
-- React 19、Vite 8、TypeScript 6
-- [TanStack Router](https://tanstack.com/router)
+- React 19、Vite 8、TypeScript
+- TanStack Router、Jotai
 - Tailwind CSS 4
-- `@microsoft/fetch-event-source`（sample SSE）
-- `@copilotkit/react-core`（HITL / simple / weather AG-UI）
+- `@copilotkit/react-core` v2
+- `@agent/graph`（`GraphsName` 类型）
 
 ## 快速开始
 
@@ -18,34 +18,42 @@ pnpm --filter server cert
 pnpm dev
 ```
 
-| 项       | 值                                                      |
-| -------- | ------------------------------------------------------- |
-| 开发地址 | `https://localhost:5173`                                |
-| Copilot  | `/api/copilotkit` → `https://localhost:3000/copilotkit` |
-| Sample   | `/api` → `https://localhost:3000`（`/sample/...` SSE）  |
+| 项       | 值                                                        |
+| -------- | --------------------------------------------------------- |
+| 开发地址 | `https://localhost:5173`                                  |
+| API      | `/api` → `https://localhost:3000`                         |
+| Copilot  | `/api/copilotkit` → `https://localhost:3000/copilotkit`   |
 
 ## 页面路由
 
-| 路径           | 调用方式   | 后端入口                         |
-| -------------- | ---------- | -------------------------------- |
-| `/sse`         | 纯 SSE     | `GET /sample/simpleGraph/sse`    |
-| `/simple`            | CopilotKit | `simple` agent                   |
-| `/simple-tool-call`  | CopilotKit | `simpleToolCall` agent           |
-| `/weather/sse`       | 纯 SSE     | `GET /sample/weather?message=`   |
-| `/weather`     | CopilotKit | `weather` agent                  |
-| `/hitl`        | CopilotKit | `hitl` agent + 审批 tool call UI |
+| 路径        | 说明                          |
+| ----------- | ----------------------------- |
+| `/login`    | 登录                          |
+| `/register` | 注册                          |
+| `/`         | 会话列表 + CopilotChat（需登录） |
+
+新建对话：`NewConversationDialog` 请求 `GET /conversations/graphs`，选择 graph 后 `POST /conversations/create`。
+
+## 数据流
+
+| 数据           | 来源 |
+| -------------- | ---- |
+| 聊天消息 UI    | CopilotKit `connect` → `MESSAGES_SNAPSHOT`（服务端 checkpoint hydrate） |
+| HITL 挂起审批  | `GET /conversations/messages` 的 `threadState`（`ConversationSync`） |
+| 会话列表       | `GET /conversations/list` |
 
 ## 目录说明
 
 ```text
 src/
-├── routes/sse.tsx | simple.tsx | weather.tsx | weather.index.tsx | weather.sse.tsx | hitl.tsx
-├── lib/streamSampleSse.ts | parseWeatherUpdate.ts | hitlContracts.ts
+├── routes/           # login、register、index（Chat）
+├── apis/             # Hono 类型安全 client（@server/api）
+├── stores/conversation-store.ts
 ├── components/
-│   ├── copilot/CopilotAgentShell.tsx
-│   ├── weather/WeatherChatBubble.tsx
-│   └── hitl/…
-└── lib/agentIds.ts
+│   ├── conversation/ # 侧边栏、新建对话
+│   ├── copilot/      # ConversationChat、CopilotKitAppProvider
+│   └── hitl/         # HitlInterruptUi、ApprovalCard
+└── hooks/useConversations.ts
 ```
 
 ## 常用命令
@@ -56,4 +64,4 @@ pnpm --filter client typecheck
 pnpm --filter client build
 ```
 
-根目录：`pnpm lint`
+根目录：`pnpm run lint`

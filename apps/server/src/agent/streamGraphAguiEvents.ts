@@ -106,7 +106,7 @@ export async function* streamGraphAguiEvents(
   }
   finally {
     const ctx = getRequestContext()
-    if (ctx.mode === 'auth' && ctx.userId)
+    if (ctx)
       ConversationService.touch(ctx.userId, input.threadId)
     delete aguiRunContext.current
   }

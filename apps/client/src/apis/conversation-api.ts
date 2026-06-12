@@ -1,14 +1,20 @@
-import type { AgentId } from './api-types'
+import type { GraphsName } from './api-types'
 import { api, successData } from './api-client'
 
 export class Conversation {
+  static async graphs() {
+    const res = await api.conversations.graphs.$get()
+    const data = await successData(res)
+    return data.graphs
+  }
+
   static async list() {
     const res = await api.conversations.list.$get()
     const data = await successData(res)
     return data.conversations
   }
 
-  static async create(agentId: AgentId) {
+  static async create(agentId: GraphsName) {
     const res = await api.conversations.create.$post({ json: { agentId } })
     const data = await successData(res)
     return data.conversation

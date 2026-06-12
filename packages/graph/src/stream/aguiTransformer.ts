@@ -11,15 +11,15 @@ import type {
   StreamTransformer,
   ToolsEventData,
 } from '@langchain/langgraph'
-import type { BuildInterruptFinalizeOptions } from './mapInterruptToAgUi.js'
-import type { AguiTextMessageEvent } from './mapMessagesToAgUi.js'
-import type { AguiToolEvent } from './mapToolsToAgUi.js'
+import type { BuildInterruptFinalizeOptions } from './mapInterruptToAgUi'
+import type { AguiTextMessageEvent } from './mapMessagesToAgUi'
+import type { AguiToolEvent } from './mapToolsToAgUi'
 import { EventType } from '@ag-ui/core'
 import { StreamChannel as StreamChannelImpl } from '@langchain/langgraph'
-import { aguiRunContext } from './aguiRunContext.js'
-import { buildInterruptFinalizeEvents } from './mapInterruptToAgUi.js'
-import { mapMessagesEventDataToAgUi } from './mapMessagesToAgUi.js'
-import { mapToolsEventDataToAgUi } from './mapToolsToAgUi.js'
+import { aguiRunContext } from './aguiRunContext'
+import { buildInterruptFinalizeEvents } from './mapInterruptToAgUi'
+import { mapMessagesEventDataToAgUi } from './mapMessagesToAgUi'
+import { mapToolsEventDataToAgUi } from './mapToolsToAgUi'
 
 /** LangGraph `config.writer` 解包名（与 `@agent/claude-agent` 的 `AGUI_WRITER_EVENT` 一致） */
 export const AGUI_WRITER_EVENT = 'agui'

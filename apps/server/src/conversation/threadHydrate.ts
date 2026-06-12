@@ -1,6 +1,7 @@
-import type { AgentId, AgUiMessage, ThreadState } from '../../shared/conversation'
-import { mapStateToAgUiMessages } from './mapStateToAgUiMessages'
+import type { GraphsName } from '@agent/graph'
+import type { AgUiMessage, ThreadState } from '../../shared/conversation'
 import { extractPendingInterruptFromSnapshot, getThreadSnapshot } from './threadState'
+import { mapStateToAgUiMessages } from './toAgUiMessages'
 
 export interface ThreadBundle {
   messages: AgUiMessage[]
@@ -8,14 +9,14 @@ export interface ThreadBundle {
 }
 
 export async function hydrateThreadBundle(
-  agentId: AgentId,
+  graphsName: GraphsName,
   threadId: string,
 ): Promise<ThreadBundle> {
-  const snapshot = await getThreadSnapshot(agentId, threadId)
+  const snapshot = await getThreadSnapshot(graphsName, threadId)
   const values = (snapshot.values ?? {}) as Record<string, unknown>
 
   return {
-    messages: mapStateToAgUiMessages(agentId, values),
+    messages: mapStateToAgUiMessages(graphsName, values),
     threadState: {
       pendingInterrupt: extractPendingInterruptFromSnapshot(snapshot),
     },

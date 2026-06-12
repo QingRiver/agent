@@ -1,12 +1,10 @@
-import type {
-  AgentId,
-  ConversationThread,
-} from '../../shared/conversation'
+import type { GraphsName } from '@agent/graph'
+import type { ConversationThread } from '../../shared/conversation'
 import { randomUUID } from 'node:crypto'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import {
-  AgentIdSchema,
   ConversationThreadSchema,
+  GraphsNameSchema,
 } from '../../shared/conversation'
 import { db } from '../db/drizzle'
 import { conversationThreads } from '../db/schema'
@@ -21,7 +19,7 @@ function formatTitle(seq: number, createdAt: number): string {
 function rowToThread(row: typeof conversationThreads.$inferSelect): ConversationThread {
   return ConversationThreadSchema.parse({
     id: row.id,
-    agentId: AgentIdSchema.parse(row.agentId),
+    agentId: GraphsNameSchema.parse(row.agentId),
     title: row.title,
     pinned: row.pinned === 1,
     seq: row.seq,
@@ -50,7 +48,7 @@ export class ConversationService {
     return row ? rowToThread(row) : null
   }
 
-  static create(userId: string, agentId: AgentId): ConversationThread {
+  static create(userId: string, agentId: GraphsName): ConversationThread {
     const now = Date.now()
     const seqRow = db
       .select({

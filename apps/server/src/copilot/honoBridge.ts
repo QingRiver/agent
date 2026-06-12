@@ -1,5 +1,4 @@
 import type { Context, Next } from 'hono'
-import type { CheckpointerMode } from '../db/checkpointer'
 import { createCopilotRuntimeHandler } from '@copilotkit/runtime/v2'
 import { getAuth } from '../auth/auth'
 import { resolveDevCorsOrigin } from '../auth/devOrigins'
@@ -22,8 +21,8 @@ function buildCopilotFetchRequest(ctx: Context): Request {
   return new Request(ctx.req.url, ctx.req.raw)
 }
 
-async function resolveCheckpointerMode(headers: Headers): Promise<
-  | { mode: CheckpointerMode, userId: string }
+async function resolveCopilotSession(headers: Headers): Promise<
+  | { userId: string }
   | Response
 > {
   const session = await getAuth().api.getSession({ headers })
@@ -33,7 +32,7 @@ async function resolveCheckpointerMode(headers: Headers): Promise<
       headers: { 'Content-Type': 'application/json' },
     })
   }
-  return { mode: 'auth', userId: session.user.id }
+  return { userId: session.user.id }
 }
 
 function extractThreadId(body: unknown): string | undefined {
@@ -50,10 +49,9 @@ function extractThreadId(body: unknown): string | undefined {
 
 async function assertCopilotThreadAccess(
   request: Request,
-  mode: CheckpointerMode,
-  userId?: string,
+  userId: string,
 ): Promise<Response | null> {
-  if (mode !== 'auth' || !userId || request.method !== 'POST')
+  if (request.method !== 'POST')
     return null
 
   let body: unknown
@@ -81,17 +79,17 @@ export async function copilotKitMiddleware(ctx: Context, next: Next): Promise<Re
   if (!ctx.req.path.startsWith(BASE_PATH))
     return next()
 
-  const resolved = await resolveCheckpointerMode(ctx.req.raw.headers)
+  const resolved = await resolveCopilotSession(ctx.req.raw.headers)
   if (resolved instanceof Response)
     return resolved
 
-  const { mode, userId } = resolved
+  const { userId } = resolved
 
-  const denied = await assertCopilotThreadAccess(ctx.req.raw, mode, userId)
+  const denied = await assertCopilotThreadAccess(ctx.req.raw, userId)
   if (denied)
     return denied
 
-  return runWithRequestContext({ mode, userId }, async () => {
+  return runWithRequestContext({ userId }, async () => {
     try {
       return await handler(buildCopilotFetchRequest(ctx))
     }

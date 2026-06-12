@@ -23,12 +23,6 @@ function RootLayout() {
               >
                 Chat
               </Link>
-              <Link
-                to="/sse"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
-              >
-                SSE
-              </Link>
               <div className="ml-auto">
                 <UserAvatarMenu />
               </div>

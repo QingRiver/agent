@@ -1,7 +1,7 @@
 import type { ValidationTargets } from 'hono'
 import type { ZodType } from 'zod'
 import { zValidator as baseZValidator } from '@hono/zod-validator'
-import { formatSseError } from '../utils/sse'
+import { formatErrorMessage } from '../utils/formatError'
 
 export function zValidator<T extends ZodType, Target extends keyof ValidationTargets>(
   target: Target,
@@ -9,6 +9,6 @@ export function zValidator<T extends ZodType, Target extends keyof ValidationTar
 ) {
   return baseZValidator(target, schema, (result, c) => {
     if (!result.success)
-      return c.json({ error: formatSseError(result.error) }, 400)
+      return c.json({ error: formatErrorMessage(result.error) }, 400)
   })
 }

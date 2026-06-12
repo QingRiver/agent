@@ -4,11 +4,16 @@ import type {
   CreateConversationRequest,
 } from '../../shared/conversation'
 import type { AppEnv, AuthUser } from '../types'
+import { listGraphAgentCatalog } from '../agent/graphAgents'
 import { hydrateThreadBundle } from '../conversation/threadHydrate'
-import { getAuthCheckpointer } from '../db/checkpointer'
+import { getCheckpointer } from '../db/checkpointer'
 import { ConversationService } from '../service/conversation'
 
 export class ConversationHandlers {
+  static graphs(c: Context<AppEnv>) {
+    return c.json({ graphs: listGraphAgentCatalog() })
+  }
+
   static list(c: Context<AppEnv>, user: AuthUser) {
     return c.json({ conversations: ConversationService.list(user.id) })
   }
@@ -63,7 +68,7 @@ export class ConversationHandlers {
     if (!ConversationService.delete(user.id, req.id))
       return c.json({ error: 'Not found' }, 404)
 
-    await getAuthCheckpointer().deleteThread(req.id)
+    await getCheckpointer().deleteThread(req.id)
     return c.json({ ok: true })
   }
 }

@@ -1,13 +1,8 @@
 import type {
-  AssistantMessage,
   BaseEvent,
   Message,
   RunAgentInput,
-  ToolCall,
-  ToolMessage,
-  UserMessage,
 } from '@ag-ui/core'
-import type { AgUiMessage } from '../../shared/conversation'
 import { randomUUID } from 'node:crypto'
 import { EventType } from '@ag-ui/core'
 import { InMemoryAgentRunner } from '@copilotkit/runtime/v2'
@@ -51,71 +46,12 @@ export class CheckpointConnectRunner extends InMemoryAgentRunner {
   }
 }
 
-function toAssistantSnapshotMessage(msg: AgUiMessage): AssistantMessage {
-  const snapshot: AssistantMessage = {
-    id: String(msg.id),
-    role: 'assistant',
-    content: String(msg.content ?? ''),
-  }
-
-  if (Array.isArray(msg.toolCalls) && msg.toolCalls.length > 0)
-    snapshot.toolCalls = msg.toolCalls as ToolCall[]
-
-  return snapshot
-}
-
-function toAgUiSnapshotMessages(messages: AgUiMessage[]): Message[] {
-  const snapshots: Message[] = []
-
-  for (const msg of messages) {
-    const id = String(msg.id)
-    const content = String(msg.content ?? '')
-
-    switch (msg.role) {
-      case 'assistant':
-        snapshots.push(toAssistantSnapshotMessage(msg))
-        break
-      case 'tool': {
-        const toolCallId = typeof msg.toolCallId === 'string' ? msg.toolCallId : ''
-        if (!toolCallId)
-          break
-        const toolMessage: ToolMessage = {
-          id,
-          role: 'tool',
-          content,
-          toolCallId,
-        }
-        snapshots.push(toolMessage)
-        break
-      }
-      case 'user': {
-        const userMessage: UserMessage = {
-          id,
-          role: 'user',
-          content,
-        }
-        snapshots.push(userMessage)
-        break
-      }
-      default:
-        snapshots.push({
-          id,
-          role: String(msg.role),
-          content,
-        } as Message)
-    }
-  }
-
-  return snapshots
-}
-
-function buildCheckpointReplayRun(threadId: string, messages: AgUiMessage[]): BaseEvent[] {
+function buildCheckpointReplayRun(threadId: string, messages: Message[]): BaseEvent[] {
   const runId = `connect-replay-${randomUUID()}`
-  const snapshotMessages = toAgUiSnapshotMessages(messages)
   const input: RunAgentInput = {
     threadId,
     runId,
-    messages: snapshotMessages,
+    messages,
     tools: [],
     context: [],
   }
@@ -129,7 +65,7 @@ function buildCheckpointReplayRun(threadId: string, messages: AgUiMessage[]): Ba
     },
     {
       type: EventType.MESSAGES_SNAPSHOT,
-      messages: snapshotMessages,
+      messages,
     },
     {
       type: EventType.RUN_FINISHED,
@@ -142,7 +78,7 @@ function buildCheckpointReplayRun(threadId: string, messages: AgUiMessage[]): Ba
 
 async function buildCheckpointConnectEvents(threadId: string): Promise<BaseEvent[]> {
   const ctx = getRequestContext()
-  if (ctx.mode !== 'auth' || !ctx.userId)
+  if (!ctx)
     return []
 
   const conversation = ConversationService.get(ctx.userId, threadId)

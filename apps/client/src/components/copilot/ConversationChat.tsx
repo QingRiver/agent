@@ -1,4 +1,4 @@
-import type { AgentId } from '@lib/agentIds'
+import type { GraphsName } from '@agent/graph'
 import {
   CopilotChat,
   CopilotChatConfigurationProvider,
@@ -6,7 +6,7 @@ import {
 import { CopilotRuntimeReady } from './CopilotRuntimeReady'
 
 interface ConversationChatProps {
-  agentId: AgentId
+  graphsName: GraphsName
   threadId: string
   chatClassName?: string
   placeholder?: string
@@ -15,7 +15,7 @@ interface ConversationChatProps {
 
 /** 聊天历史由 CopilotChat connect → CheckpointConnectRunner MESSAGES_SNAPSHOT 恢复 */
 export function ConversationChat({
-  agentId,
+  graphsName,
   threadId,
   chatClassName = 'h-full min-h-[24rem]',
   placeholder = '输入消息…',
@@ -23,14 +23,14 @@ export function ConversationChat({
 }: ConversationChatProps) {
   return (
     <CopilotChatConfigurationProvider
-      agentId={agentId}
+      agentId={graphsName}
       threadId={threadId}
       hasExplicitThreadId
     >
       <CopilotRuntimeReady>
         <CopilotChat
           key={threadId}
-          agentId={agentId}
+          agentId={graphsName}
           className={chatClassName}
           labels={{ chatInputPlaceholder: placeholder }}
         />

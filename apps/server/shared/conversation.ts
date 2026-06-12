@@ -1,17 +1,9 @@
+import type { Message } from '@ag-ui/core'
+import { GraphsNameSchema } from '@agent/graph'
 import { z } from 'zod'
 
-/** 与 CopilotKit 注册的 agent id 对齐 */
-export const AGENT_ID_VALUES = [
-  'claudeAgent',
-  'simple',
-  'simpleToolCall',
-  'weather',
-  'hitl',
-  'obsidian',
-] as const
-
-export const AgentIdSchema = z.enum(AGENT_ID_VALUES)
-export type AgentId = z.infer<typeof AgentIdSchema>
+export type { GraphsName } from '@agent/graph'
+export { GraphsNameSchema } from '@agent/graph'
 
 export const ConversationIdSchema = z.string().uuid()
 export type ConversationId = z.infer<typeof ConversationIdSchema>
@@ -23,16 +15,16 @@ export const ConversationIdRequestSchema = z.object({
 export type ConversationIdRequest = z.infer<typeof ConversationIdRequestSchema>
 
 export const CreateConversationRequestSchema = z.object({
-  agentId: AgentIdSchema,
+  agentId: GraphsNameSchema,
 })
 export type CreateConversationRequest = z.infer<typeof CreateConversationRequestSchema>
 
-/** AG-UI Message JSON（首版宽松） */
-export type AgUiMessage = Record<string, unknown>
+/** AG-UI `Message`（checkpoint hydrate / connect snapshot 共用） */
+export type AgUiMessage = Message
 
 export const ConversationThreadSchema = z.object({
   id: ConversationIdSchema,
-  agentId: AgentIdSchema,
+  agentId: GraphsNameSchema,
   title: z.string(),
   pinned: z.boolean(),
   seq: z.number().int().positive(),

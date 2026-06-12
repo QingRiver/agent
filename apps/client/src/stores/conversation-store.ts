@@ -1,7 +1,8 @@
-import type { AgentId, ConversationThread, ThreadState } from '@apis/api-types'
+import type { ConversationThread, GraphsName, ThreadState } from '@apis/api-types'
 import { Conversation } from '@apis/conversation-api'
-import { DEFAULT_AGUI_AGENT_ID } from '@lib/aguiAgents'
 import { atom, getDefaultStore } from 'jotai'
+
+const DEFAULT_GRAPHS_NAME: GraphsName = 'simple'
 
 export interface UseConversationsResult {
   conversations: ConversationThread[]
@@ -12,7 +13,7 @@ export interface UseConversationsResult {
   threadStateLoading: boolean
   error: string | null
   select: (id: string) => void
-  create: (agentId: AgentId) => Promise<ConversationThread>
+  create: (graphsName: GraphsName) => Promise<ConversationThread>
   pin: (id: string) => Promise<void>
   unpin: (id: string) => Promise<void>
   remove: (id: string) => Promise<void>
@@ -108,7 +109,7 @@ export class ConversationStore {
     try {
       let list = await Conversation.list()
       if (list.length === 0) {
-        const created = await Conversation.create(DEFAULT_AGUI_AGENT_ID)
+        const created = await Conversation.create(DEFAULT_GRAPHS_NAME)
         list = [created]
       }
       store.set(ConversationStore.conversationsAtom, list)
@@ -167,9 +168,9 @@ export class ConversationStore {
     await ConversationStore.loadThreadState(activeId)
   }
 
-  static async create(agentId: AgentId): Promise<ConversationThread> {
+  static async create(graphsName: GraphsName): Promise<ConversationThread> {
     const store = ConversationStore.store()
-    const conversation = await Conversation.create(agentId)
+    const conversation = await Conversation.create(graphsName)
     store.set(ConversationStore.conversationsAtom, prev => [conversation, ...prev])
     store.set(ConversationStore.activeIdAtom, conversation.id)
     return conversation

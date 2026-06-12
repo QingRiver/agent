@@ -3,7 +3,7 @@ import type {
   ApprovalDecision,
   ApprovalInterruptPayload,
   HitlWorkflowResult,
-} from './hitl/types.js'
+} from './hitl/types'
 import { AIMessage } from '@langchain/core/messages'
 import {
   Annotation,

@@ -1,5 +1,5 @@
 import type { RunAgentInput } from '@ag-ui/core'
-import type { ApprovalDecision } from '../hitl/types.js'
+import type { ApprovalDecision } from '../hitl/types'
 
 function extractForwardedCommand(input: RunAgentInput): { resume?: unknown } | undefined {
   const command = (input.forwardedProps as { command?: { resume?: unknown } } | undefined)

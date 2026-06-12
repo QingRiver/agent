@@ -1,6 +1,5 @@
 import type { ConversationThread } from '@apis/api-types'
 import { Button } from '@components/ui/button'
-import { getAguiAgent } from '@lib/aguiAgents'
 import { cn } from '@lib/utils'
 import { Pin, PinOff, Trash2 } from 'lucide-react'
 import { useState } from 'react'
@@ -22,7 +21,6 @@ export function ConversationListItem({
   onUnpin,
   onDelete,
 }: ConversationListItemProps) {
-  const agentLabel = getAguiAgent(conversation.agentId).label
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
@@ -40,7 +38,7 @@ export function ConversationListItem({
         className="min-w-0 flex-1 text-left"
       >
         <div className="truncate font-medium">{conversation.title}</div>
-        <div className="mt-0.5 truncate text-xs text-slate-500">{agentLabel}</div>
+        <div className="mt-0.5 truncate text-xs text-slate-500">{conversation.agentId}</div>
       </button>
       <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <button

@@ -1,6 +1,6 @@
 import type { AIMessage, ToolMessage } from '@langchain/core/messages'
 import type { ProtocolEvent } from '@langchain/langgraph'
-import type { AguiTextMessageEvent } from './stream/mapMessagesToAgUi.js'
+import type { AguiTextMessageEvent } from './stream/mapMessagesToAgUi'
 import { EventType } from '@ag-ui/core'
 import { HumanMessage } from '@langchain/core/messages'
 import { match } from 'ts-pattern'
@@ -9,7 +9,7 @@ import {
   ORDER_TOOL_PROGRESS_EVENT,
   simpleToolCallGraph,
 } from './simpleToolCallGraph'
-import { aguiTransformerFactory } from './stream/aguiTransformer.js'
+import { aguiTransformerFactory } from './stream/aguiTransformer'
 import { getAIMessageContent } from './utils'
 
 const input = { messages: [new HumanMessage('取消订单 10086')] }

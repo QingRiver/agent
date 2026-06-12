@@ -51,9 +51,6 @@ catalogs:
     '@langchain/openai':
       specifier: ^1.4.7
       version: 1.4.7
-    '@microsoft/fetch-event-source':
-      specifier: ^2.0.1
-      version: 2.0.1
     '@radix-ui/react-avatar':
       specifier: ^1.1.10
       version: 1.1.12
@@ -194,12 +191,12 @@ importers:
 
   apps/client:
     dependencies:
+      '@agent/graph':
+        specifier: workspace:*
+        version: link:../../packages/graph
       '@copilotkit/react-core':
         specifier: 'catalog:'
         version: 1.59.2(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(graphql@16.14.1)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(zod@4.4.3)
-      '@microsoft/fetch-event-source':
-        specifier: 'catalog:'
-        version: 2.0.1
       '@radix-ui/react-avatar':
         specifier: 'catalog:'
         version: 1.1.12(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -1752,9 +1749,6 @@ packages:
 
   '@mermaid-js/parser@1.1.1':
     resolution: {integrity: sha512-VuHdsYMK1bT6X2JbcAaWAhugTRvRBRyuZgd+c22swUeI9g/ntaxF7CY7dYarhZovofCbUNO0G7JesfmNtjYOCw==}
-
-  '@microsoft/fetch-event-source@2.0.1':
-    resolution: {integrity: sha512-W6CLUJ2eBMw3Rec70qrsEW0jOm/3twwJv21mrmj2yORiaVmVYGS4sSS5yUwvQc1ZlDLYGPnClVWmUUMagKNsfA==}
 
   '@modelcontextprotocol/sdk@1.29.0':
     resolution: {integrity: sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ==}
@@ -7656,8 +7650,6 @@ snapshots:
   '@mermaid-js/parser@1.1.1':
     dependencies:
       '@chevrotain/types': 11.1.2
-
-  '@microsoft/fetch-event-source@2.0.1': {}
 
   '@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@3.25.76)':
     dependencies:

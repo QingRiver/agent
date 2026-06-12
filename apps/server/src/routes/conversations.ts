@@ -10,6 +10,7 @@ import { zValidator } from '../middleware/zodValidator'
 
 export const conversationsRoutes = new Hono<AppEnv>()
   .use('*', requireAuth)
+  .get('/graphs', c => ConversationHandlers.graphs(c))
   .get('/list', c => ConversationHandlers.list(c, c.get('user')!))
   .post(
     '/create',

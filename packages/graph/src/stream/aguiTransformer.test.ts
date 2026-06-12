@@ -1,8 +1,8 @@
 import type { ProtocolEvent } from '@langchain/langgraph'
-import type { AguiMappedEvent } from './aguiTransformer.js'
+import type { AguiMappedEvent } from './aguiTransformer'
 import { EventType } from '@ag-ui/core'
 import { describe, expect, it } from 'vitest'
-import { AGUI_WRITER_EVENT, AguiTransformer } from './aguiTransformer.js'
+import { AGUI_WRITER_EVENT, AguiTransformer } from './aguiTransformer'
 
 function captureAguiEvents(transformer: AguiTransformer) {
   const extensions = transformer.init()

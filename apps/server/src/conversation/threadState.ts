@@ -1,8 +1,8 @@
+import type { GraphsName } from '@agent/graph'
 import type { CompiledStateGraph, StateSnapshot } from '@langchain/langgraph'
-import type { AgentId, PendingInterrupt } from '../../shared/conversation'
-import type { AguiGraphName } from '../graphs/graphAppFactory'
+import type { PendingInterrupt } from '../../shared/conversation'
 import { PendingInterruptSchema } from '../../shared/conversation'
-import { getAguiGraphApp } from '../graphs/graphAppFactory'
+import { getAguiGraphApp } from '../agent'
 
 interface CheckpointTask {
   interrupts?: Array<{
@@ -12,14 +12,10 @@ interface CheckpointTask {
 }
 
 export async function getThreadSnapshot(
-  agentId: AgentId,
+  graphsName: GraphsName,
   threadId: string,
 ): Promise<StateSnapshot> {
-  const graphName = agentIdToGraphName(agentId)
-  if (!graphName)
-    throw new Error(`Unknown agent for checkpoint hydrate: ${agentId}`)
-
-  const app = getAguiGraphApp(graphName, 'auth') as unknown as CompiledStateGraph<unknown, unknown>
+  const app = getAguiGraphApp(graphsName) as unknown as CompiledStateGraph<unknown, unknown>
   return app.getState({ configurable: { thread_id: threadId } })
 }
 
@@ -47,23 +43,4 @@ export function extractPendingInterruptFromSnapshot(
   }
 
   return null
-}
-
-function agentIdToGraphName(agentId: AgentId): AguiGraphName | null {
-  switch (agentId) {
-    case 'claudeAgent':
-      return 'claudeAgent'
-    case 'hitl':
-      return 'hitl'
-    case 'simple':
-      return 'simple'
-    case 'simpleToolCall':
-      return 'simpleToolCall'
-    case 'weather':
-      return 'weather'
-    case 'obsidian':
-      return 'obsidian'
-    default:
-      return null
-  }
 }

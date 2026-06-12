@@ -1,7 +1,8 @@
-export { claudeAgent } from './claudeAgent'
-export { buildMessagesInput } from './extractLastUserMessage'
-export { hitlAgent } from './hitlAgent'
-export { obsidianAgent, obsidianGraphApp } from './obsidianAgent'
-export { simpleAgent, simpleGraphApp } from './simpleAgent'
-export { simpleToolCallAgent } from './simpleToolCallAgent'
-export { weatherAgent, weatherGraphApp } from './weatherAgent'
+export { buildMessagesInput, extractLastUserMessage } from './extractLastUserMessage'
+export {
+  copilotAgents,
+  getAguiGraphApp,
+  listGraphAgentCatalog,
+} from './graphAgents'
+export { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
+export { streamGraphAguiEvents } from './streamGraphAguiEvents'
