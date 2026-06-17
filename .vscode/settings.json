@@ -1,6 +1,10 @@
 {
   "prettier.enable": false,
-  "typescript.tsdk": "node_modules/typescript/lib",
+  "editor.fontLigatures": true,
+  "editor.fontFamily": "Fira Code,Microsoft Yahei UI, monospace",
+  "terminal.integrated.fontFamily": "Menlo, Monaco, 'Courier New', monospace",
+  "typescript.experimental.useTsgo": true,
+  "typescript.tsdk": "node_modules/@typescript/native-preview/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "editor.defaultFormatter": "dbaeumer.vscode-eslint",
   "editor.formatOnSave": true,

@@ -17,7 +17,7 @@
   "scripts": {
     "dev": "pnpm --parallel --filter server --filter client dev",
     "cli": "pnpm --filter @agent/cli start",
-    "typecheck": "pnpm -r run typecheck",
+    "tc": "pnpm -r run tc",
     "lint": "pnpm exec eslint apps packages",
     "format": "pnpm exec eslint apps packages --fix",
     "test": "vitest run",
@@ -27,6 +27,7 @@
     "@antfu/eslint-config": "catalog:",
     "@eslint-react/eslint-plugin": "catalog:",
     "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
     "eslint": "catalog:",
     "eslint-plugin-format": "catalog:",
     "ts-pattern": "catalog:",

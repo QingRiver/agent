@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "tc": "tsgo --noEmit"
   },
   "dependencies": {
     "@ag-ui/core": "catalog:",

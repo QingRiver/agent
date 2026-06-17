@@ -75,7 +75,7 @@ pnpm dev
 pnpm dev                    # server + client 并行
 pnpm cli                    # packages/cli（读取根 .env）
 pnpm run lint               # ESLint（apps + packages）
-pnpm typecheck              # 全仓类型检查
+pnpm tc                     # 全仓类型检查
 pnpm test                   # Vitest
 ```
 

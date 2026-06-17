@@ -60,7 +60,7 @@ src/
 
 ```bash
 pnpm --filter client dev
-pnpm --filter client typecheck
+pnpm --filter client tc
 pnpm --filter client build
 ```
 

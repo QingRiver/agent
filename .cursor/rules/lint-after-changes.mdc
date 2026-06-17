@@ -23,5 +23,5 @@ pnpm run lint
 
 ## 与其他检查的关系
 
-- 改了 TypeScript：在 lint 通过后，相关包还应 `pnpm typecheck`（或根目录 `pnpm typecheck`）。
+- 改了 TypeScript：在 lint 通过后，相关包还应 `pnpm tc`（或根目录 `pnpm tc`）。
 - 改了测试相关逻辑：在 lint 通过后运行 `pnpm test`（或对应测试文件）。
