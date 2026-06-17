@@ -12,10 +12,11 @@
     "chatbot"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "dev": "pnpm --parallel --filter server --filter client dev",
+    "cli": "pnpm --filter @agent/cli start",
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm exec eslint apps packages",
     "format": "pnpm exec eslint apps packages --fix",

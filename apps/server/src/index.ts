@@ -1,4 +1,4 @@
-import 'dotenv/config'
+import { env } from '@agent/env'
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
@@ -15,7 +15,7 @@ import { logger } from './middleware/logger'
 import { apiRoutes } from './routes'
 import type { AppEnv } from './types'
 
-const port = Number(process.env.PORT) || 3000
+const port = env.PORT
 
 const app = new Hono<AppEnv>()
 

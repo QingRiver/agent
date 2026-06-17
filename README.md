@@ -11,12 +11,14 @@ apps/
 packages/
   graph/           # @agent/graph — LangGraph 图与 AguiTransformer
   claudeAgent/     # @agent/claude-agent — Claude Agent SDK 适配
+  env/             # @agent/env — 根 .env 加载 + zod 校验
+  cli/             # @agent/cli — DeepSeek CLI 实验
   tools/           # @agent/tools — Open-Meteo、Obsidian 等工具
 ```
 
 ## 前置条件
 
-- Node.js >= 22
+- Node.js >= 24
 - [pnpm](https://pnpm.io/)
 - [mkcert](https://github.com/FiloSottile/mkcert)（本地 HTTPS，server / client 共用）
 
@@ -28,12 +30,13 @@ packages/
 pnpm install
 ```
 
-### 2. 配置环境变量（server）
+### 2. 配置环境变量
 
-Weather / Obsidian 等 ReAct 图需要 LLM；Claude Agent 图需要 Claude SDK 环境（见 `apps/server/.env.example`）。
+Weather / Obsidian 等 ReAct 图需要 LLM；Claude Agent 图需要 Claude SDK 环境（见根目录 `.env.example`）。
 
 ```bash
-cp apps/server/.env.example apps/server/.env
+cp .env.example .env
+# 若你已有 apps/server/.env：cp apps/server/.env .env
 ```
 
 | 变量              | 说明                                    |
@@ -41,7 +44,9 @@ cp apps/server/.env.example apps/server/.env
 | `OPENAI_API_KEY`  | DeepSeek 等 OpenAI 兼容 API Key         |
 | `OPENAI_BASE_URL` | 如 `https://api.deepseek.com`           |
 | `OPENAI_MODEL`    | 默认 `deepseek-v4-flash`                |
-| `PORT`            | 默认 `3000`                             |
+| `PORT`            | 默认 `3000`（可在 `apps/server/.env` 覆盖） |
+
+环境变量由 `@agent/env` 从仓库根 `.env` 加载并经 zod 校验；`apps/server/.env` 可选覆盖 server 专有项。**改密钥只改根 `.env`。**
 
 ### 3. 本地 HTTPS 证书（首次）
 
@@ -68,6 +73,7 @@ pnpm dev
 
 ```bash
 pnpm dev                    # server + client 并行
+pnpm cli                    # packages/cli（读取根 .env）
 pnpm run lint               # ESLint（apps + packages）
 pnpm typecheck              # 全仓类型检查
 pnpm test                   # Vitest

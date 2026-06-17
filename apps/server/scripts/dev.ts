@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { config } from 'dotenv'
+import { env } from '@agent/env'
 
 const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -14,30 +14,15 @@ function fail(message: string): never {
 
 function checkNodeVersion(): void {
   const major = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10)
-  if (major < 22) {
-    fail(`需要 Node.js >= 22，当前为 ${process.versions.node}`)
+  if (major < 24) {
+    fail(`需要 Node.js >= 24，当前为 ${process.versions.node}`)
   }
   console.log(`[dev] Node ${process.versions.node} ✓`)
 }
 
-function loadEnv(): void {
-  const envPath = path.join(serverRoot, '.env')
-  if (!fs.existsSync(envPath)) {
-    fail(`未找到 ${envPath}，请执行：cp apps/server/.env.example apps/server/.env`)
-  }
-  const { error } = config({ path: envPath })
-  if (error)
-    fail(`加载 .env 失败：${error.message}`)
-}
-
-function checkRequiredEnv(): void {
-  const required = ['OPENAI_API_KEY', 'OPENAI_BASE_URL'] as const
-  for (const key of required) {
-    const value = process.env[key]?.trim()
-    if (!value)
-      fail(`环境变量 ${key} 未设置，请在 apps/server/.env 中配置`)
-    console.log(`[dev] ${key} ✓`)
-  }
+function logEnv(): void {
+  console.log('[dev] OPENAI_API_KEY ✓')
+  console.log(`[dev] OPENAI_BASE_URL ✓ (${env.OPENAI_BASE_URL})`)
 }
 
 function checkCertificates(): void {
@@ -84,7 +69,6 @@ function runServer(): void {
 }
 
 checkNodeVersion()
-loadEnv()
-checkRequiredEnv()
+logEnv()
 checkCertificates()
 runServer()

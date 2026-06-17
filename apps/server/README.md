@@ -4,7 +4,7 @@
 
 ## 前置条件
 
-- Node.js >= 22
+- Node.js >= 24
 - pnpm、mkcert（证书与 client 共用）
 
 ## 快速开始
@@ -20,7 +20,8 @@ pnpm --filter server dev
 
 ### 环境变量
 
-见 `apps/server/.env.example`（`OPENAI_*` 等）。复制：`cp apps/server/.env.example apps/server/.env`
+见仓库根目录 `.env.example`（`OPENAI_*` 等）。复制：`cp .env.example .env`  
+可选 `apps/server/.env` 仅覆盖 `PORT`、`DATA_DIR` 等 server 专有项。
 
 ## API
 

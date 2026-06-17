@@ -1,9 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import process from 'node:process'
+import { dataDirPath } from '@agent/env'
 import Database from 'better-sqlite3'
 
-let dataDir = path.resolve(process.cwd(), process.env.DATA_DIR ?? './data')
+let dataDir = dataDirPath
 
 export function getDataDir(): string {
   return dataDir
