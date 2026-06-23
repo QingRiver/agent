@@ -2,6 +2,11 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "rootDir": "src",
+    "paths": {
+      "@core/*": ["./src/core/*"],
+      "@ui/*": ["./src/ui/*"],
+      "@cli/agent/*": ["./src/agent/*"]
+    },
     "types": ["node", "react"],
     "noEmit": true
   },

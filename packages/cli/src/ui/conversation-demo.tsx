@@ -1,19 +1,19 @@
 /* eslint-disable react-refresh/only-export-components -- 演示入口文件，无导出 */
 /**
- * streaming-markdown MVP 演示
- * 运行：pnpm --filter @agent/cli exec tsx src/ui/streaming-markdown-demo.tsx
+ * Conversation MVP 演示
+ * 运行：pnpm --filter @agent/cli exec tsx src/ui/conversation-demo.tsx
  *
  * 模拟 LLM 逐 token 吐字，验证：已完成行不闪烁、最后一行流畅更新、
  * 完成后冻结进 scrollback。
  */
 
-import type { FinishedMessage } from './streaming-markdown'
+import type { HistoryMessage } from '@ui/components/conversation'
+import { Conversation } from '@ui/components/conversation'
+import { useStreamingBuffer } from '@ui/hooks/use-streaming-buffer'
 import { render } from 'ink'
 import React, { useEffect, useRef, useState } from 'react'
-import { StreamingConversation } from './streaming-markdown'
-import { useStreamingBuffer } from './use-streaming-buffer'
 
-const SAMPLE = `正在分析 \`streaming-markdown.tsx\`……
+const SAMPLE = `正在分析 \`conversation.tsx\`……
 
 ## 核心结论
 - **已完成行**只解析一次，永不重渲染
@@ -22,6 +22,7 @@ const SAMPLE = `正在分析 \`streaming-markdown.tsx\`……
 - 嵌套列表演示：
   - 二级缩进项 A
   - 二级缩进项 B
+- 参考实现见 [Open Code](https://github.com/anomalyco/opencode)
 
 ### 有序列表
 1. 第一步：\`append(chunk)\` 写入 ref
@@ -48,7 +49,7 @@ const suffix = stripped.substring(stable.length)
 
 function Demo() {
   const { buffer, append, commit } = useStreamingBuffer()
-  const [finished, setFinished] = useState<FinishedMessage[]>([])
+  const [messages, setMessages] = useState<HistoryMessage[]>([])
   const idRef = useRef(0)
 
   useEffect(() => {
@@ -60,7 +61,7 @@ function Demo() {
         clearInterval(timer)
         // 流结束：取出完整内容冻结进 Static
         const content = commit()
-        setFinished(prev => [...prev, { id: idRef.current++, content }])
+        setMessages(prev => [...prev, { id: idRef.current++, kind: 'assistant', content }])
         return
       }
       append(chars[i++]!)
@@ -68,7 +69,7 @@ function Demo() {
     return () => clearInterval(timer)
   }, [append, commit])
 
-  return <StreamingConversation finished={finished} streaming={buffer} />
+  return <Conversation messages={messages} streaming={buffer} />
 }
 
 render(React.createElement(Demo))

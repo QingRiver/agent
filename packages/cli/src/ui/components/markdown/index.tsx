@@ -1,7 +1,15 @@
+import type { CodeHighlighter, HighlightToken } from '@ui/hooks/use-highlight'
 import type { Token, Tokens } from 'marked'
 import { Box, Text } from 'ink'
 import { marked } from 'marked'
 import React, { memo, useMemo, useRef } from 'react'
+import stringWidth from 'string-width'
+
+import { MarkdownLink } from './link'
+
+// codespan(行内代码)颜色 —— 移植自 Claude Code dark theme 的 permission 色
+// rgb(177,185,249) → #b1b9f9（Ink <Text color> 不解析 rgb() 字符串）
+const CODESPAN_COLOR = '#b1b9f9'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // configureMarked：禁用 strikethrough —— 模型常把 ~ 当"约等于"(~100)用
@@ -73,6 +81,11 @@ function cachedLexer(content: string): Token[] {
   return tokens
 }
 
+// 渲染上下文：透传代码高亮器，等价于原版 formatToken 的 (theme, highlight) 入参
+interface RenderCtx {
+  highlight: CodeHighlighter | null
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // renderInlineTokens：递归渲染行内 token → React 节点(嵌套 <Text> 样式)
 // 对应 formatToken 的 codespan/em/strong/del/link/text/escape/br/html 分支
@@ -80,7 +93,8 @@ function cachedLexer(content: string): Token[] {
 let inlineKey = 0
 function renderInlineTokens(
   tokens: Token[] | undefined,
-  parent: Token | null = null,
+  parent: Token | null,
+  ctx: RenderCtx,
 ): React.ReactNode[] {
   if (!tokens?.length)
     return []
@@ -89,12 +103,17 @@ function renderInlineTokens(
     const k = inlineKey++
     switch (tok.type) {
       case 'text':
-        // link 父节点内：原样输出，避免嵌套第二个 OSC8(本版无 hyperlink，仍保持原行为)
-        out.push(tok.tokens ? renderInlineTokens(tok.tokens, parent) : tok.text)
+        // link 父节点内：原样/递归输出，避免嵌套第二个 OSC8（终端只认最内层，会覆盖真实 href）
+        if (parent?.type === 'link') {
+          out.push(tok.tokens ? renderInlineTokens(tok.tokens, parent, ctx) : tok.text)
+          break
+        }
+        // 有子 token 则递归保留嵌套格式，否则原样输出文本
+        out.push(tok.tokens ? renderInlineTokens(tok.tokens, parent, ctx) : tok.text)
         break
       case 'codespan':
         out.push(
-          <Text key={k} color="cyan">
+          <Text key={k} color={CODESPAN_COLOR}>
             {tok.text}
           </Text>,
         )
@@ -102,14 +121,14 @@ function renderInlineTokens(
       case 'em':
         out.push(
           <Text key={k} italic>
-            {renderInlineTokens(tok.tokens, tok)}
+            {renderInlineTokens(tok.tokens, tok, ctx)}
           </Text>,
         )
         break
       case 'strong':
         out.push(
           <Text key={k} bold>
-            {renderInlineTokens(tok.tokens, tok)}
+            {renderInlineTokens(tok.tokens, tok, ctx)}
           </Text>,
         )
         break
@@ -117,7 +136,7 @@ function renderInlineTokens(
         // 已被 configureMarked 禁用，仍处理以防自定义
         out.push(
           <Text key={k} strikethrough>
-            {renderInlineTokens(tok.tokens, tok)}
+            {renderInlineTokens(tok.tokens, tok, ctx)}
           </Text>,
         )
         break
@@ -126,12 +145,12 @@ function renderInlineTokens(
           out.push(tok.href.replace(/^mailto:/, ''))
           break
         }
-        const linkText = renderInlineTokens(tok.tokens, tok)
+        const linkNodes = renderInlineTokens(tok.tokens, tok, ctx)
         const hasText = tok.tokens?.length
         out.push(
-          <Text key={k} color="blue" underline>
-            {hasText ? linkText : tok.href}
-          </Text>,
+          <MarkdownLink key={k} href={tok.href}>
+            {hasText ? linkNodes : tok.href}
+          </MarkdownLink>,
         )
         break
       }
@@ -153,33 +172,6 @@ function renderInlineTokens(
 // renderBlockToken：渲染顶层 block token → 一行/一块 React 节点
 // 对应 formatToken 的 heading/paragraph/code/blockquote/list/hr/table/space 分支
 // ─────────────────────────────────────────────────────────────────────────────
-
-// 简易 CJK/全角感知宽度（原版用 string-width；MVP 内联避免依赖）
-function stringWidth(s: string): number {
-  let w = 0
-  for (const ch of s) {
-    const c = ch.codePointAt(0) ?? 0
-    if (
-      (c >= 0x1100 && c <= 0x115F)
-      || (c >= 0x2E80 && c <= 0x303E)
-      || (c >= 0x3041 && c <= 0x33FF)
-      || (c >= 0x3400 && c <= 0x4DBF)
-      || (c >= 0x4E00 && c <= 0x9FFF)
-      || (c >= 0xAC00 && c <= 0xD7A3)
-      || (c >= 0xF900 && c <= 0xFAFF)
-      || (c >= 0xFE30 && c <= 0xFE4F)
-      || (c >= 0xFF00 && c <= 0xFF60)
-      || (c >= 0xFFE0 && c <= 0xFFE6)
-      || (c >= 0x1F300 && c <= 0x1FAFF)
-    ) {
-      w += 2
-    }
-    else {
-      w += 1
-    }
-  }
-  return w
-}
 
 // 取 token 的纯文本（用于列宽测量，不含样式）
 function tokenPlainText(tokens: Token[] | undefined): string {
@@ -207,8 +199,8 @@ function tokenPlainText(tokens: Token[] | undefined): string {
 }
 
 // MarkdownTable：用 Ink <Box> 固定列宽 + 边框字符，列对齐且保留单元格内联样式
-// 原版拼成单个 ANSI 字符串块(防 Ink 行内折行)；本版用 flexbox 列布局等价达成。
-function MarkdownTable({ token }: { token: Tokens.Table }): React.ReactNode {
+// 原版拼成单个 ANSI 字符串块(<Ansi>)防 Ink 行内折行；本版用 flexbox 列布局等价达成。
+function MarkdownTable({ token, ctx }: { token: Tokens.Table, ctx: RenderCtx }): React.ReactNode {
   // 列宽 = 该列最大内容宽度 + 2(左右各 1 padding)
   const colWidths = token.header.map((_, ci) => {
     let w = stringWidth(tokenPlainText(token.header[ci]!.tokens))
@@ -236,7 +228,7 @@ function MarkdownTable({ token }: { token: Tokens.Table }): React.ReactNode {
       {cells.map((cell, ci) => (
         <React.Fragment key={ci}>
           <Box width={colWidths[ci]} paddingLeft={1} paddingRight={1} justifyContent={alignOf(ci, isHeader)}>
-            <Text {...(isHeader ? { bold: true } : {})}>{renderInlineTokens(cell.tokens)}</Text>
+            <Text {...(isHeader ? { bold: true } : {})}>{renderInlineTokens(cell.tokens, null, ctx)}</Text>
           </Box>
           <Text>│</Text>
         </React.Fragment>
@@ -267,12 +259,14 @@ function ListItem({
   start,
   index,
   depth,
+  ctx,
 }: {
   item: Token
   ordered: boolean
   start: number
   index: number
   depth: number
+  ctx: RenderCtx
 }): React.ReactNode {
   const num = ordered ? start + index : null
   const prefix = `${'  '.repeat(depth)}${num != null ? `${num}. ` : '• '}`
@@ -280,9 +274,9 @@ function ListItem({
   const nestedParts: React.ReactNode[] = []
   for (const t of (item as { tokens?: Token[] }).tokens ?? []) {
     if (t.type === 'list')
-      nestedParts.push(renderBlockToken(t, depth + 1))
+      nestedParts.push(renderBlockToken(t, ctx, depth + 1))
     else
-      inlineParts.push(renderInlineTokens([t], item))
+      inlineParts.push(renderInlineTokens([t], item, ctx))
   }
   return (
     <Box flexDirection="column">
@@ -294,35 +288,77 @@ function ListItem({
     </Box>
   )
 }
-function renderBlockToken(token: Token, listDepth = 0): React.ReactNode {
+// CodeTokens：shiki token 二维数组 → Ink <Text color={hex}> 片段。
+// fontStyle 位掩码：1=italic 2=bold 4=underline。空行渲染一个空格保高度。
+function CodeTokens({ tokens }: { tokens: HighlightToken[][] }): React.ReactNode {
+  return (
+    <Box flexDirection="column">
+      {tokens.map((line, i) => (
+        <Text key={i}>
+          {line.length === 0
+            ? ' '
+            : line.map((t, j) => {
+                const props: {
+                  color?: string
+                  italic?: boolean
+                  bold?: boolean
+                  underline?: boolean
+                } = {}
+                if (t.color)
+                  props.color = t.color
+                if (t.fontStyle) {
+                  if (t.fontStyle & 1)
+                    props.italic = true
+                  if (t.fontStyle & 2)
+                    props.bold = true
+                  if (t.fontStyle & 4)
+                    props.underline = true
+                }
+                return (
+                  <Text key={j} {...props}>
+                    {t.content}
+                  </Text>
+                )
+              })}
+        </Text>
+      ))}
+    </Box>
+  )
+}
+
+function renderBlockToken(token: Token, ctx: RenderCtx, listDepth = 0): React.ReactNode {
   const k = `${token.type}-${token.raw?.length ?? 0}`
   switch (token.type) {
     case 'heading': {
-      const inline = renderInlineTokens(token.tokens)
+      const inline = renderInlineTokens(token.tokens, null, ctx)
       const t = token as Tokens.Heading
       if (t.depth === 1)
         return <Text key={k} bold italic underline>{inline}</Text>
       return <Text key={k} bold>{inline}</Text>
     }
     case 'paragraph':
-      return <Text key={k}>{renderInlineTokens(token.tokens)}</Text>
+      return <Text key={k}>{renderInlineTokens(token.tokens, null, ctx)}</Text>
     case 'code': {
       const t = token as Tokens.Code
+      // shiki 异步加载/语言不支持时返回 null → 降级主题色纯文本
+      const tokens = ctx.highlight?.highlight(t.text, t.lang || 'plaintext') ?? null
       return (
-        <Box key={k} flexDirection="column">
+        <Box key={k} flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
           {t.lang && (
             <Text dimColor>
               {t.lang}
             </Text>
           )}
-          <Text color="cyan">
-            {t.text}
-          </Text>
+          {tokens !== null
+            ? <CodeTokens tokens={tokens} />
+            : (
+                <Text color={CODESPAN_COLOR}>{t.text}</Text>
+              )}
         </Box>
       )
     }
     case 'blockquote': {
-      const inner = renderInlineTokens(token.tokens)
+      const inner = renderInlineTokens(token.tokens, null, ctx)
       return (
         <Box key={k} flexDirection="column">
           <Text>
@@ -337,13 +373,13 @@ function renderBlockToken(token: Token, listDepth = 0): React.ReactNode {
       return (
         <Box key={k} flexDirection="column">
           {t.items.map((item, i) => (
-            <ListItem key={i} item={item} ordered={t.ordered} start={Number(t.start)} index={i} depth={listDepth} />
+            <ListItem key={i} item={item} ordered={t.ordered} start={Number(t.start)} index={i} depth={listDepth} ctx={ctx} />
           ))}
         </Box>
       )
     }
     case 'list_item':
-      return renderInlineTokens(token.tokens)
+      return renderInlineTokens(token.tokens, null, ctx)
     case 'hr':
       return (
         <Text key={k} dimColor>
@@ -351,7 +387,7 @@ function renderBlockToken(token: Token, listDepth = 0): React.ReactNode {
         </Text>
       )
     case 'table':
-      return <MarkdownTable key={k} token={token as Tokens.Table} />
+      return <MarkdownTable key={k} token={token as Tokens.Table} ctx={ctx} />
     case 'space':
     case 'br':
       return <Text key={k}>{' '}</Text>
@@ -361,20 +397,23 @@ function renderBlockToken(token: Token, listDepth = 0): React.ReactNode {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Markdown：稳定渲染。useMemo([children, dimColor]) —— 同内容不重解析
+// Markdown：稳定渲染。useMemo([children, dimColor, highlight]) —— 同内容+同高亮态不重解析
 // 表格与非表格内容分别处理；非表格 block 渲染为 <Text> 行。
 // ─────────────────────────────────────────────────────────────────────────────
 interface MarkdownProps {
   children: string
   dimColor?: boolean
+  highlight: CodeHighlighter | null
 }
 
-export const Markdown = memo(({ children, dimColor }: MarkdownProps) => {
+export const Markdown = memo(({ children, dimColor, highlight }: MarkdownProps) => {
   configureMarked()
+  const ctx: RenderCtx = { highlight }
   const elements = useMemo(() => {
     const tokens = cachedLexer(children)
-    return tokens.map(token => renderBlockToken(token))
-  }, [children])
+    return tokens.map(token => renderBlockToken(token, ctx))
+    // highlight 影响 code 分支必须入 deps
+  }, [children, highlight])
 
   return (
     <Box flexDirection="column" gap={0}>
@@ -395,9 +434,10 @@ export const Markdown = memo(({ children, dimColor }: MarkdownProps) => {
 // ─────────────────────────────────────────────────────────────────────────────
 interface StreamingProps {
   children: string
+  highlight: CodeHighlighter | null
 }
 
-export function StreamingMarkdown({ children }: StreamingProps): React.ReactNode {
+export function StreamingMarkdown({ children, highlight }: StreamingProps): React.ReactNode {
   configureMarked()
   const stripped = children // 原版在此 stripPromptXMLTags；MVP 直通
   const stablePrefixRef = useRef('')
@@ -425,8 +465,8 @@ export function StreamingMarkdown({ children }: StreamingProps): React.ReactNode
 
   return (
     <Box flexDirection="column" gap={0}>
-      {stablePrefix && <Markdown>{stablePrefix}</Markdown>}
-      {unstableSuffix && <Markdown>{unstableSuffix}</Markdown>}
+      {stablePrefix && <Markdown highlight={highlight}>{stablePrefix}</Markdown>}
+      {unstableSuffix && <Markdown highlight={highlight}>{unstableSuffix}</Markdown>}
     </Box>
   )
 }

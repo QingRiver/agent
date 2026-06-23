@@ -1,0 +1,58 @@
+import type { InteractionRequest, InteractionResponse } from '@core/types'
+import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions/completions'
+import { Driver, UI } from '@core/types'
+import { Effect } from 'effect'
+
+/** 发起一次 LLM chat(流式 delta 直接灌入 UI.streaming buffer),返回 assistant 消息 */
+export function chat(messages: ChatCompletionMessageParam[], tools?: ChatCompletionTool[]): Effect.Effect<ChatCompletionMessageParam, never, Driver | UI> {
+  return Effect.gen(function* () {
+    const driver = yield* Driver
+    const ui = yield* UI
+    ui.streaming.reset()
+    const result = yield* Effect.promise(() =>
+      driver.chat(messages, tools, (event) => {
+        if (event.type === 'text_delta')
+          ui.streaming.append(event.content)
+      }),
+    )
+    // 清空 buffer(副作用);冻结历史用的文本直接取 result.content,单一真相在消息上
+    ui.streaming.commit()
+    return result
+  })
+}
+
+/** 发起一次人机交互,挂起直到用户响应(UI.interact 内部 Effect.async) */
+export function interact(request: InteractionRequest): Effect.Effect<InteractionResponse, never, UI> {
+  return Effect.gen(function* () {
+    const ui = yield* UI
+    return yield* ui.interact(request)
+  })
+}
+
+/** 推一条用户消息到 UI 投影(真相 llmMessages 由调用方维护) */
+export function pushUser(content: string): Effect.Effect<void, never, UI> {
+  return Effect.gen(function* () {
+    (yield* UI).pushHistory({ kind: 'user', content })
+  })
+}
+
+/** 推一条助手 markdown 消息到 UI 投影 */
+export function pushAssistant(content: string): Effect.Effect<void, never, UI> {
+  return Effect.gen(function* () {
+    (yield* UI).pushHistory({ kind: 'assistant', content })
+  })
+}
+
+/** 推一条工具结果行到 UI 投影 */
+export function pushToolResult(name: string, result: string): Effect.Effect<void, never, UI> {
+  return Effect.gen(function* () {
+    (yield* UI).pushHistory({ kind: 'toolResult', name, result })
+  })
+}
+
+/** 设置/清除 spinner 文案(通用,与工具无关) */
+export function setSpinner(label: string | null): Effect.Effect<void, never, UI> {
+  return Effect.gen(function* () {
+    (yield* UI).setSpinner(label)
+  })
+}

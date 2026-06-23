@@ -99,6 +99,9 @@ catalogs:
     better-sqlite3:
       specifier: ^12.10.0
       version: 12.10.0
+    chalk:
+      specifier: ^5.6.2
+      version: 5.6.2
     class-variance-authority:
       specifier: ^0.7.1
       version: 0.7.1
@@ -153,6 +156,15 @@ catalogs:
     react-dom:
       specifier: ^19.2.6
       version: 19.2.6
+    shiki:
+      specifier: ^3.23.0
+      version: 3.23.0
+    string-width:
+      specifier: ^8.2.1
+      version: 8.2.1
+    supports-hyperlinks:
+      specifier: ^4.3.0
+      version: 4.5.0
     tailwind-merge:
       specifier: ^3.3.1
       version: 3.6.0
@@ -398,6 +410,9 @@ importers:
       '@inkjs/ui':
         specifier: 'catalog:'
         version: 2.0.0(ink@7.1.0(@types/react@19.2.15)(react@19.2.6))
+      chalk:
+        specifier: 'catalog:'
+        version: 5.6.2
       effect:
         specifier: 'catalog:'
         version: 3.21.3
@@ -410,6 +425,15 @@ importers:
       openai:
         specifier: 'catalog:'
         version: 4.104.0(ws@8.21.0)(zod@3.25.76)
+      shiki:
+        specifier: 'catalog:'
+        version: 3.23.0
+      string-width:
+        specifier: 'catalog:'
+        version: 8.2.1
+      supports-hyperlinks:
+        specifier: 'catalog:'
+        version: 4.5.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -4564,6 +4588,10 @@ packages:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
     engines: {node: '>=8'}
 
+  has-flag@5.0.1:
+    resolution: {integrity: sha512-CsNUt5x9LUdx6hnk/E2SZLsDyvfqANZSUq4+D3D8RzDJ2M+HDTIkF60ibS1vHaK55vzgiZw1bEPFG9yH7l33wA==}
+    engines: {node: '>=12'}
+
   has-symbols@1.1.0:
     resolution: {integrity: sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==}
     engines: {node: '>= 0.4'}
@@ -6154,9 +6182,17 @@ packages:
   stylis@4.4.0:
     resolution: {integrity: sha512-5Z9ZpRzfuH6l/UAvCPAPUo3665Nk2wLaZU3x+TLHKVzIz33+sbJqbtrYoC3KD4/uVOr2Zp+L0LySezP9OHV9yA==}
 
+  supports-color@10.2.2:
+    resolution: {integrity: sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g==}
+    engines: {node: '>=18'}
+
   supports-color@7.2.0:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
     engines: {node: '>=8'}
+
+  supports-hyperlinks@4.5.0:
+    resolution: {integrity: sha512-ZW2OvfeCXrNTbLakPUzjQG922EeGCOteFSVoek5DKStTh898wf7zgtuFlzQN8HfZCxC3Eh02yJVrRW51hADf+w==}
+    engines: {node: '>=20'}
 
   synckit@0.11.13:
     resolution: {integrity: sha512-eNRKgb3z66Yp3D2CixVujOUvXLFUTij/zVnV8KRyvFdQwpz7I5DS8UfRkTeLzb64u+dkzDSdelE24izu+zSSUg==}
@@ -10775,6 +10811,8 @@ snapshots:
 
   has-flag@4.0.0: {}
 
+  has-flag@5.0.1: {}
+
   has-symbols@1.1.0: {}
 
   has-tostringtag@1.0.2:
@@ -12856,9 +12894,16 @@ snapshots:
 
   stylis@4.4.0: {}
 
+  supports-color@10.2.2: {}
+
   supports-color@7.2.0:
     dependencies:
       has-flag: 4.0.0
+
+  supports-hyperlinks@4.5.0:
+    dependencies:
+      has-flag: 5.0.1
+      supports-color: 10.2.2
 
   synckit@0.11.13:
     dependencies:
