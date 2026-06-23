@@ -27,10 +27,10 @@ export function UserMessage({ content }: { content: string }) {
   )
 }
 
-export function ToolResultLine({ name, result }: { name: string, result: string }) {
+export function ToolResultLine({ name }: { name: string }) {
   return (
     <StatusMessage variant="info">
-      {`🔧 ${name}: ${result}`}
+      {`🔧 ${name}`}
     </StatusMessage>
   )
 }

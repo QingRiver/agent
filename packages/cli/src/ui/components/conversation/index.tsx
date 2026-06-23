@@ -24,7 +24,7 @@ function HistoryMessageItem({ msg, highlight }: { msg: HistoryMessage, highlight
     case 'assistant':
       return <AssistantMessageItem content={msg.content} highlight={highlight} />
     case 'toolResult':
-      return <ToolResultLine name={msg.name} result={msg.result} />
+      return <ToolResultLine name={msg.name} />
   }
 }
 

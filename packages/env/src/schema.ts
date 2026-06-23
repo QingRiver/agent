@@ -16,6 +16,7 @@ export const ServerEnvSchema = LlmEnvSchema.extend({
   DATA_DIR: z.string().default('./data'),
   BETTER_AUTH_SECRET: z.string().min(1).default('dev-secret-change-me-in-production'),
   BETTER_AUTH_URL: z.string().url().default('https://localhost:3000'),
+  TUSHARE_TOKEN: z.string().min(1).optional(),
 })
 
 export type ServerEnv = z.infer<typeof ServerEnvSchema>
