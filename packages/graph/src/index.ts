@@ -7,10 +7,6 @@ import { simpleToolCallGraph } from './simpleToolCallGraph'
 import { weatherGraph } from './weatherGraph'
 
 export { ASK_SYSTEM_PROMPT, ASK_TOOLS } from './hitl/ask-tools'
-export type {
-  ApprovalDecision,
-  HitlWorkflowResult,
-} from './hitl/types'
 export {
   MAX_SEARCH_RESULTS,
   OBSIDIAN_SEARCH_TOOL_NAME,
