@@ -1,4 +1,3 @@
-import type { ApprovalInterruptPayload } from '../hitl/types'
 import { EventType } from '@ag-ui/core'
 import { describe, expect, it } from 'vitest'
 import {
@@ -8,9 +7,9 @@ import {
 } from './mapInterruptToAgUi'
 
 describe('mapInterruptToAgUi', () => {
-  it('maps ApprovalInterruptPayload to AG-UI Interrupt', () => {
-    const payload: ApprovalInterruptPayload = {
-      type: 'approval',
+  it('maps approval interrupt payload to AG-UI Interrupt', () => {
+    const payload = {
+      type: 'approval' as const,
       message: '请确认敏感操作：转账',
       details: '向 0x123 转账 100 ETH',
     }

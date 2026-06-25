@@ -4,6 +4,7 @@ import type {
   ChatCompletionMessageToolCall,
 } from 'openai/resources/chat/completions/completions'
 import { chat, pushAssistant, pushToolResult, pushUser, setSpinner } from '@core/agent-effect'
+import { defaultConfirmGate } from '@core/confirm-gate'
 import { Effect } from 'effect'
 import { match, P } from 'ts-pattern'
 
@@ -54,27 +55,20 @@ function handleToolCall(tc: ChatCompletionMessageToolCall, tools: ToolDef[], llm
       args = {}
     }
 
-    // HITL 确认(可多步);返回 null = 用户拒绝
-    if (tool.confirm) {
-      const confirmed = yield* tool.confirm(args)
-      if (confirmed === null) {
+    // 权限闸门:risk≠safe 触发默认闸门;用户取消则跳过执行
+    if (tool.risk && tool.risk !== 'safe') {
+      const ok = yield* defaultConfirmGate(name, args)
+      if (!ok) {
         const msg = '用户拒绝执行'
         yield* pushToolResult(name, msg)
         llmMessages.push({ role: 'tool', tool_call_id: tc.id, content: msg })
         return
       }
-      args = confirmed
     }
 
-    // 执行(execute 是纯 Promise,不转出控制权;spinner 用 effect 包裹)
+    // 执行(execute 是 Effect,可 yield* interact;error channel 为 never,无需 catch)
     yield* setSpinner(`正在执行 ${name}...`)
-    let result: string
-    try {
-      result = yield* Effect.promise(() => tool.execute(args))
-    }
-    catch (err) {
-      result = `工具执行失败:${err instanceof Error ? err.message : String(err)}`
-    }
+    const result = yield* tool.execute(args)
     yield* setSpinner(null)
 
     yield* pushToolResult(name, result)

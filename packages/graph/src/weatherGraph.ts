@@ -1,12 +1,13 @@
 import type { BaseMessage } from '@langchain/core/messages'
 import process from 'node:process'
 import { openMeteo } from '@agent/tools'
-import { AIMessage } from '@langchain/core/messages'
+import { AIMessage, SystemMessage } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { Annotation, StateGraph } from '@langchain/langgraph'
 import { ToolNode } from '@langchain/langgraph/prebuilt'
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
+import { ASK_SYSTEM_PROMPT, ASK_TOOLS } from './hitl/ask-tools'
 
 const WeatherState = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
@@ -34,7 +35,7 @@ const getWeatherTool = tool(
   },
 )
 
-const tools = [getWeatherTool]
+const tools = [getWeatherTool, ...ASK_TOOLS]
 
 const llm = new ChatOpenAI({
   model: process.env.OPENAI_MODEL ?? '',
@@ -44,7 +45,11 @@ const llm = new ChatOpenAI({
 const llmWithTools = llm.bindTools(tools)
 
 async function chatbot(state: typeof WeatherState.State) {
-  const response = await llmWithTools.invoke(state.messages)
+  // 首轮注入 system prompt:引导 AI 缺信息时调 ask_* 而非臆测(与 CLI interact-tools 同构)
+  const messages = state.messages[0]?.getType() === 'system'
+    ? state.messages
+    : [new SystemMessage(ASK_SYSTEM_PROMPT), ...state.messages]
+  const response = await llmWithTools.invoke(messages)
   return { messages: [response] }
 }
 

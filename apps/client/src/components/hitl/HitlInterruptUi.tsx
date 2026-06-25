@@ -1,18 +1,19 @@
-import type { ApprovalDecision } from '@lib/hitlContracts'
+import type { InterruptRequest } from '@lib/hitlContracts'
 import { useAgent, useCopilotKit, useInterrupt } from '@copilotkit/react-core/v2'
 import { useConversations } from '@hooks/useConversations'
-import { narrowApprovalInterruptValue } from '@lib/hitlContracts'
+import { narrowInterruptRequest, narrowPendingInterrupt } from '@lib/hitlContracts'
 import { useCallback, useEffect, useState } from 'react'
-import { ApprovalCard } from './ApprovalCard'
+import { InterruptCard } from './InterruptCards'
 
 interface HitlInterruptUiProps {
   threadId: string
 }
 
 /**
- * 审批 UI 注入 CopilotChat 消息流（与 useInterrupt 默认 renderInChat 同位置）。
- * - 进行中 run：useInterrupt 订阅 on_interrupt
+ * 中断 UI 注入 CopilotChat 消息流（与 useInterrupt 默认 renderInChat 同位置）。
+ * - 进行中 run：useInterrupt 订阅 on_interrupt,event.value 经 narrowInterruptRequest 收窄
  * - 刷新后：threadState.pendingInterrupt 来自 checkpoint hydrate
+ * 两路都按 InterruptRequest.type 分发到 InterruptCard,resolve/resume payload 由 type 决定。
  */
 export function HitlInterruptUi({ threadId }: HitlInterruptUiProps) {
   const { threadState, reloadActiveThread } = useConversations()
@@ -25,28 +26,21 @@ export function HitlInterruptUi({ threadId }: HitlInterruptUiProps) {
     renderInChat: false,
     enabled: event => event.name === 'on_interrupt',
     render: ({ event, resolve }) => {
-      const payload = narrowApprovalInterruptValue(event.value)
-      if (!payload)
+      const request = narrowInterruptRequest(event.value)
+      if (!request)
         return <></>
 
-      return (
-        <ApprovalCard
-          title={payload.message}
-          content={payload.details}
-          onApprove={() => resolve({ approved: true })}
-          onReject={() => resolve({ approved: false, reason: '用户拒绝' })}
-        />
-      )
+      return <InterruptCard request={request} onRespond={payload => resolve(payload)} />
     },
   })
 
-  const resumeFromCheckpoint = useCallback(async (decision: ApprovalDecision) => {
+  const resumeFromCheckpoint = useCallback(async (payload: unknown) => {
     setBusy(true)
     try {
       agent.threadId = threadId
       await agent.runAgent({
         forwardedProps: {
-          command: { resume: decision },
+          command: { resume: payload },
         },
       })
       await reloadActiveThread()
@@ -57,15 +51,13 @@ export function HitlInterruptUi({ threadId }: HitlInterruptUiProps) {
   }, [agent, threadId, reloadActiveThread])
 
   const pending = threadState?.pendingInterrupt
-  const checkpointElement = pending != null
+  const pendingRequest: InterruptRequest | null = pending != null
+    ? narrowPendingInterrupt(pending)
+    : null
+  const checkpointElement = pendingRequest != null
     ? (
         <div className={busy ? 'pointer-events-none opacity-60' : undefined}>
-          <ApprovalCard
-            title={pending.message}
-            content={pending.details}
-            onApprove={() => { void resumeFromCheckpoint({ approved: true }) }}
-            onReject={() => { void resumeFromCheckpoint({ approved: false, reason: '用户拒绝' }) }}
-          />
+          <InterruptCard request={pendingRequest} onRespond={payload => void resumeFromCheckpoint(payload)} />
         </div>
       )
     : null
