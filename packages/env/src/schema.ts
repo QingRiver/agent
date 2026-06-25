@@ -13,7 +13,7 @@ export const ServerEnvSchema = LlmEnvSchema.extend({
   ANTHROPIC_BASE_URL: z.string().url().optional(),
   ANTHROPIC_MODEL: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(3000),
-  DATA_DIR: z.string().default('./data'),
+  DATA_DIR: z.string().default('apps/server/data'),
   BETTER_AUTH_SECRET: z.string().min(1).default('dev-secret-change-me-in-production'),
   BETTER_AUTH_URL: z.string().url().default('https://localhost:3000'),
   TUSHARE_TOKEN: z.string().min(1).optional(),

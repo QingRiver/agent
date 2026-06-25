@@ -31,12 +31,10 @@ export function extractPendingInterruptFromSnapshot(
       if (value == null || typeof value !== 'object')
         continue
       const v = value as Record<string, unknown>
-      const parsed = PendingInterruptSchema.safeParse({
-        interruptId: interrupt.id,
-        type: v.type,
-        message: v.message,
-        details: v.details,
-      })
+      const interruptId = interrupt.id
+      if (!interruptId || typeof v.type !== 'string')
+        continue
+      const parsed = PendingInterruptSchema.safeParse({ interruptId, ...v })
       if (parsed.success)
         return parsed.data
     }
