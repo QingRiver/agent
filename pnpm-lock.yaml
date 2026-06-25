@@ -404,6 +404,9 @@ importers:
       '@agent/env':
         specifier: workspace:*
         version: link:../env
+      '@agent/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@agent/tools':
         specifier: workspace:*
         version: link:../tools
@@ -472,6 +475,9 @@ importers:
       '@agent/claude-agent':
         specifier: workspace:*
         version: link:../claudeAgent
+      '@agent/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@agent/tools':
         specifier: workspace:*
         version: link:../tools
@@ -497,6 +503,8 @@ importers:
       ts-pattern:
         specifier: 'catalog:'
         version: 5.9.0
+
+  packages/protocol: {}
 
   packages/tools:
     dependencies:

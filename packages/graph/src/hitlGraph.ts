@@ -1,9 +1,5 @@
 import type { BaseMessage } from '@langchain/core/messages'
-import type {
-  ApprovalDecision,
-  ApprovalInterruptPayload,
-  HitlWorkflowResult,
-} from './hitl/types'
+import type { ApprovalDecision, HitlWorkflowResult } from './hitl/types'
 import { AIMessage } from '@langchain/core/messages'
 import {
   Annotation,
@@ -38,7 +34,8 @@ async function prepare(_state: typeof HitlState.State) {
 
 async function humanApproval(state: typeof HitlState.State) {
   await sleep(1000)
-  const decision = interrupt<ApprovalInterruptPayload, ApprovalDecision>({
+  // approval 中断 payload（与 @agent/protocol 的 InterruptRequest approval 分支同构，去掉 interruptId——langgraph 自动生成）
+  const decision = interrupt<{ type: 'approval', message: string, details: string }, ApprovalDecision>({
     type: 'approval',
     message: `请确认敏感操作：${state.input}`,
     details: state.input,

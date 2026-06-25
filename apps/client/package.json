@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@agent/graph": "workspace:*",
+    "@agent/protocol": "workspace:*",
     "@copilotkit/react-core": "catalog:",
     "@radix-ui/react-avatar": "catalog:",
     "@radix-ui/react-dropdown-menu": "catalog:",

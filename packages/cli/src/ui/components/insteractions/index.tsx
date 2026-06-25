@@ -15,7 +15,7 @@ export function InteractionRenderer({
   onRespond,
 }: {
   request: InteractionRequest
-  onRespond: (response: InteractionResponse) => void
+  onRespond: (response: Omit<InteractionResponse, 'interruptId'>) => void
 }) {
   switch (request.type) {
     case 'unlock':

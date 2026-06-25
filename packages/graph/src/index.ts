@@ -6,9 +6,9 @@ import { simpleGraph } from './simpleGraph'
 import { simpleToolCallGraph } from './simpleToolCallGraph'
 import { weatherGraph } from './weatherGraph'
 
+export { ASK_SYSTEM_PROMPT, ASK_TOOLS } from './hitl/ask-tools'
 export type {
   ApprovalDecision,
-  ApprovalInterruptPayload,
   HitlWorkflowResult,
 } from './hitl/types'
 export {

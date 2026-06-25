@@ -1,31 +1,32 @@
 import type { ToolDef } from '@core/types'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions/completions'
 import { openMeteo } from '@agent/tools'
-import { interact } from '@core/agent-effect'
 import { Effect } from 'effect'
 
 // ==========================================
-// 天气工具定义(ToolDef)—— 多步 HITL
+// 天气工具定义(ToolDef)—— safe 只读,无权限闸门
+// 参数索取(补城市/选附加项)交由 AI 调用 interact 工具(ask_input/ask_multi_choice)
 // ==========================================
 
-const EXTRAS_OPTIONS = [
-  { label: '天气代码', value: 'code' },
-  { label: '英文地名', value: 'english' },
-  { label: '查询时间', value: 'time' },
-] as const
+const WEATHER_EXTRAS = ['code', 'english', 'time'] as const
 
 const weatherTool: ToolDef = {
   schema: {
     type: 'function',
     function: {
       name: 'get_weather',
-      description: '查询指定城市的当前天气,需要提供城市名称',
+      description: '查询指定城市的当前天气。若用户未提供城市或附加展示项,先用 ask_input / ask_multi_choice 询问,不要臆测。',
       parameters: {
         type: 'object',
         properties: {
           city: {
             type: 'string',
             description: '城市名称,如"北京"、"上海"、"Tokyo"',
+          },
+          extras: {
+            type: 'array',
+            items: { type: 'string', enum: [...WEATHER_EXTRAS] },
+            description: '附加展示项(可选): code=天气代码, english=英文地名, time=查询时间',
           },
         },
         required: ['city'],
@@ -34,46 +35,25 @@ const weatherTool: ToolDef = {
   },
 
   /**
-   * 多步人机确认(Effect):input(补城市) → multiSelect(附加项) → modal(确认)
-   * 通过 `yield* interact(...)` 转出控制权,与主调度循环无缝组合。任意一步取消即 return null。
+   * execute 是 Effect,error channel 为 never:用 Effect.match 消化异步错误为返回字符串。
+   * 不再有 confirm 三步——参数索取由 AI 用 interact 工具完成。
    */
-  confirm: args =>
-    Effect.gen(function* () {
-      // 1. 若 LLM 未给城市,先输入补全
-      if (!args.city) {
-        const r = yield* interact({ type: 'input', message: '请输入要查询的城市:', placeholder: '北京' })
-        args = { ...args, city: (r.payload as { value: string }).value }
-      }
-
-      // 2. 附加展示项(多选,可空)
-      const m = yield* interact({
-        type: 'multiSelect',
-        message: '选择附加展示项(空格选择,回车确认)',
-        options: [...EXTRAS_OPTIONS],
-      })
-      args = { ...args, extras: (m.payload as { values: string[] }).values }
-
-      // 3. 确认执行
-      const c = yield* interact({
-        type: 'modal',
-        title: '确认查询',
-        body: `查询 ${(args.city as string)} 的天气?`,
-        actions: ['确认', '取消'],
-      })
-      if ((c.payload as { action: string }).action === '取消')
-        return null
-      return args
-    }),
-
-  execute: async (args) => {
+  execute: args => Effect.gen(function* () {
     const city = args.city as string
     const extras = new Set(((args.extras as string[] | undefined) ?? []))
 
-    const place = await openMeteo.getCoordinates(city)
+    const place = yield* Effect.promise(() => openMeteo.getCoordinates(city)).pipe(
+      Effect.match({ onFailure: () => null, onSuccess: p => p }),
+    )
     if (!place)
       return `找不到城市「${city}」,请检查名称或尝试英文名。`
 
-    const current = await openMeteo.getCurrentWeather(place.latitude, place.longitude)
+    const current = yield* Effect.promise(() => openMeteo.getCurrentWeather(place.latitude, place.longitude)).pipe(
+      Effect.match({ onFailure: () => null, onSuccess: c => c }),
+    )
+    if (!current)
+      return `查询「${city}」天气数据失败,请稍后重试。`
+
     const lines = [
       `${place.country} ${place.name} 当前天气:`,
       `- 气温:${current.temperature_2m}°C`,
@@ -84,7 +64,7 @@ const weatherTool: ToolDef = {
     if (extras.has('time'))
       lines.push(`- 查询时间:${new Date().toLocaleString('zh-CN')}`)
     return lines.join('\n')
-  },
+  }),
 }
 
 // ==========================================
@@ -93,7 +73,8 @@ const weatherTool: ToolDef = {
 
 const WEATHER_SYSTEM_PROMPT = [
   '你是天气查询助手。',
-  '当用户没有提供城市名时,用自然语言反问,不要调用工具。',
+  '当用户没有提供城市名时,调用 ask_input 工具询问用户,不要臆测。',
+  '若需要附加展示项,调用 ask_multi_choice 让用户选择(code/english/time)。',
   '只有当用户明确提供了城市名时才调用 get_weather 工具。',
   '工具调用后,基于查询结果用简洁友好的语言回复用户。',
 ].join('\n')
