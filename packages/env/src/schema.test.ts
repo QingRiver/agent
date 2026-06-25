@@ -18,7 +18,7 @@ describe('serverEnvSchema', () => {
     if (result.success) {
       expect(result.data.OPENAI_MODEL).toBe('deepseek-v4-flash')
       expect(result.data.PORT).toBe(3000)
-      expect(result.data.DATA_DIR).toBe('./data')
+      expect(result.data.DATA_DIR).toBe('apps/server/data')
     }
   })
 })

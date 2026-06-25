@@ -3,11 +3,13 @@ import type {
   Message,
   RunAgentInput,
 } from '@ag-ui/core'
+import type { PendingInterrupt } from '../../shared/conversation'
 import { randomUUID } from 'node:crypto'
 import { EventType } from '@ag-ui/core'
 import { InMemoryAgentRunner } from '@copilotkit/runtime/v2'
 import { Observable } from 'rxjs'
 import { getRequestContext } from '../context/requestContext'
+import { buildPendingInterruptConnectEvents } from '../conversation/pendingInterruptAgUi'
 import { hydrateThreadBundle } from '../conversation/threadHydrate'
 import { ConversationService } from '../service/conversation'
 
@@ -46,7 +48,11 @@ export class CheckpointConnectRunner extends InMemoryAgentRunner {
   }
 }
 
-function buildCheckpointReplayRun(threadId: string, messages: Message[]): BaseEvent[] {
+function buildCheckpointReplayRun(
+  threadId: string,
+  messages: Message[],
+  pendingInterrupt: PendingInterrupt | null,
+): BaseEvent[] {
   const runId = `connect-replay-${randomUUID()}`
   const input: RunAgentInput = {
     threadId,
@@ -56,7 +62,7 @@ function buildCheckpointReplayRun(threadId: string, messages: Message[]): BaseEv
     context: [],
   }
 
-  return [
+  const base: BaseEvent[] = [
     {
       type: EventType.RUN_STARTED,
       threadId,
@@ -67,13 +73,20 @@ function buildCheckpointReplayRun(threadId: string, messages: Message[]): BaseEv
       type: EventType.MESSAGES_SNAPSHOT,
       messages,
     },
-    {
-      type: EventType.RUN_FINISHED,
-      threadId,
-      runId,
-      outcome: { type: 'success' },
-    },
   ]
+
+  if (pendingInterrupt != null) {
+    base.push(...buildPendingInterruptConnectEvents(threadId, runId, pendingInterrupt))
+    return base
+  }
+
+  base.push({
+    type: EventType.RUN_FINISHED,
+    threadId,
+    runId,
+    outcome: { type: 'success' },
+  })
+  return base
 }
 
 async function buildCheckpointConnectEvents(threadId: string): Promise<BaseEvent[]> {
@@ -87,10 +100,11 @@ async function buildCheckpointConnectEvents(threadId: string): Promise<BaseEvent
 
   try {
     const bundle = await hydrateThreadBundle(conversation.agentId, threadId)
-    if (bundle.messages.length === 0)
+    const pending = bundle.threadState.pendingInterrupt
+    if (bundle.messages.length === 0 && pending == null)
       return []
 
-    return buildCheckpointReplayRun(threadId, bundle.messages)
+    return buildCheckpointReplayRun(threadId, bundle.messages, pending)
   }
   catch {
     return []
