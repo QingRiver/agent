@@ -1,5 +1,5 @@
 import type { LlmDriver, LlmDriverEvent } from '@core/driver/types'
-import type { ChatCompletionMessageParam, ChatCompletionMessageToolCall, ChatCompletionTool } from 'openai/resources/chat/completions/completions'
+import type { ChatCompletionFunctionTool, ChatCompletionMessageFunctionToolCall, ChatCompletionMessageParam } from 'openai/resources/chat/completions/completions'
 import { env } from '@agent/env'
 import OpenAI from 'openai'
 
@@ -15,7 +15,7 @@ class OpenAIDriver implements LlmDriver {
 
   async chat(
     messages: ChatCompletionMessageParam[],
-    tools: ChatCompletionTool[] | undefined,
+    tools: ChatCompletionFunctionTool[] | undefined,
     onEvent: (event: LlmDriverEvent) => void,
   ): Promise<ChatCompletionMessageParam> {
     const streamParams: OpenAI.ChatCompletionCreateParamsStreaming = {
@@ -31,7 +31,7 @@ class OpenAIDriver implements LlmDriver {
     const stream = await this.#client.chat.completions.create(streamParams)
 
     let content = ''
-    const toolCallAcc = new Map<number, ChatCompletionMessageToolCall>()
+    const toolCallAcc = new Map<number, ChatCompletionMessageFunctionToolCall>()
 
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta

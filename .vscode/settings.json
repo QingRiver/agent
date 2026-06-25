@@ -3,8 +3,7 @@
   "editor.fontLigatures": true,
   "editor.fontFamily": "Fira Code,Microsoft Yahei UI, monospace",
   "terminal.integrated.fontFamily": "Menlo, Monaco, 'Courier New', monospace",
-  "typescript.experimental.useTsgo": true,
-  "typescript.tsdk": "node_modules/@typescript/native-preview/lib",
+  "typescript.tsdk": "node_modules/typescript-go/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "editor.defaultFormatter": "dbaeumer.vscode-eslint",
   "editor.formatOnSave": true,
@@ -34,5 +33,10 @@
   },
   "[json]": {
     "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+  },
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": {
+    "*.ts": "${capture}.test.ts, ${capture}.spec.ts",
+    "*.tsx": "${capture}.test.tsx, ${capture}.spec.tsx"
   }
 }

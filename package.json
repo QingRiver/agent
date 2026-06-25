@@ -18,6 +18,7 @@
     "dev": "pnpm --parallel --filter server --filter client dev",
     "cli": "pnpm --filter @agent/cli start",
     "tc": "pnpm -r run tc",
+    "tsc-go": "tsx scripts/tsc-go.ts",
     "lint": "pnpm exec eslint apps packages",
     "format": "pnpm exec eslint apps packages --fix",
     "test": "vitest run",
@@ -27,11 +28,12 @@
     "@antfu/eslint-config": "catalog:",
     "@eslint-react/eslint-plugin": "catalog:",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
     "eslint": "catalog:",
     "eslint-plugin-format": "catalog:",
     "ts-pattern": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
+    "typescript-go": "catalog:",
     "vitest": "catalog:"
   }
 }

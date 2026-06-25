@@ -125,56 +125,48 @@ const getStockBasicTool: ToolDef = {
     },
   },
 
-  confirm: args =>
-    Effect.gen(function* () {
-      let resolved = { ...args }
-      const ts_code = asString(resolved.ts_code)
-      const name = asString(resolved.name)
+  execute: (args: Record<string, unknown>) => Effect.gen(function* () {
+    let resolved = { ...args }
+    const ts_code = asString(resolved.ts_code)
+    const name = asString(resolved.name)
 
-      if (!ts_code && !name) {
-        const r = yield* interact({
-          type: 'input',
-          message: '请输入要查询的股票名称或代码:',
-          placeholder: '平安银行',
-        })
-        const input = (r.payload as { value: string }).value.trim()
-        if (input.includes('.'))
-          resolved = { ...resolved, ts_code: input }
-        else
-          resolved = { ...resolved, name: input }
-      }
-      else if (!ts_code && name) {
-        let stocks: StockBasicRow[]
-        try {
-          stocks = yield* Effect.promise(() =>
-            tushare.getStockBasic({ name }),
-          )
-        }
-        catch {
-          return null
-        }
-        const picked = yield* pickStock(stocks)
-        if (!picked)
-          return null
-        resolved = { ...resolved, ts_code: picked.ts_code, name: picked.name }
-      }
-
-      return resolved
-    }),
-
-  execute: async (args) => {
-    try {
-      const rows = await tushare.getStockBasic({
-        ...pickOptionalString(args, 'ts_code'),
-        ...pickOptionalString(args, 'name'),
-        ...pickOptionalString(args, 'list_status'),
+    if (!ts_code && !name) {
+      const r = yield* interact({
+        type: 'input',
+        message: '请输入要查询的股票名称或代码:',
+        placeholder: '平安银行',
       })
-      return tushare.formatRowsAsText(rows, { maxRows: 10 })
+      const input = (r.payload as { value: string }).value.trim()
+      if (input.includes('.'))
+        resolved = { ...resolved, ts_code: input }
+      else
+        resolved = { ...resolved, name: input }
     }
-    catch (err) {
-      return toolErrorMessage(err)
+    else if (!ts_code && name) {
+      const stocks = yield* Effect.promise(() =>
+        tushare.getStockBasic({ name }),
+      ).pipe(Effect.match({ onFailure: () => null as StockBasicRow[] | null, onSuccess: s => s }))
+      if (!stocks)
+        return '查询股票基础信息失败'
+      const picked = yield* pickStock(stocks)
+      if (!picked)
+        return '未选择股票'
+      resolved = { ...resolved, ts_code: picked.ts_code, name: picked.name }
     }
-  },
+
+    return yield* Effect.promise(() =>
+      tushare.getStockBasic({
+        ...pickOptionalString(resolved, 'ts_code'),
+        ...pickOptionalString(resolved, 'name'),
+        ...pickOptionalString(resolved, 'list_status'),
+      }),
+    ).pipe(
+      Effect.match({
+        onFailure: err => toolErrorMessage(err),
+        onSuccess: rows => tushare.formatRowsAsText(rows, { maxRows: 10 }),
+      }),
+    )
+  }),
 }
 
 const getDailyTool: ToolDef = {
@@ -196,49 +188,43 @@ const getDailyTool: ToolDef = {
     },
   },
 
-  confirm: args =>
-    Effect.gen(function* () {
-      const resolved = yield* resolveTsCode(args)
-      if (!resolved)
-        return null
+  execute: (args: Record<string, unknown>) => Effect.gen(function* () {
+    const resolved = yield* resolveTsCode(args)
+    if (!resolved)
+      return TOKEN_HINT
 
-      const merged = { ...args, ...resolved }
-      let start_date = asString(merged.start_date)
-      let end_date = asString(merged.end_date)
-      const trade_date = asString(merged.trade_date)
+    const merged = { ...args, ...resolved }
+    let start_date = asString(merged.start_date)
+    let end_date = asString(merged.end_date)
+    const trade_date = asString(merged.trade_date)
 
-      if (!trade_date && (!start_date || !end_date)) {
-        const defaults = defaultDailyRange()
-        start_date = start_date ?? defaults.start_date
-        end_date = end_date ?? defaults.end_date
-      }
+    if (!trade_date && (!start_date || !end_date)) {
+      const defaults = defaultDailyRange()
+      start_date = start_date ?? defaults.start_date
+      end_date = end_date ?? defaults.end_date
+    }
 
-      return {
-        ...merged,
-        ...(start_date ? { start_date } : {}),
-        ...(end_date ? { end_date } : {}),
-        ...(trade_date ? { trade_date } : {}),
-      }
-    }),
-
-  execute: async (args) => {
-    const ts_code = asString(args.ts_code)
+    const ts_code = asString(merged.ts_code)
     if (!ts_code)
       return TOKEN_HINT
 
-    try {
-      const rows = await tushare.getDaily({
+    return yield* Effect.promise(() =>
+      tushare.getDaily({
         ts_code,
-        ...pickOptionalString(args, 'start_date'),
-        ...pickOptionalString(args, 'end_date'),
-        ...pickOptionalString(args, 'trade_date'),
-      })
-      return tushare.formatRowsAsText(rows, { maxRows: 30 })
-    }
-    catch (err) {
-      return toolErrorMessage(err)
-    }
-  },
+        ...pickOptionalString(merged, 'start_date'),
+        ...pickOptionalString(merged, 'end_date'),
+        ...pickOptionalString(merged, 'trade_date'),
+        ...(start_date ? { start_date } : {}),
+        ...(end_date ? { end_date } : {}),
+        ...(trade_date ? { trade_date } : {}),
+      }),
+    ).pipe(
+      Effect.match({
+        onFailure: err => toolErrorMessage(err),
+        onSuccess: rows => tushare.formatRowsAsText(rows, { maxRows: 30 }),
+      }),
+    )
+  }),
 }
 
 const getRealtimeQuoteTool: ToolDef = {
@@ -257,25 +243,27 @@ const getRealtimeQuoteTool: ToolDef = {
     },
   },
 
-  confirm: args =>
-    Effect.gen(function* () {
-      return yield* resolveTsCode(args)
-    }),
+  execute: (args: Record<string, unknown>) => Effect.gen(function* () {
+    const resolved = yield* resolveTsCode(args)
+    if (!resolved)
+      return TOKEN_HINT
 
-  execute: async (args) => {
-    const ts_code = asString(args.ts_code)
+    const ts_code = asString(resolved.ts_code)
     if (!ts_code)
       return TOKEN_HINT
 
-    try {
-      const rows = await tushare.getRealtimeQuote({ ts_code })
-      return tushare.formatRowsAsText(rows, { maxRows: 10 })
-    }
-    catch (err) {
-      const msg = toolErrorMessage(err)
-      return `${msg}\n可改用 get_daily 查询最近交易日收盘数据。`
-    }
-  },
+    return yield* Effect.promise(() =>
+      tushare.getRealtimeQuote({ ts_code }),
+    ).pipe(
+      Effect.match({
+        onFailure: (err) => {
+          const msg = toolErrorMessage(err)
+          return `${msg}\n可改用 get_daily 查询最近交易日收盘数据。`
+        },
+        onSuccess: rows => tushare.formatRowsAsText(rows, { maxRows: 10 }),
+      }),
+    )
+  }),
 }
 
 const tushareTools: ToolDef[] = [getStockBasicTool, getDailyTool, getRealtimeQuoteTool]

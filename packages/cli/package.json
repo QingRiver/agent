@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "tsx src/cli.ts",
-    "tc": "tsgo --noEmit"
+    "tc": "pnpm -w run tsc-go --noEmit"
   },
   "dependencies": {
     "@agent/env": "workspace:*",

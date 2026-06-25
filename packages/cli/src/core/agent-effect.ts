@@ -1,10 +1,10 @@
 import type { InteractionRequest, InteractionResponse } from '@core/types'
-import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions/completions'
+import type { ChatCompletionFunctionTool, ChatCompletionMessageParam } from 'openai/resources/chat/completions/completions'
 import { Driver, UI } from '@core/types'
 import { Effect } from 'effect'
 
 /** 发起一次 LLM chat(流式 delta 直接灌入 UI.streaming buffer),返回 assistant 消息 */
-export function chat(messages: ChatCompletionMessageParam[], tools?: ChatCompletionTool[]): Effect.Effect<ChatCompletionMessageParam, never, Driver | UI> {
+export function chat(messages: ChatCompletionMessageParam[], tools?: ChatCompletionFunctionTool[]): Effect.Effect<ChatCompletionMessageParam, never, Driver | UI> {
   return Effect.gen(function* () {
     const driver = yield* Driver
     const ui = yield* UI
