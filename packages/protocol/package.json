@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "tc": "tsgo --noEmit"
+    "tc": "pnpm -w run tsc-go --noEmit"
   },
   "dependencies": {
     "zod": "catalog:"

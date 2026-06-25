@@ -10,7 +10,7 @@
     }
   },
   "scripts": {
-    "tc": "tsgo --noEmit"
+    "tc": "pnpm -w run tsc-go --noEmit"
   },
   "dependencies": {
     "dotenv": "catalog:",

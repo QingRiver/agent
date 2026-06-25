@@ -2,7 +2,6 @@
   "recommendations": [
     "bradlc.vscode-tailwindcss",
     "ipatalas.vscode-postfix-ts",
-    "typescriptteam.native-preview",
     "vscode-icons-team.vscode-icons",
     "dbaeumer.vscode-eslint"
   ]

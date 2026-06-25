@@ -1,4 +1,4 @@
-import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions/completions'
+import type { ChatCompletionFunctionTool, ChatCompletionMessageParam } from 'openai/resources/chat/completions/completions'
 
 // ==========================================
 // LlmDriver — LLM 后端抽象接口
@@ -12,7 +12,7 @@ import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/reso
 interface LlmDriver {
   chat: (
     messages: ChatCompletionMessageParam[],
-    tools: ChatCompletionTool[] | undefined,
+    tools: ChatCompletionFunctionTool[] | undefined,
     onEvent: (event: LlmDriverEvent) => void,
   ) => Promise<ChatCompletionMessageParam>
 }

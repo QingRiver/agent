@@ -1,5 +1,6 @@
 import type { ToolDef } from '@core/types'
 import type {
+  ChatCompletionMessageFunctionToolCall,
   ChatCompletionMessageParam,
   ChatCompletionMessageToolCall,
 } from 'openai/resources/chat/completions/completions'
@@ -35,7 +36,7 @@ export function agentLoop(userText: string, tools: ToolDef[], llmMessages: ChatC
 }
 
 /** 处理单个 tool_call:确认(HITL)→ 执行 → 拼入 tool 消息(requirement: UI) */
-function handleToolCall(tc: ChatCompletionMessageToolCall, tools: ToolDef[], llmMessages: ChatCompletionMessageParam[]) {
+function handleToolCall(tc: ChatCompletionMessageFunctionToolCall, tools: ToolDef[], llmMessages: ChatCompletionMessageParam[]) {
   return Effect.gen(function* () {
     const name = tc.function.name
     const tool = tools.find(t => t.schema.function.name === name)
@@ -76,10 +77,14 @@ function handleToolCall(tc: ChatCompletionMessageToolCall, tools: ToolDef[], llm
   })
 }
 
-function toolCallsOf(message: ChatCompletionMessageParam): ChatCompletionMessageToolCall[] {
+function toolCallsOf(message: ChatCompletionMessageParam): ChatCompletionMessageFunctionToolCall[] {
   return match(message)
-    .with({ role: 'assistant' }, m => m.tool_calls ?? [])
+    .with({ role: 'assistant' }, m => (m.tool_calls ?? []).filter(isFunctionToolCall))
     .otherwise(() => [])
+}
+
+function isFunctionToolCall(tc: ChatCompletionMessageToolCall): tc is ChatCompletionMessageFunctionToolCall {
+  return tc.type === 'function'
 }
 
 function contentOf(message: ChatCompletionMessageParam): string {

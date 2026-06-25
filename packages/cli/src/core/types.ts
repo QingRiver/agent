@@ -1,6 +1,6 @@
 import type { LlmDriver } from '@core/driver/types'
 import type { Effect } from 'effect'
-import type { ChatCompletionTool } from 'openai/resources/chat/completions/completions'
+import type { ChatCompletionFunctionTool } from 'openai/resources/chat/completions/completions'
 import { Context } from 'effect'
 
 /** 工具权限分级:决定执行前是否走强制确认闸门 */
@@ -8,7 +8,7 @@ type ToolRisk = 'safe' | 'sensitive' | 'destructive'
 
 export interface ToolDef {
   /** OpenAI function tool schema */
-  schema: ChatCompletionTool
+  schema: ChatCompletionFunctionTool
   /**
    * 执行工具,返回结果字符串。是一个 Effect,可 `yield* interact(...)` 转出控制权
    * (interact 工具即靠此机制),与主调度循环无缝组合。
