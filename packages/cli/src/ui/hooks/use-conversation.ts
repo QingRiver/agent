@@ -15,6 +15,7 @@
 import type { InteractionRequest, InteractionResponse, UIMessage } from '@core/types'
 import type { HistoryMessage } from '@ui/components/conversation'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions/completions'
+import { randomUUID } from 'node:crypto'
 import { agentLoop } from '@core/agent-loop'
 import { Driver, UI } from '@core/types'
 import { useConversationConfig } from '@ui/components/provider/conversation-config'
@@ -29,7 +30,11 @@ export interface Conversation {
   spinnerLabel: string | null
   interaction: InteractionRequest | null
   send: (text: string) => void
-  respond: (response: InteractionResponse) => void
+  /**
+   * 响应当前挂起的中断。调用方只需提供 `{ type, payload }`,
+   * interruptId 由 hook 内部按当前挂起中断补全并校验(对 UI 透明)。
+   */
+  respond: (response: Omit<InteractionResponse, 'interruptId'>) => void
 }
 
 export function useConversation(): Conversation {
@@ -50,10 +55,19 @@ export function useConversation(): Conversation {
   const streamingRef = useRef(false)
   const pendingQueueRef = useRef<string[]>([])
   const resolveRef = useRef<((r: InteractionResponse) => void) | null>(null)
+  // 当前挂起中断的 id(与响应路由匹配用)。挂起时生成,respond 校验一致才 resume,
+  // 防止过期/错配响应误触发恢复。本期不做持久化:进程内 id 即足够路由中断恢复过程。
+  const pendingInterruptIdRef = useRef<string | null>(null)
 
-  const respond = useCallback((response: InteractionResponse) => {
-    resolveRef.current?.(response)
+  const respond = useCallback((response: Omit<InteractionResponse, 'interruptId'>) => {
+    // interruptId 由内部按当前挂起中断补全;无挂起中断则忽略(防止过期响应)
+    const interruptId = pendingInterruptIdRef.current
+    if (interruptId == null)
+      return
+    const full: InteractionResponse = { interruptId, ...response }
+    resolveRef.current?.(full)
     resolveRef.current = null
+    pendingInterruptIdRef.current = null
     setInteraction(null)
   }, [])
 
@@ -67,8 +81,11 @@ export function useConversation(): Conversation {
             setMessages(prev => [...prev, { id: idRef.current++, ...entry }]),
           streaming: { reset, append, commit },
           // Effect.async 挂起直到 respond 调用 resume(无 Deferred 的 Scope 包袱,语义等价)
+          // 生成 interruptId 标识本次挂起,响应须带相同 id 才被 accept(见 respond)
           interact: (request: InteractionRequest) =>
             Effect.async<InteractionResponse>((resume) => {
+              const interruptId = randomUUID()
+              pendingInterruptIdRef.current = interruptId
               resolveRef.current = resp => resume(Effect.succeed(resp))
               setInteraction(request)
             }),

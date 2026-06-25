@@ -3,20 +3,28 @@ import type { Effect } from 'effect'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions/completions'
 import { Context } from 'effect'
 
+/** 工具权限分级:决定执行前是否走强制确认闸门 */
+type ToolRisk = 'safe' | 'sensitive' | 'destructive'
+
 export interface ToolDef {
   /** OpenAI function tool schema */
   schema: ChatCompletionTool
-  /** 执行工具,返回结果字符串(纯异步工作,不转出控制权) */
-  execute: (args: Record<string, unknown>) => Promise<string>
   /**
-   * 执行前的人机确认(可选)。是一个 Effect,通过 `yield* interact(...)` 多次转出控制权
-   * (input/select/multiSelect/modal 任意顺序),与主调度循环无缝组合。
-   * - return args(可修改):继续执行
-   * - return null:用户拒绝,跳过执行
+   * 执行工具,返回结果字符串。是一个 Effect,可 `yield* interact(...)` 转出控制权
+   * (interact 工具即靠此机制),与主调度循环无缝组合。
+   * - error channel 为 never:工具内部须自行消化异常(如 Effect.match),保证不 fail
    * - requirement: UI
    */
-  confirm?: (args: Record<string, unknown>) => Effect.Effect<Record<string, unknown> | null, never, UI>
+  execute: (args: Record<string, unknown>) => Effect.Effect<string, never, UI>
+  /**
+   * 权限分级(默认 'safe')。risk≠safe 时,执行前自动触发框架默认闸门
+   * defaultConfirmGate(标准 modal ⚠️ 确认),AI 绕不过;用户取消则跳过执行。
+   * 工具若需更友好的自定义确认,由 AI 在调用前主动调 ask_confirm 工具完成。
+   */
+  risk?: ToolRisk
 }
+
+export type { ToolRisk }
 
 export type UIMessage
   = | { kind: 'user', content: string }
@@ -38,8 +46,11 @@ export type InteractionRequest
     | { type: 'modal', title: string, body: string, actions: string[] }
     | { type: 'unlock', message: string, key: string }
 
-/** 交互响应 */
-export interface InteractionResponse { type: string, payload: unknown }
+/**
+ * 交互响应。`interruptId` 必填,用于把响应路由回正确的挂起中断点
+ * (与中性协议 {@link InterruptResponse} 对齐;多源/并发中断时靠 id 匹配)。
+ */
+export interface InteractionResponse { interruptId: string, type: string, payload: unknown }
 
 export interface I_UI {
   /** 推一条 UI 条目(同步) */
