@@ -1,32 +1,47 @@
-import type { StockBasicRow } from '@agent/tools'
-import type { ToolDef, UI } from '@core/types'
+import type { McpTool, TushareMcp } from '@core/mcp/client'
+import type { ToolDef } from '@core/types'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { tushare } from '@agent/tools'
 import { interact } from '@core/agent-effect'
+import { mcpToolsToToolDefs } from '@core/mcp/to-tooldef'
 import { Effect } from 'effect'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const TUSHARE_SYSTEM_PROMPT = readFileSync(
+const TUSHARE_SYSTEM_PROMPT_TEMPLATE = readFileSync(
   join(__dirname, 'prompts/tushare.md'),
   'utf8',
 ).trim()
 
-const TOKEN_HINT = '请在环境变量设置 TUSHARE_TOKEN（tushare.pro 用户中心获取）'
-
-function formatYmd(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}${m}${d}`
+function todayYmd(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}${m}${day}`
 }
 
-function defaultDailyRange(): { start_date: string, end_date: string } {
-  const end = new Date()
-  const start = new Date()
-  start.setDate(start.getDate() - 130) // 约 90 个交易日，供月 K 聚合
-  return { start_date: formatYmd(start), end_date: formatYmd(end) }
+/** 渲染 system prompt，把 `${to_day}` 占位符替换为当日日期（YYYYMMDD），避免模型时间错乱 */
+function renderSystemPrompt(): string {
+  return TUSHARE_SYSTEM_PROMPT_TEMPLATE.replace(/\$\{to_day\}/g, todayYmd())
+}
+
+const TUSHARE_SYSTEM_PROMPT = renderSystemPrompt()
+
+const TOKEN_HINT = '请在环境变量设置 TUSHARE_TOKEN（tushare.pro 用户中心获取）'
+
+const QUERY_TOOL_CANDIDATES = [
+  'sdk_call',
+  'tushare_query',
+  'get_api_query',
+  'query',
+  'call_api',
+]
+
+interface StockCandidate {
+  ts_code: string
+  name: string
+  industry?: string
 }
 
 function asString(value: unknown): string | undefined {
@@ -39,7 +54,117 @@ function toolErrorMessage(err: unknown): string {
   return String(err)
 }
 
-function pickStock(stocks: StockBasicRow[]) {
+function findStockBasicTool(tools: McpTool[]): McpTool | null {
+  return tools.find(tool => tool.name === 'stock_basic') ?? null
+}
+
+function findQueryTool(tools: McpTool[]): McpTool | null {
+  for (const name of QUERY_TOOL_CANDIDATES) {
+    const found = tools.find(tool => tool.name === name)
+    if (found)
+      return found
+  }
+
+  return tools.find((tool) => {
+    const props = tool.inputSchema.properties as Record<string, unknown> | undefined
+    return props != null && 'api_name' in props
+  }) ?? null
+}
+
+function buildStockBasicArgs(tool: McpTool, name?: string, ts_code?: string): Record<string, unknown> {
+  if (tool.name === 'stock_basic') {
+    const args: Record<string, unknown> = { list_status: 'L' }
+    if (ts_code)
+      args.ts_code = ts_code
+    if (name)
+      args.name = name
+    return args
+  }
+
+  const props = tool.inputSchema.properties as Record<string, unknown> | undefined
+  const params: Record<string, unknown> = {}
+  if (ts_code)
+    params.ts_code = ts_code
+  if (name)
+    params.name = name
+
+  if (props && 'api_name' in props) {
+    const args: Record<string, unknown> = { api_name: 'stock_basic' }
+    if (props.params && typeof props.params === 'object')
+      args.params = params
+    else if (props.params && (props.params as { type?: string }).type === 'string')
+      args.params = JSON.stringify(params)
+    else
+      args.params = params
+    return args
+  }
+
+  return {
+    api_name: 'stock_basic',
+    ...params,
+  }
+}
+
+function extractRows(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload))
+    return payload.filter((row): row is Record<string, unknown> => typeof row === 'object' && row != null)
+
+  if (typeof payload !== 'object' || payload == null)
+    return []
+
+  const obj = payload as Record<string, unknown>
+  for (const key of ['data', 'items', 'rows', 'result']) {
+    const value = obj[key]
+    if (Array.isArray(value))
+      return value.filter((row): row is Record<string, unknown> => typeof row === 'object' && row != null)
+  }
+
+  if (Array.isArray(obj.fields) && Array.isArray(obj.items)) {
+    const fields = obj.fields as string[]
+    return (obj.items as unknown[][]).map((item) => {
+      const row: Record<string, unknown> = {}
+      fields.forEach((field, index) => {
+        row[field] = item[index]
+      })
+      return row
+    })
+  }
+
+  return []
+}
+
+function parseStockCandidates(text: string): StockCandidate[] {
+  const trimmed = text.trim()
+  if (!trimmed)
+    return []
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    const rows = extractRows(parsed)
+    return rows
+      .map((row): StockCandidate | null => {
+        const ts_code = asString(row.ts_code)
+        const name = asString(row.name)
+        if (!ts_code || !name)
+          return null
+        const candidate: StockCandidate = { ts_code, name }
+        const industry = asString(row.industry)
+        if (industry)
+          candidate.industry = industry
+        return candidate
+      })
+      .filter((row): row is StockCandidate => row != null)
+  }
+  catch {
+    const matches = [...trimmed.matchAll(/(\d{6}\.[A-Z]{2})\s+([^\n,|]+)/g)]
+    return matches.map(match => ({
+      ts_code: match[1]!,
+      name: match[2]!.trim(),
+    }))
+  }
+}
+
+function pickStock(stocks: StockCandidate[]) {
   return Effect.gen(function* () {
     if (stocks.length === 0)
       return null
@@ -49,223 +174,92 @@ function pickStock(stocks: StockBasicRow[]) {
     const r = yield* interact({
       type: 'select',
       message: '匹配到多只股票，请选择:',
-      options: stocks.map(s => ({
-        label: `${s.name} (${s.ts_code})`,
-        value: s.ts_code,
-        description: s.industry,
-      })),
+      options: stocks.map((s) => {
+        const option = {
+          label: `${s.name} (${s.ts_code})`,
+          value: s.ts_code,
+        }
+        return s.industry ? { ...option, description: s.industry } : option
+      }),
     })
     const ts_code = (r.payload as { value: string }).value
     return stocks.find(s => s.ts_code === ts_code) ?? null
   })
 }
 
-function pickOptionalString(args: Record<string, unknown>, key: string): { [k: string]: string } {
-  const value = asString(args[key])
-  return value ? { [key]: value } : {}
+async function queryStockBasic(mcp: TushareMcp, queryTool: McpTool, args: { name?: string, ts_code?: string }): Promise<StockCandidate[]> {
+  const result = await mcp.callTool(queryTool.name, buildStockBasicArgs(queryTool, args.name, args.ts_code))
+  return parseStockCandidates(result)
 }
 
-function resolveTsCode(args: Record<string, unknown>): Effect.Effect<Record<string, unknown> | null, never, UI> {
-  return Effect.gen(function* () {
-    let ts_code = asString(args.ts_code)
-    const name = asString(args.name)
+function createResolveStockTool(mcp: TushareMcp): ToolDef {
+  const stockBasicTool = findStockBasicTool(mcp.tools) ?? findQueryTool(mcp.tools)
 
-    if (!ts_code && !name) {
-      const r = yield* interact({
-        type: 'input',
-        message: '请输入股票名称或代码:',
-        placeholder: '平安银行 / 000001.SZ',
-      })
-      const input = (r.payload as { value: string }).value.trim()
-      if (input.includes('.'))
-        ts_code = input
-      else
-        args = { ...args, name: input }
-    }
-
-    if (ts_code)
-      return { ...args, ts_code }
-
-    const searchName = asString(args.name)
-    if (!searchName)
-      return null
-
-    let stocks: StockBasicRow[]
-    try {
-      stocks = yield* Effect.promise(() =>
-        tushare.getStockBasic({ name: searchName }),
-      )
-    }
-    catch {
-      return null
-    }
-
-    const picked = yield* pickStock(stocks)
-    if (!picked)
-      return null
-
-    return { ...args, ts_code: picked.ts_code, name: picked.name }
-  })
-}
-
-const getStockBasicTool: ToolDef = {
-  schema: {
-    type: 'function',
-    function: {
-      name: 'get_stock_basic',
-      description: '查询 A 股股票基础信息（代码、名称、行业、上市日期等）',
-      parameters: {
-        type: 'object',
-        properties: {
-          ts_code: { type: 'string', description: 'TS 代码，如 000001.SZ' },
-          name: { type: 'string', description: '股票名称，支持模糊匹配' },
-          list_status: { type: 'string', description: '上市状态，默认 L（上市）' },
+  return {
+    schema: {
+      type: 'function',
+      function: {
+        name: 'resolve_stock',
+        description: '解析股票名称或代码为 ts_code。用户只给简称/模糊名称时必须先调用此工具；多匹配时终端会弹出选择列表。',
+        parameters: {
+          type: 'object',
+          properties: {
+            ts_code: { type: 'string', description: 'TS 代码，如 000001.SZ' },
+            name: { type: 'string', description: '股票名称，支持模糊匹配' },
+          },
         },
       },
     },
-  },
+    risk: 'safe',
+    execute: (args: Record<string, unknown>) => Effect.gen(function* () {
+      let ts_code = asString(args.ts_code)
+      let name = asString(args.name)
 
-  execute: (args: Record<string, unknown>) => Effect.gen(function* () {
-    let resolved = { ...args }
-    const ts_code = asString(resolved.ts_code)
-    const name = asString(resolved.name)
+      if (!ts_code && !name) {
+        const r = yield* interact({
+          type: 'input',
+          message: '请输入股票名称或代码:',
+          placeholder: '平安银行 / 000001.SZ',
+        })
+        const input = (r.payload as { value: string }).value.trim()
+        if (input.includes('.'))
+          ts_code = input
+        else
+          name = input
+      }
 
-    if (!ts_code && !name) {
-      const r = yield* interact({
-        type: 'input',
-        message: '请输入要查询的股票名称或代码:',
-        placeholder: '平安银行',
-      })
-      const input = (r.payload as { value: string }).value.trim()
-      if (input.includes('.'))
-        resolved = { ...resolved, ts_code: input }
-      else
-        resolved = { ...resolved, name: input }
-    }
-    else if (!ts_code && name) {
-      const stocks = yield* Effect.promise(() =>
-        tushare.getStockBasic({ name }),
-      ).pipe(Effect.match({ onFailure: () => null as StockBasicRow[] | null, onSuccess: s => s }))
-      if (!stocks)
-        return '查询股票基础信息失败'
+      if (ts_code) {
+        return JSON.stringify({ ts_code, name: name ?? null }, null, 2)
+      }
+
+      if (!name)
+        return TOKEN_HINT
+
+      if (!stockBasicTool)
+        return '未找到 Tushare MCP stock_basic 工具，无法解析股票名称'
+
+      let stocks: StockCandidate[]
+      try {
+        stocks = yield* Effect.promise(() => queryStockBasic(mcp, stockBasicTool, { name }))
+      }
+      catch (err) {
+        return toolErrorMessage(err)
+      }
+
       const picked = yield* pickStock(stocks)
       if (!picked)
-        return '未选择股票'
-      resolved = { ...resolved, ts_code: picked.ts_code, name: picked.name }
-    }
+        return stocks.length === 0 ? `未找到名称「${name}」对应的股票` : '未选择股票'
 
-    return yield* Effect.promise(() =>
-      tushare.getStockBasic({
-        ...pickOptionalString(resolved, 'ts_code'),
-        ...pickOptionalString(resolved, 'name'),
-        ...pickOptionalString(resolved, 'list_status'),
-      }),
-    ).pipe(
-      Effect.match({
-        onFailure: err => toolErrorMessage(err),
-        onSuccess: rows => tushare.formatRowsAsText(rows, { maxRows: 10 }),
-      }),
-    )
-  }),
+      return JSON.stringify({ ts_code: picked.ts_code, name: picked.name }, null, 2)
+    }),
+  }
 }
 
-const getDailyTool: ToolDef = {
-  schema: {
-    type: 'function',
-    function: {
-      name: 'get_daily',
-      description: '查询 A 股历史日线行情（开高低收、涨跌幅、成交量等）',
-      parameters: {
-        type: 'object',
-        properties: {
-          ts_code: { type: 'string', description: 'TS 代码，如 000001.SZ' },
-          name: { type: 'string', description: '股票名称（无 ts_code 时用于解析）' },
-          start_date: { type: 'string', description: '开始日期 YYYYMMDD' },
-          end_date: { type: 'string', description: '结束日期 YYYYMMDD' },
-          trade_date: { type: 'string', description: '单日查询 YYYYMMDD' },
-        },
-      },
-    },
-  },
-
-  execute: (args: Record<string, unknown>) => Effect.gen(function* () {
-    const resolved = yield* resolveTsCode(args)
-    if (!resolved)
-      return TOKEN_HINT
-
-    const merged = { ...args, ...resolved }
-    let start_date = asString(merged.start_date)
-    let end_date = asString(merged.end_date)
-    const trade_date = asString(merged.trade_date)
-
-    if (!trade_date && (!start_date || !end_date)) {
-      const defaults = defaultDailyRange()
-      start_date = start_date ?? defaults.start_date
-      end_date = end_date ?? defaults.end_date
-    }
-
-    const ts_code = asString(merged.ts_code)
-    if (!ts_code)
-      return TOKEN_HINT
-
-    return yield* Effect.promise(() =>
-      tushare.getDaily({
-        ts_code,
-        ...pickOptionalString(merged, 'start_date'),
-        ...pickOptionalString(merged, 'end_date'),
-        ...pickOptionalString(merged, 'trade_date'),
-        ...(start_date ? { start_date } : {}),
-        ...(end_date ? { end_date } : {}),
-        ...(trade_date ? { trade_date } : {}),
-      }),
-    ).pipe(
-      Effect.match({
-        onFailure: err => toolErrorMessage(err),
-        onSuccess: rows => tushare.formatRowsAsText(rows, { maxRows: 30 }),
-      }),
-    )
-  }),
+function createTushareAgent(mcp: TushareMcp): { tools: ToolDef[], systemPrompt: string } {
+  return {
+    tools: [...mcpToolsToToolDefs(mcp), createResolveStockTool(mcp)],
+    systemPrompt: renderSystemPrompt(),
+  }
 }
 
-const getRealtimeQuoteTool: ToolDef = {
-  schema: {
-    type: 'function',
-    function: {
-      name: 'get_realtime_quote',
-      description: '查询 A 股最新快照行情（积分要求较高）',
-      parameters: {
-        type: 'object',
-        properties: {
-          ts_code: { type: 'string', description: 'TS 代码，多只用逗号分隔' },
-          name: { type: 'string', description: '股票名称（无 ts_code 时用于解析）' },
-        },
-      },
-    },
-  },
-
-  execute: (args: Record<string, unknown>) => Effect.gen(function* () {
-    const resolved = yield* resolveTsCode(args)
-    if (!resolved)
-      return TOKEN_HINT
-
-    const ts_code = asString(resolved.ts_code)
-    if (!ts_code)
-      return TOKEN_HINT
-
-    return yield* Effect.promise(() =>
-      tushare.getRealtimeQuote({ ts_code }),
-    ).pipe(
-      Effect.match({
-        onFailure: (err) => {
-          const msg = toolErrorMessage(err)
-          return `${msg}\n可改用 get_daily 查询最近交易日收盘数据。`
-        },
-        onSuccess: rows => tushare.formatRowsAsText(rows, { maxRows: 10 }),
-      }),
-    )
-  }),
-}
-
-const tushareTools: ToolDef[] = [getStockBasicTool, getDailyTool, getRealtimeQuoteTool]
-
-export { TUSHARE_SYSTEM_PROMPT, tushareTools }
+export { createTushareAgent, TUSHARE_SYSTEM_PROMPT }
