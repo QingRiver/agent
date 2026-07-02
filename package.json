@@ -22,7 +22,9 @@
     "lint": "pnpm exec eslint apps packages",
     "format": "pnpm exec eslint apps packages --fix",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "qlib:package": "tsx scripts/qlib-package-source.ts package",
+    "qlib:unpack": "tsx scripts/qlib-package-source.ts unpack"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:",

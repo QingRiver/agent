@@ -1,0 +1,19 @@
+services:
+  qlib-api:
+    build: .
+    platform: linux/amd64
+    container_name: qlib-api
+    ports:
+      - "${QLIB_API_PORT:-8000}:8000"
+    env_file:
+      - ../../.env
+    environment:
+      - QLIB_DATA_DIR=/root/.qlib/qlib_data/cn_data
+      - QLIB_SOURCE_DIR=/app/source
+      - QLIB_CONFIG_DIR=/app/config
+      - LOCAL_REPORT_DIR=/local_report
+    volumes:
+      - ./qlib_data:/root/.qlib/qlib_data
+      - ./source:/app/source
+      - ../../local_report:/local_report
+    restart: unless-stopped
