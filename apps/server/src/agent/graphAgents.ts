@@ -69,6 +69,19 @@ const GRAPH_AGENT_DEFINITIONS = {
       }
     },
   },
+  tushare: {
+    description: 'A股个股分析（Tushare MCP + ask_human 中断）',
+    resolveStreamInput: (input) => {
+      // ask_human 续接：resolve_stock / ask_* 工具内 interrupt 后，恢复值经 Command({resume}) 回灌
+      const resume = resolveResumeFromRunAgentInput(input)
+      if (resume != null)
+        return new Command({ resume })
+      const userText = extractLastUserMessage(input, {
+        defaultMessage: '分析平安银行最近走势',
+      })
+      return buildMessagesInput(userText)
+    },
+  },
 } as const satisfies Record<GraphsName, GraphAgentDefinition>
 
 export function listGraphAgentCatalog(): { name: GraphsName, description: string }[] {

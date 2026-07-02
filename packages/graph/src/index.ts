@@ -4,6 +4,7 @@ import { hitlGraph } from './hitlGraph'
 import { obsidianGraph } from './obsidianGraph'
 import { simpleGraph } from './simpleGraph'
 import { simpleToolCallGraph } from './simpleToolCallGraph'
+import { tushareGraph } from './tushareGraph'
 import { weatherGraph } from './weatherGraph'
 
 export { ASK_SYSTEM_PROMPT, ASK_TOOLS } from './hitl/ask-tools'
@@ -40,6 +41,7 @@ export const Graphs = {
   weather: weatherGraph,
   obsidian: obsidianGraph,
   hitl: hitlGraph,
+  tushare: tushareGraph,
 } as const
 
 export type GraphsName = keyof typeof Graphs

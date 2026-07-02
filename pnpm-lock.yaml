@@ -525,9 +525,15 @@ importers:
 
   packages/tools:
     dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 'catalog:'
+        version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
       radash:
         specifier: 'catalog:'
         version: 12.1.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
