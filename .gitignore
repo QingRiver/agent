@@ -142,13 +142,24 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
+# Python
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+
 .DS_Store
 **/.DS_Store
 apps/server/certificates/
 apps/server/data/*.sqlite
 apps/server/data/*.sqlite-wal
 apps/server/data/*.sqlite-shm
-/data/
+/data/qlib/qlib_data/
+/data/qlib/qlib_data/**/*.bin
+/data/qlib/source/
+/data/qlib/**/__MACOSX/
+/data/qlib/state/
+/data/qlib/logs/
+/local_report/
 
 # @agent/graph test debug dumps (fileLog / resetFileLog)
 packages/graph/src/debug/

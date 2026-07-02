@@ -1,0 +1,18 @@
+qlib:
+  data_dir: /root/.qlib/qlib_data/cn_data
+  source_dir: /app/source
+  bars_subdir: cn_1d
+  runtime_subdir: _runtime
+  instruments_dir: /root/.qlib/qlib_data/cn_data/instruments
+
+tushare:
+  request_interval_sec: 5
+  request_interval_step_sec: 5
+  request_interval_max_sec: 20
+  max_retries: 5
+  retry_base_delay_sec: 1.0
+  timeout_sec: 30
+
+sync:
+  lookback_days: 365
+  max_failed_attempts: 5
