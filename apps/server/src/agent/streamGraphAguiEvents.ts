@@ -57,8 +57,16 @@ export async function* streamGraphAguiEvents(
       configurable: { thread_id: threadId },
     })
 
+    // drain 主迭代器驱动 transformer；stream 内部节点出错时该迭代器会 reject，
+    // 捕获到 streamError 由主流程统一抛出，避免成为 unhandled rejection 崩溃进程
+    let streamError: unknown
     const protocolDone = (async () => {
-      for await (const _ of stream) { /* drain protocol to drive transformer */ }
+      try {
+        for await (const _ of stream) { /* drain protocol to drive transformer */ }
+      }
+      catch (err) {
+        streamError = err
+      }
     })()
 
     for await (const event of stream.extensions.aguiEvents) {
@@ -68,6 +76,8 @@ export async function* streamGraphAguiEvents(
     }
 
     await protocolDone
+    if (streamError != null)
+      throw streamError
 
     if (!hasAnyRunFinished(collected)) {
       if (stream.interrupted && stream.interrupts.length > 0) {
@@ -94,14 +104,14 @@ export async function* streamGraphAguiEvents(
   }
   catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    yield {
-      type: EventType.RUN_ERROR,
-      message,
-    }
-    yield {
-      type: EventType.RUN_FINISHED,
-      threadId,
-      runId,
+    // stream 内部错误不会被 honoBridge 的 catch 捕获，必须在此打印，否则 server 终端无任何线索
+    console.error(`[streamGraphAguiEvents] thread=${threadId} run=${runId} failed:`, err)
+    // RUN_ERROR 已是 ag-ui 终态，不能再发 RUN_FINISHED（ag-ui client 会抛 AGUIError）
+    if (!hasAnyRunFinished(collected)) {
+      yield {
+        type: EventType.RUN_ERROR,
+        message,
+      }
     }
   }
   finally {

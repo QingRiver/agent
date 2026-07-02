@@ -10,7 +10,9 @@
     "tc": "pnpm -w run tsc-go --noEmit"
   },
   "dependencies": {
-    "radash": "catalog:"
+    "@modelcontextprotocol/sdk": "catalog:",
+    "radash": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:"
