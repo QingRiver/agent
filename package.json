@@ -12,7 +12,7 @@
     "chatbot"
   ],
   "engines": {
-    "node": ">=24"
+    "node": ">=24.0.0 <25.0.0"
   },
   "scripts": {
     "dev": "pnpm --parallel --filter server --filter client dev",
@@ -24,7 +24,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "qlib:package": "tsx scripts/qlib-package-source.ts package",
-    "qlib:unpack": "tsx scripts/qlib-package-source.ts unpack"
+    "qlib:unpack": "tsx scripts/qlib-package-source.ts unpack",
+    "qlib:init": "tsx scripts/qlib-daily-update.ts init",
+    "qlib:update": "tsx scripts/qlib-daily-update.ts update"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:",

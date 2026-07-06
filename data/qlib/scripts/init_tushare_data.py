@@ -10,8 +10,26 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.config import get_settings
-from app.logging.stream_hub import get_log_hub, get_service_logger
+from app.logging.stream_hub import get_service_logger
 from app.services.sync_runner import run_sync
+
+
+def _configure_cli_logging() -> logging.Logger:
+    """CLI 直接输出到 stderr，避免 log hub 队列导致 docker exec 长时间无日志。"""
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+    for name in ("qlib_service", "qlib_service.sync", "qlib_service.tushare", "qlib_service.bundle"):
+        pkg_logger = logging.getLogger(name)
+        pkg_logger.setLevel(logging.INFO)
+        pkg_logger.propagate = True
+
+    return get_service_logger("qlib_service.cli")
 
 
 def main() -> int:
@@ -39,20 +57,16 @@ def main() -> int:
         action="store_true",
         help="与 --reconcile-only 联用，写入 data_manifest.json",
     )
+    parser.add_argument(
+        "--skip-dump",
+        action="store_true",
+        help="增量模式仅同步 CSV，不转换 qlib bin（由 dump_daily 单独执行）",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
     settings.ensure_dirs()
-
-    hub = get_log_hub()
-    import asyncio
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    hub.start(loop)
-
-    logging.basicConfig(level=logging.INFO)
-    logger = get_service_logger("qlib_service.cli")
+    logger = _configure_cli_logging()
 
     try:
         checkpoint = run_sync(
@@ -66,6 +80,7 @@ def main() -> int:
             symbols=args.symbols,
             reconcile_only=args.reconcile_only,
             write_manifest=args.write_manifest,
+            skip_dump=args.skip_dump,
             settings=settings,
         )
         logger.info(
@@ -76,9 +91,9 @@ def main() -> int:
             checkpoint.failed_count,
         )
         return 0 if checkpoint.phase == "done" else 1
-    finally:
-        hub.stop()
-        loop.close()
+    except Exception:
+        logger.exception("同步失败")
+        return 1
 
 
 if __name__ == "__main__":

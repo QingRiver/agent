@@ -19,6 +19,7 @@ from app.services.source_bundle import (
     filter_pending_dates_already_in_snapshot,
     prepare_bundle_for_incremental,
     prepare_bundle_for_reconcile,
+    refresh_bundle_from_csv,
     save_symbol_index,
     scan_symbol_index,
     symbol_covers_range,
@@ -196,6 +197,8 @@ def fetch_daily_by_trade_date(client: TushareClient, trade_date: str) -> list[di
     offset = 0
     limit = 5000
     while True:
+        if offset > 0:
+            logger.info("  → daily 分页拉取 trade_date=%s offset=%d …", trade_date, offset)
         rows = client.call(
             "daily",
             {"trade_date": trade_date, "offset": offset, "limit": limit},
@@ -275,10 +278,12 @@ def dump_to_qlib_bin(settings: Settings, *, incremental: bool = False) -> None:
 
     try:
         if use_update:
-            from dump_bin import DumpDataUpdate
+            from dump_daily import run_daily_dump
 
-            logger.info("使用 DumpDataUpdate 增量转换 CSV -> qlib bin")
-            DumpDataUpdate(**common_kwargs).dump()
+            logger.info("使用 dump_daily 增量转换 CSV -> qlib bin（先日历，再按需更新）")
+            plan = run_daily_dump(settings, max_workers=common_kwargs["max_workers"])
+            if plan.mode == "skip":
+                logger.info("dump_daily 跳过: %s", plan.reason)
         else:
             from dump_bin import DumpDataAll
 
@@ -288,32 +293,36 @@ def dump_to_qlib_bin(settings: Settings, *, incremental: bool = False) -> None:
     except ImportError as exc:
         logger.warning("无法直接导入 dump_bin，回退 subprocess: %s", exc)
 
-    cmd_mode = "dump_update" if use_update else "dump_all"
-    cmd = [
-        sys.executable,
-        str(scripts_dir / "dump_bin.py"),
-        cmd_mode,
-        "--data_path",
-        str(source_dir),
-        "--qlib_dir",
-        str(qlib_dir),
-        "--freq",
-        "day",
-        "--date_field_name",
-        "date",
-        "--symbol_field_name",
-        "symbol",
-        "--exclude_fields",
-        "date,symbol",
-    ]
-    logger.info("执行 dump_bin: %s", " ".join(cmd))
+    if use_update:
+        cmd = [sys.executable, str(scripts_dir / "dump_daily.py")]
+        label = "dump_daily"
+    else:
+        cmd = [
+            sys.executable,
+            str(scripts_dir / "dump_bin.py"),
+            "dump_all",
+            "--data_path",
+            str(source_dir),
+            "--qlib_dir",
+            str(qlib_dir),
+            "--freq",
+            "day",
+            "--date_field_name",
+            "date",
+            "--symbol_field_name",
+            "symbol",
+            "--exclude_fields",
+            "date,symbol",
+        ]
+        label = "dump_bin"
+    logger.info("执行 %s: %s", label, " ".join(cmd))
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.stdout:
         logger.info(result.stdout.strip())
     if result.returncode != 0:
         if result.stderr:
             logger.error(result.stderr.strip())
-        raise RuntimeError(f"dump_bin 失败，exit={result.returncode}")
+        raise RuntimeError(f"{label} 失败，exit={result.returncode}")
 
 
 def sanity_check_qlib(settings: Settings) -> None:
@@ -335,15 +344,17 @@ def _sync_incremental_trade_date(
     meta: SyncMeta,
     events_path: Path,
 ) -> tuple[int, int]:
+    logger.info("  → 正在拉取 %s 全市场日线截面 …", trade_date)
     daily_rows = fetch_daily_by_trade_date(client, trade_date)
     traded_codes = {str(r["ts_code"]) for r in daily_rows if r.get("ts_code")}
     by_symbol: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in daily_rows:
         by_symbol[str(row["ts_code"])].append(row)
 
+    logger.info("  → 正在拉取 %s 停牌列表 …", trade_date)
     suspended = fetch_suspend_by_trade_date(client, trade_date)
     logger.info(
-        "截面数据 %s: 成交 %d 只，停牌 %d 只",
+        "  → 截面 %s: 成交 %d 只，停牌 %d 只，开始合并 CSV …",
         trade_date,
         len(traded_codes),
         len(suspended),
@@ -411,6 +422,7 @@ def _sync_incremental_trade_date(
                 reason="not_in_daily_cross_section",
             )
 
+    logger.info("  → %s CSV 合并完成", trade_date)
     return len(traded_codes), len(suspended)
 
 
@@ -418,6 +430,7 @@ def run_incremental_sync(
     *,
     trade_date: Optional[str] = None,
     force: bool = False,
+    skip_dump: bool = False,
     settings: Optional[Settings] = None,
 ) -> SyncCheckpoint:
     global _shutdown_requested
@@ -425,8 +438,10 @@ def run_incremental_sync(
 
     settings = settings or get_settings()
     settings.ensure_dirs()
+    logger.info("增量同步开始（仅 CSV，skip_dump=%s）", skip_dump)
     client = TushareClient(settings)
     source_dir = settings.bars_dir
+    logger.info("正在准备 bundle（sync_meta / symbol_index）…")
     meta, index = prepare_bundle_for_incremental(settings)
     for warning in validate_bundle(settings):
         logger.warning("bundle 校验: %s", warning)
@@ -434,10 +449,13 @@ def run_incremental_sync(
     checkpoint_path = settings.checkpoint_path
 
     checkpoint = SyncCheckpoint(mode="incremental", phase="resolve_trade_date")
+    logger.info("正在查询最近开市日 …")
     target_date = trade_date or resolve_latest_open_trade_date(client)
     checkpoint.trade_date = target_date
+    logger.info("目标交易日: %s", target_date)
 
     watermark = resolve_incremental_watermark(meta)
+    logger.info("正在计算待补交易日（当前水位 %s）…", watermark or "(无)")
     pending_dates = resolve_pending_incremental_dates(
         client,
         watermark=watermark,
@@ -455,13 +473,21 @@ def run_incremental_sync(
 
     if not pending_dates:
         logger.info(
-            "增量已是最新（watermark=%s, target=%s），跳过",
+            "增量已是最新（watermark=%s, target=%s），跳过 API 拉取",
             watermark or "(无)",
             target_date,
         )
+        logger.info("正在从 CSV reconcile 水位 …")
+        meta, _ = refresh_bundle_from_csv(settings, meta)
         checkpoint.phase = "done"
         save_checkpoint(checkpoint_path, checkpoint)
         return checkpoint
+
+    if len(pending_dates) <= 5:
+        dates_summary = ", ".join(pending_dates)
+    else:
+        dates_summary = f"{pending_dates[0]} … {pending_dates[-1]}（共 {len(pending_dates)} 个）"
+    logger.info("待补交易日: %s", dates_summary)
 
     logger.info(
         "增量补洞 %s -> %s，共 %d 个交易日待同步（watermark=%s）",
@@ -471,6 +497,7 @@ def run_incremental_sync(
         watermark or "(无)",
     )
 
+    logger.info("正在拉取 A 股股票池 stock_basic …")
     symbols, list_dates = resolve_universe(client)
     meta.universe = symbols
 
@@ -490,7 +517,7 @@ def run_incremental_sync(
             return checkpoint
 
         checkpoint.trade_date = day
-        logger.info("增量同步 [%d/%d]: %s", idx, len(pending_dates), day)
+        logger.info("—— 交易日 [%d/%d]: %s ——", idx, len(pending_dates), day)
         last_traded, last_suspended = _sync_incremental_trade_date(
             client=client,
             trade_date=day,
@@ -505,13 +532,20 @@ def run_incremental_sync(
         save_sync_meta(settings.sync_meta_path, meta)
         save_checkpoint(checkpoint_path, checkpoint)
 
-    checkpoint.phase = "dump"
-    save_checkpoint(checkpoint_path, checkpoint)
-    dump_to_qlib_bin(settings, incremental=True)
-    try:
-        sanity_check_qlib(settings)
-    except Exception as exc:
-        logger.warning("qlib sanity check 跳过: %s", exc)
+    logger.info("正在从 CSV reconcile 水位与 symbol_index …")
+    meta, _ = refresh_bundle_from_csv(settings, meta)
+    logger.info("CSV 同步完成，水位: %s", meta.last_success_trade_date or "(无)")
+
+    if not skip_dump:
+        checkpoint.phase = "dump"
+        save_checkpoint(checkpoint_path, checkpoint)
+        dump_to_qlib_bin(settings, incremental=True)
+        try:
+            sanity_check_qlib(settings)
+        except Exception as exc:
+            logger.warning("qlib sanity check 跳过: %s", exc)
+    else:
+        logger.info("skip_dump=True，CSV 同步结束，bin 转换留待 dump_daily")
 
     append_symbol_event(
         events_path,
@@ -763,6 +797,7 @@ def run_sync(
     symbols: Optional[list[str]] = None,
     reconcile_only: bool = False,
     write_manifest: bool = False,
+    skip_dump: bool = False,
     settings: Optional[Settings] = None,
     install_signal_handlers: bool = True,
 ) -> SyncCheckpoint:
@@ -773,6 +808,7 @@ def run_sync(
         return run_incremental_sync(
             trade_date=trade_date,
             force=force,
+            skip_dump=skip_dump,
             settings=settings,
         )
     return run_backfill_sync(

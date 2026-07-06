@@ -23,13 +23,14 @@ from app.services.source_bundle import (
     filter_pending_dates_already_in_snapshot,
     needs_bootstrap,
     reconcile_meta,
+    refresh_bundle_from_csv,
     scan_symbol_index,
     snapshot_watermark,
     symbol_covers_range,
     SymbolIndex,
     SymbolIndexEntry,
 )
-from app.services.sync_meta import SyncMeta, SymbolMeta
+from app.services.sync_meta import SyncMeta, SymbolMeta, save_sync_meta
 
 
 def _write_csv(bars_dir: Path, ts_code: str, dates: list[str]) -> None:
@@ -157,6 +158,18 @@ class TestSourceBundle(unittest.TestCase):
         self.assertEqual(settings.runtime_dir, Path("/app/source/_runtime"))
         self.assertEqual(settings.sync_meta_path, Path("/app/source/sync_meta.json"))
         self.assertEqual(settings.checkpoint_path, Path("/app/source/_runtime/sync_checkpoint.json"))
+
+    def test_refresh_bundle_from_csv_updates_watermark(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings = self._settings(root)
+            settings.ensure_dirs()
+            _write_csv(settings.bars_dir, "000001.SZ", ["20260701", "20260703"])
+            meta = SyncMeta(last_success_trade_date="20260710")
+            save_sync_meta(settings.sync_meta_path, meta)
+            refreshed, index = refresh_bundle_from_csv(settings, meta)
+            self.assertEqual(refreshed.last_success_trade_date, "20260703")
+            self.assertEqual(index.symbols["000001.SZ"].last_date, "20260703")
 
 
 if __name__ == "__main__":
