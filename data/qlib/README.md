@@ -40,6 +40,41 @@ docker compose down
 
 > **说明**：官方 qlib 镜像为 `linux/amd64`。在 Apple Silicon 上会通过模拟运行，首次构建拉取镜像较慢。
 
+## 每日更新（推荐）
+
+在仓库根目录使用 pnpm 编排脚本，**自动检测 Docker / 容器**，未运行时提示并尝试启动：
+
+```bash
+# 首次：启动容器、检查 CSV / qlib_data，必要时全量 dump
+pnpm qlib:init
+
+# 每日：增量同步 CSV + 按需 dump bin（先更新日历，再只更新有变动的股票）
+pnpm qlib:update
+
+# 补洞至指定交易日
+pnpm qlib:update -- --date 20260702
+
+# 预览 dump 计划（不执行）
+pnpm qlib:update -- --dry-run
+```
+
+流程说明：
+
+| 步骤 | 动作 |
+|------|------|
+| 1 | 检查 Docker 是否运行；`qlib-api` 未启动则 `docker compose up -d` |
+| 2 | 容器内 `incremental --skip-dump` 同步 Tushare → `source/cn_1d`（不 dump bin） |
+| 3 | `dump_daily.py`：先扩展 `calendars/day.txt`，再仅 dump 严格晚于 instruments 结束日的股票 |
+
+与旧版 `DumpDataUpdate` 的区别：旧逻辑会**读取全部 5000+ CSV** 再判断增量；`dump_daily` 根据 `symbol_index` + `instruments/all.txt` 只处理有变动的文件，日常更新快得多。
+
+Docker 未启动时会提示：
+
+```
+错误: Docker 未运行，请先启动 Docker Desktop。
+  macOS: open -a Docker
+```
+
 ## API 使用
 
 ### 健康检查
@@ -293,7 +328,7 @@ PYTHONPATH=. python -m strategies.day_trade.backtest
 - 使用 `suspend_d` 标记停牌/复牌，写入 `sync_meta.json` 与 `symbol_events.jsonl`
 - 每完成一个交易日即更新水位并写 checkpoint，中断后可续传
 - CSV **追加合并**（`drop_duplicates` 按日期去重），不写停牌假 K 线
-- 全部缺口补完后统一 `DumpDataUpdate` 写 bin；首次用 `DumpDataAll`
+- 全部缺口补完后统一 `dump_daily` 写 bin（先日历，再按需更新）；首次用 `DumpDataAll`
 - 水位已追平目标日时幂等跳过（`force: true` 可重跑含目标日在内的区间）
 
 ### 停牌处理

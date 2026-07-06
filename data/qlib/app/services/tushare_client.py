@@ -7,7 +7,10 @@ from typing import Any, Optional
 import httpx
 
 from app.config import Settings, get_settings
+from app.logging.stream_hub import get_service_logger
 from app.services.rate_limiter import AdaptiveRateLimiter
+
+logger = get_service_logger("qlib_service.tushare")
 
 TUSHARE_API = "https://api.tushare.pro"
 
@@ -56,6 +59,21 @@ def _is_retryable(message: str, code: Optional[int] = None) -> bool:
     return any(pattern.search(message) for pattern in RETRYABLE_PATTERNS)
 
 
+def _describe_tushare_call(api_name: str, params: dict[str, Any]) -> str:
+    if api_name == "daily":
+        if params.get("trade_date"):
+            return f"日线截面 trade_date={params['trade_date']}"
+        if params.get("ts_code"):
+            return f"个股日线 {params['ts_code']} {params.get('start_date', '')}~{params.get('end_date', '')}"
+    if api_name == "trade_cal":
+        return f"交易日历 {params.get('start_date', '')}~{params.get('end_date', '')}"
+    if api_name == "stock_basic":
+        return "A 股股票列表 stock_basic"
+    if api_name == "suspend_d":
+        return f"停牌列表 trade_date={params.get('trade_date', '')}"
+    return f"{api_name} {params}"
+
+
 class TushareClient:
     def __init__(self, settings: Optional[Settings] = None) -> None:
         self.settings = settings or get_settings()
@@ -74,12 +92,18 @@ class TushareClient:
         fields: str = "",
     ) -> list[dict[str, Any]]:
         params = params or {}
+        desc = _describe_tushare_call(api_name, params)
         last_error: Optional[Exception] = None
 
         for attempt in range(self.settings.max_retries):
             try:
+                if attempt == 0:
+                    logger.info("正在请求 Tushare: %s", desc)
+                elif attempt > 0:
+                    logger.info("正在重试 Tushare (%d/%d): %s", attempt + 1, self.settings.max_retries, desc)
                 rows = self._request(api_name, params, fields)
                 self._limiter.on_success()
+                logger.info("Tushare 返回 %d 条: %s", len(rows), desc)
                 return rows
             except TushareError as exc:
                 last_error = exc

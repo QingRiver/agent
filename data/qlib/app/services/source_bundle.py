@@ -11,10 +11,13 @@ from typing import Any, Optional
 import pandas as pd
 
 from app.config import Settings
+from app.logging.stream_hub import get_service_logger
 from app.services.sync_meta import SyncMeta, load_sync_meta, save_sync_meta
 
 SCHEMA_VERSION = 1
 BACKFILL_GUARD_MIN_SYMBOLS = 100
+
+logger = get_service_logger("qlib_service.bundle")
 
 
 @dataclass
@@ -148,6 +151,22 @@ def bootstrap_meta_from_index(meta: SyncMeta, index: SymbolIndex) -> SyncMeta:
 
 def reconcile_meta(meta: SyncMeta, index: SymbolIndex) -> SyncMeta:
     return bootstrap_meta_from_index(meta, index)
+
+
+def refresh_bundle_from_csv(settings: Settings, meta: Optional[SyncMeta] = None) -> tuple[SyncMeta, SymbolIndex]:
+    """从 CSV 重扫 symbol_index，并 reconcile sync_meta 水位（与 CSV 对齐）。"""
+    logger.info("正在扫描 CSV 重建 symbol_index …")
+    meta = meta or load_sync_meta(settings.sync_meta_path)
+    index = scan_symbol_index(settings.bars_dir)
+    save_symbol_index(settings.symbol_index_path, index)
+    meta = reconcile_meta(meta, index)
+    save_sync_meta(settings.sync_meta_path, meta)
+    logger.info(
+        "symbol_index 已更新: %d 只, CSV 水位 %s",
+        len(index.symbols),
+        meta.last_success_trade_date or "(无)",
+    )
+    return meta, index
 
 
 def filter_pending_dates_already_in_snapshot(

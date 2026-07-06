@@ -415,6 +415,9 @@ class DumpDataUpdate(DumpDataBase):
         exclude_fields: str = "",
         include_fields: str = "",
         limit_nums: int = None,
+        only_files: str = "",
+        append_calendar: str = "",
+        skip_calendar_save: bool = False,
     ):
         """
 
@@ -455,6 +458,17 @@ class DumpDataUpdate(DumpDataBase):
             exclude_fields,
             include_fields,
         )
+        self._skip_calendar_save = skip_calendar_save
+        if only_files:
+            allow = set()
+            for name in only_files.split(","):
+                stem = name.strip().lower()
+                if not stem:
+                    continue
+                if stem.endswith(".csv"):
+                    stem = stem[:-4]
+                allow.add(stem)
+            self.df_files = [path for path in self.df_files if path.stem.lower() in allow]
         self._mode = self.UPDATE_MODE
         self._old_calendar_list = self._read_calendars(self._calendars_dir.joinpath(f"{self.freq}.txt"))
         # NOTE: all.txt only exists once for each stock
@@ -465,11 +479,18 @@ class DumpDataUpdate(DumpDataBase):
             .to_dict(orient="index")
         )  # type: dict
 
-        # load all csv files
-        self._all_data = self._load_all_source_data()  # type: pd.DataFrame
-        self._new_calendar_list = self._old_calendar_list + sorted(
-            filter(lambda x: x > self._old_calendar_list[-1], self._all_data[self.date_field_name].unique())
-        )
+        self._all_data = self._load_all_source_data() if self.df_files else pd.DataFrame()
+        if append_calendar:
+            extra = sorted(pd.Timestamp(item.strip()) for item in append_calendar.split(",") if item.strip())
+            self._new_calendar_list = self._old_calendar_list + [
+                item for item in extra if item > self._old_calendar_list[-1]
+            ]
+        elif self._all_data.empty:
+            self._new_calendar_list = list(self._old_calendar_list)
+        else:
+            self._new_calendar_list = self._old_calendar_list + sorted(
+                filter(lambda x: x > self._old_calendar_list[-1], self._all_data[self.date_field_name].unique())
+            )
 
     def _load_all_source_data(self):
         # NOTE: Need more memory
@@ -543,11 +564,15 @@ class DumpDataUpdate(DumpDataBase):
         logger.info("end of features dump.\n")
 
     def dump(self):
-        self.save_calendars(self._new_calendar_list)
+        if not self._skip_calendar_save:
+            self.save_calendars(self._new_calendar_list)
         self._dump_features()
         df = pd.DataFrame.from_dict(self._update_instruments, orient="index")
         df.index.names = [self.symbol_field_name]
         self.save_instruments(df.reset_index())
+
+    def save_calendar_only(self):
+        self.save_calendars(self._new_calendar_list)
 
 
 if __name__ == "__main__":
