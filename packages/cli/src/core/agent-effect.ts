@@ -9,12 +9,32 @@ export function chat(messages: ChatCompletionMessageParam[], tools?: ChatComplet
     const driver = yield* Driver
     const ui = yield* UI
     ui.streaming.reset()
+    ui.reasoning.reset()
+    let textStarted = false
     const result = yield* Effect.promise(() =>
       driver.chat(messages, tools, (event) => {
-        if (event.type === 'text_delta')
+        if (event.type === 'reasoning_delta') {
+          // 思考过程实时流入 reasoning buffer(DeepSeek 先 reasoning 后 text)
+          ui.reasoning.append(event.content)
+        }
+        else if (event.type === 'text_delta') {
+          // 首个 text delta 到来时,把已累积的思考冻结进 scrollback,再开始正文流式
+          if (!textStarted) {
+            textStarted = true
+            const r = ui.reasoning.commit()
+            if (r)
+              ui.pushHistory({ kind: 'reasoning', content: r })
+          }
           ui.streaming.append(event.content)
+        }
       }),
     )
+    // 全程只有 reasoning 没 text(如纯工具调用):也把思考冻结进 scrollback
+    if (!textStarted) {
+      const r = ui.reasoning.commit()
+      if (r)
+        ui.pushHistory({ kind: 'reasoning', content: r })
+    }
     // 清空 buffer(副作用);冻结历史用的文本直接取 result.content,单一真相在消息上
     ui.streaming.commit()
     return result

@@ -12,7 +12,7 @@ import type {
   ToolsEventData,
 } from '@langchain/langgraph'
 import type { BuildInterruptFinalizeOptions } from './mapInterruptToAgUi'
-import type { AguiTextMessageEvent } from './mapMessagesToAgUi'
+import type { AguiReasoningEvent, AguiTextMessageEvent } from './mapMessagesToAgUi'
 import type { AguiToolEvent } from './mapToolsToAgUi'
 import { EventType } from '@ag-ui/core'
 import { StreamChannel as StreamChannelImpl } from '@langchain/langgraph'
@@ -27,6 +27,7 @@ export const AGUI_WRITER_EVENT = 'agui'
 export type AguiMappedEvent
   = | AguiToolEvent
     | AguiTextMessageEvent
+    | AguiReasoningEvent
     | CustomEvent
     | StateSnapshotEvent
     | RunFinishedEvent
@@ -57,7 +58,7 @@ export class AguiTransformer implements StreamTransformer<AguiExtensions> {
   #toolEvents!: StreamChannel<AguiToolEvent>
   #customEvents!: StreamChannel<CustomEvent>
   #messageEvents!: StreamChannel<AguiTextMessageEvent>
-  readonly #textMessageState = { activeMessageId: null as string | null }
+  readonly #textMessageState = { activeMessageId: null as string | null, activeReasoningMessageId: null as string | null }
   #lastValues: Record<string, unknown> | undefined
   readonly #interrupts = new Map<string, InterruptPayload>()
   #emittedRunFinished = false
@@ -68,6 +69,7 @@ export class AguiTransformer implements StreamTransformer<AguiExtensions> {
     this.#customEvents = StreamChannelImpl.local<CustomEvent>()
     this.#messageEvents = StreamChannelImpl.local<AguiTextMessageEvent>()
     this.#textMessageState.activeMessageId = null
+    this.#textMessageState.activeReasoningMessageId = null
     this.#lastValues = undefined
     this.#interrupts.clear()
     this.#emittedRunFinished = false
@@ -105,8 +107,13 @@ export class AguiTransformer implements StreamTransformer<AguiExtensions> {
         event.params.data as MessagesEventData,
         this.#textMessageState,
       )) {
-        this.#messageEvents.push(aguiEvent)
         this.#aguiEvents.push(aguiEvent)
+        // reasoning 事件只进主通道；文本事件额外进 #messageEvents（保持其文本类型约束）
+        if (aguiEvent.type === EventType.TEXT_MESSAGE_START
+          || aguiEvent.type === EventType.TEXT_MESSAGE_CONTENT
+          || aguiEvent.type === EventType.TEXT_MESSAGE_END) {
+          this.#messageEvents.push(aguiEvent as AguiTextMessageEvent)
+        }
       }
     }
 

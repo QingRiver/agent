@@ -42,11 +42,12 @@ export function App() {
   }
 
   // pending 槽:确认区激活时不显示;工具执行时显示工具 spinner;否则思考中 spinner
+  // (reasoning/text 已在流式区实时显示时,不再重复显示 spinner)
   const pending = conv.interaction !== null
     ? null
     : conv.spinnerLabel !== null
       ? <Spinner label={conv.spinnerLabel} />
-      : conv.isStreaming && conv.streaming === ''
+      : conv.isStreaming && conv.streaming === '' && conv.reasoning === ''
         ? <Spinner label="🤖 AI 思考中..." />
         : null
 
@@ -55,6 +56,7 @@ export function App() {
       <Conversation
         messages={conv.messages}
         streaming={conv.streaming}
+        reasoning={conv.reasoning}
         pending={pending}
       />
       {conv.interaction !== null && (

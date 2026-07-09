@@ -82,6 +82,19 @@ const GRAPH_AGENT_DEFINITIONS = {
       return buildMessagesInput(userText)
     },
   },
+  writer: {
+    description: '中文文本润色 writer（流式输出润色后完整文本）',
+    resolveStreamInput: (input) => {
+      // 原文可经 state.originalMarkdown 或最后 user message 传入
+      const userText = extractLastUserMessage(input, {
+        stateKeys: ['originalMarkdown'],
+        defaultMessage: '',
+      })
+      if (userText.trim())
+        return buildMessagesInput(userText)
+      return { messages: [] }
+    },
+  },
 } as const satisfies Record<GraphsName, GraphAgentDefinition>
 
 export function listGraphAgentCatalog(): { name: GraphsName, description: string }[] {

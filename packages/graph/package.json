@@ -17,10 +17,12 @@
     "@langchain/core": "catalog:",
     "@langchain/langgraph": "catalog:",
     "@langchain/openai": "catalog:",
+    "diff-match-patch": "catalog:",
     "radash": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/diff-match-patch": "catalog:",
     "@types/node": "catalog:",
     "ts-pattern": "catalog:"
   }

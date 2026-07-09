@@ -46,7 +46,7 @@ const llmWithTools = llm.bindTools(tools)
 
 async function chatbot(state: typeof WeatherState.State) {
   // 首轮注入 system prompt:引导 AI 缺信息时调 ask_* 而非臆测(与 CLI interact-tools 同构)
-  const messages = state.messages[0]?.getType() === 'system'
+  const messages = state.messages[0]?.type === 'system'
     ? state.messages
     : [new SystemMessage(ASK_SYSTEM_PROMPT), ...state.messages]
   const response = await llmWithTools.invoke(messages)
