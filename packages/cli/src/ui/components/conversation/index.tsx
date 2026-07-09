@@ -17,10 +17,22 @@ const AssistantMessageItem = memo(({ content, highlight }: { content: string, hi
   </Box>
 ))
 
+const ReasoningItem = memo(({ content }: { content: string }) => (
+  <Box flexDirection="column">
+    <Text color="gray">
+      {'🧠 '}
+      {content}
+    </Text>
+    <Text>{' '}</Text>
+  </Box>
+))
+
 function HistoryMessageItem({ msg, highlight }: { msg: HistoryMessage, highlight: ReturnType<typeof useHighlight> }) {
   switch (msg.kind) {
     case 'user':
       return <UserMessage content={msg.content} />
+    case 'reasoning':
+      return <ReasoningItem content={msg.content} />
     case 'assistant':
       return <AssistantMessageItem content={msg.content} highlight={highlight} />
     case 'toolResult':
@@ -31,10 +43,12 @@ function HistoryMessageItem({ msg, highlight }: { msg: HistoryMessage, highlight
 export function Conversation({
   messages,
   streaming,
+  reasoning,
   pending,
 }: {
   messages: HistoryMessage[]
   streaming: string
+  reasoning?: string
   pending?: ReactNode | null
 }) {
   const highlight = useHighlight()
@@ -44,6 +58,13 @@ export function Conversation({
       <Static items={messages}>
         {msg => <HistoryMessageItem key={msg.id} msg={msg} highlight={highlight} />}
       </Static>
+
+      {reasoning !== '' && reasoning !== undefined && (
+        <Box flexDirection="column">
+          <ReasoningItem content={reasoning} />
+          <Text color="gray">▌</Text>
+        </Box>
+      )}
 
       {streaming !== '' && (
         <Box flexDirection="column">

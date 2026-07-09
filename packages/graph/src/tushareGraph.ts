@@ -127,10 +127,6 @@ async function buildTushareToolset(mcp: TushareMcp): Promise<TushareToolset> {
   const llm = new ChatOpenAI({
     model: process.env.OPENAI_MODEL ?? '',
     temperature: 0,
-    // deepseek-v4-* 默认 thinking 模式，多轮要求回传 reasoning_content；langchain 不回传，
-    // 第二轮起报 400 "reasoning_content in the thinking mode must be passed back"。
-    // 禁用 thinking 以兼容 ReAct 多轮（agent↔tools 循环）。
-    modelKwargs: { thinking: { type: 'disabled' } },
   })
   const llmWithTools = llm.bindTools(tools)
   const toolNode = new ToolNode(tools)

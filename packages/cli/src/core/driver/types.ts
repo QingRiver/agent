@@ -22,7 +22,7 @@ interface LlmDriver {
 // ==========================================
 
 interface LlmDriverEvent {
-  type: 'text_delta'
+  type: 'text_delta' | 'reasoning_delta'
   content: string
 }
 

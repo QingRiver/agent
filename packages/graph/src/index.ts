@@ -6,6 +6,7 @@ import { simpleGraph } from './simpleGraph'
 import { simpleToolCallGraph } from './simpleToolCallGraph'
 import { tushareGraph } from './tushareGraph'
 import { weatherGraph } from './weatherGraph'
+import { writerGraph } from './writerGraph'
 
 export { ASK_SYSTEM_PROMPT, ASK_TOOLS } from './hitl/ask-tools'
 export {
@@ -42,6 +43,7 @@ export const Graphs = {
   obsidian: obsidianGraph,
   hitl: hitlGraph,
   tushare: tushareGraph,
+  writer: writerGraph,
 } as const
 
 export type GraphsName = keyof typeof Graphs
@@ -51,3 +53,9 @@ const graphsNameValues = Object.keys(Graphs) as GraphsName[]
 export const GraphsNameSchema = z.enum(
   graphsNameValues as [GraphsName, ...GraphsName[]],
 )
+
+export {
+  WRITER_CHANGE_SUMMARIES_EVENT,
+  type WriterChangeSummary,
+  writerGraph,
+} from './writerGraph'

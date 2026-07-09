@@ -28,6 +28,7 @@ export type { ToolRisk }
 
 export type UIMessage
   = | { kind: 'user', content: string }
+    | { kind: 'reasoning', content: string }
     | { kind: 'assistant', content: string }
     | { kind: 'toolResult', name: string, result: string }
 
@@ -62,6 +63,12 @@ export interface I_UI {
     /** 追加一个 chunk */
     append: (chunk: string) => void
     /** 取出当前完整内容并清空,用于"流结束 → 冻结进 scrollback" */
+    commit: () => string
+  }
+  /** 流式渲染当前思考过程(reasoning_content),与 streaming 同构 */
+  reasoning: {
+    reset: () => void
+    append: (chunk: string) => void
     commit: () => string
   }
   /** HITL:发请求 → 挂起 → 等用户响应(Effect,内部 Effect.async) */
