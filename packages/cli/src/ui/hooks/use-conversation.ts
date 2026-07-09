@@ -26,6 +26,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 export interface Conversation {
   messages: HistoryMessage[]
   streaming: string
+  reasoning: string
   isStreaming: boolean
   spinnerLabel: string | null
   interaction: InteractionRequest | null
@@ -44,6 +45,7 @@ export function useConversation(): Conversation {
   const [spinnerLabel, setSpinnerLabel] = useState<string | null>(null)
   const [interaction, setInteraction] = useState<InteractionRequest | null>(null)
   const { buffer, append, commit, reset } = useStreamingBuffer()
+  const { buffer: reasoningBuffer, append: appendReasoning, commit: commitReasoning, reset: resetReasoning } = useStreamingBuffer()
 
   // LLM 真实历史(含 system),由 agentLoop 直接 mutate
   const llmMessagesRef = useRef<ChatCompletionMessageParam[]>([
@@ -80,6 +82,7 @@ export function useConversation(): Conversation {
           pushHistory: (entry: UIMessage) =>
             setMessages(prev => [...prev, { id: idRef.current++, ...entry }]),
           streaming: { reset, append, commit },
+          reasoning: { reset: resetReasoning, append: appendReasoning, commit: commitReasoning },
           // Effect.async 挂起直到 respond 调用 resume(无 Deferred 的 Scope 包袱,语义等价)
           // 生成 interruptId 标识本次挂起,响应须带相同 id 才被 accept(见 respond)
           interact: (request: InteractionRequest) =>
@@ -92,7 +95,7 @@ export function useConversation(): Conversation {
           setSpinner: (label: string | null) => setSpinnerLabel(label),
         }),
       ),
-    [append, commit, driver, reset],
+    [append, appendReasoning, commit, commitReasoning, driver, reset, resetReasoning],
   )
 
   const runChat = useCallback(async (initialText: string) => {
@@ -122,5 +125,5 @@ export function useConversation(): Conversation {
     void runChat(trimmed)
   }, [runChat])
 
-  return { messages, streaming: buffer, isStreaming, spinnerLabel, interaction, send, respond }
+  return { messages, streaming: buffer, reasoning: reasoningBuffer, isStreaming, spinnerLabel, interaction, send, respond }
 }

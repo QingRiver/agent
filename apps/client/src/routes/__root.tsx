@@ -23,6 +23,12 @@ function RootLayout() {
               >
                 Chat
               </Link>
+              <Link
+                to="/text-editor"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
+              >
+                编辑器
+              </Link>
               <div className="ml-auto">
                 <UserAvatarMenu />
               </div>

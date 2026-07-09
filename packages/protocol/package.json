@@ -10,6 +10,10 @@
     "tc": "pnpm -w run tsc-go --noEmit"
   },
   "dependencies": {
+    "diff-match-patch": "catalog:",
     "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/diff-match-patch": "catalog:"
   }
 }

@@ -31,6 +31,7 @@ class OpenAIDriver implements LlmDriver {
     const stream = await this.#client.chat.completions.create(streamParams)
 
     let content = ''
+    let reasoning = ''
     const toolCallAcc = new Map<number, ChatCompletionMessageFunctionToolCall>()
 
     for await (const chunk of stream) {
@@ -42,6 +43,13 @@ class OpenAIDriver implements LlmDriver {
       if (delta.content) {
         content += delta.content
         onEvent({ type: 'text_delta', content: delta.content })
+      }
+
+      // DeepSeek-v4 thinking 模式的 reasoning_content:实时流出 + 累积回传,避多轮 400
+      const rc = (delta as { reasoning_content?: string }).reasoning_content
+      if (rc) {
+        reasoning += rc
+        onEvent({ type: 'reasoning_delta', content: rc })
       }
 
       for (const tc of delta.tool_calls ?? []) {
@@ -61,9 +69,14 @@ class OpenAIDriver implements LlmDriver {
       .map(([, tc]) => tc)
       .filter(tc => tc.id !== '' && tc.function.name !== '')
 
-    return toolCalls.length > 0
+    // 回传 reasoning_content:DeepSeek thinking 多轮要求 assistant 消息带 reasoning_content,
+    // 否则第二轮起报 400 "reasoning_content in the thinking mode must be passed back"。
+    const assistant: Record<string, unknown> = toolCalls.length > 0
       ? { role: 'assistant', content: content || null, tool_calls: toolCalls }
       : { role: 'assistant', content: content || null }
+    if (reasoning)
+      assistant.reasoning_content = reasoning
+    return assistant as unknown as ChatCompletionMessageParam
   }
 }
 

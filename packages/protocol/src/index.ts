@@ -111,3 +111,14 @@ export type PendingInterrupt = z.infer<typeof PendingInterruptSchema>
 export interface ThreadState {
   pendingInterrupt: PendingInterrupt | null
 }
+
+export {
+  computeHunks,
+  type Hunk,
+  hunkKey,
+  WRITER_CHANGE_SUMMARIES_EVENT,
+  WriterChangeSummariesSchema,
+  type WriterChangeSummary,
+  WriterChangeSummarySchema,
+  WriterHunkSummariesSchema,
+} from './writer'
