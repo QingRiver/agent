@@ -16,12 +16,12 @@
 | `TUSHARE_REQUEST_INTERVAL_STEP_SEC` | `5` | 超时/限流时每次增加的间隔（秒） |
 | `TUSHARE_REQUEST_INTERVAL_MAX_SEC` | `20` | 请求间隔上限（秒） |
 | `QLIB_API_PORT` | `8000` | 服务端口 |
-| `QLIB_DATA_DIR` | `data/qlib/qlib_data/cn_data` | 本地 qlib 数据目录（容器外路径） |
+| `QLIB_DATA_DIR` | `infra/qlib/qlib_data/cn_data` | 本地 qlib 数据目录（容器外路径） |
 
 ## 快速启动
 
 ```bash
-cd data/qlib
+cd infra/qlib
 docker compose up --build -d
 ```
 
@@ -217,7 +217,7 @@ docker compose exec qlib-api python scripts/init_tushare_data.py --reconcile-onl
 ## 目录说明
 
 ```
-data/qlib/
+infra/qlib/
 ├── app/              # FastAPI 应用源码（数据服务）
 ├── config/           # 服务配置
 ├── scripts/          # 数据运维：dump_bin、reconcile、init
@@ -262,7 +262,7 @@ pnpm qlib:package -o qlib-source-20260701.zip
 ### 解包（本机从 zip 恢复）
 
 ```bash
-# 默认解压仓库根目录 source.zip → data/qlib/source
+# 默认解压仓库根目录 source.zip → infra/qlib/source
 pnpm qlib:unpack
 pnpm qlib:unpack source.zip
 # 自动：解压 → 删 __MACOSX → bootstrap/reconcile sync_meta
@@ -271,7 +271,7 @@ pnpm qlib:unpack source.zip
 ### 接收（同事）
 
 ```bash
-# 解压到 data/qlib/source/
+# 解压到 infra/qlib/source/
 # 若无 sync_meta.json，首次 incremental 会自动 bootstrap（扫 CSV 写 meta，不触发 backfill）
 curl -X POST http://localhost:8000/api/data/sync \
   -H 'Content-Type: application/json' \
@@ -314,7 +314,7 @@ docker compose exec qlib-api python -m strategies.vol_spike.screener
 # 当天买当天卖回测
 docker compose exec qlib-api python -m strategies.day_trade.backtest
 
-# 本地（在 data/qlib 目录下）
+# 本地（在 infra/qlib 目录下）
 PYTHONPATH=. python -m strategies.vol_spike.screener
 PYTHONPATH=. python -m strategies.day_trade.backtest
 ```
@@ -357,7 +357,7 @@ PYTHONPATH=. python -m strategies.day_trade.backtest
 
 ```bash
 # 1. 启动服务
-cd data/qlib && docker compose up -d
+cd infra/qlib && docker compose up -d
 
 # 2. 首次：历史回填（慢，支持断点续传）
 curl -X POST http://localhost:8000/api/data/sync \

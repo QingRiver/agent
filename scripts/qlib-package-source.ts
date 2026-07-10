@@ -3,7 +3,7 @@
  * qlib source 数据包：打包 / 解包
  *
  * 打包：reconcile sync_meta + data_manifest，输出 zip 到仓库根目录
- * 解包：从仓库根目录 zip 解压到 data/qlib/source，并 bootstrap/reconcile
+ * 解包：从仓库根目录 zip 解压到 infra/qlib/source，并 bootstrap/reconcile
  */
 import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const QLIB_ROOT = join(REPO_ROOT, 'data/qlib')
+const QLIB_ROOT = join(REPO_ROOT, 'infra/qlib')
 const DEFAULT_SOURCE = join(QLIB_ROOT, 'source')
 
 function resolveRepoPath(path: string): string {
@@ -218,12 +218,12 @@ function cmdUnpack(zipPath: string, sourceDir: string, skipReconcile: boolean): 
 
 function printHelp(): void {
   console.log(`用法:
-  pnpm qlib:package [选项]          打包 data/qlib/source → 仓库根目录 source.zip
-  pnpm qlib:unpack [zip] [选项]     解压仓库根目录 zip → data/qlib/source
+  pnpm qlib:package [选项]          打包 infra/qlib/source → 仓库根目录 source.zip
+  pnpm qlib:unpack [zip] [选项]     解压仓库根目录 zip → infra/qlib/source
 
 选项:
   -o, --output <file>     zip 路径（默认仓库根目录 source.zip）
-  -s, --source <dir>      source 目录（默认 data/qlib/source）
+  -s, --source <dir>      source 目录（默认 infra/qlib/source）
   --skip-reconcile        跳过 Python reconcile（不更新 sync_meta / manifest）
 
 示例:

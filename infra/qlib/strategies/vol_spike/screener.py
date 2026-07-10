@@ -132,7 +132,7 @@ def main() -> int:
     parser.add_argument(
         "--source-dir",
         default=None,
-        help="CSV 目录，默认 data/qlib/source/cn_1d",
+        help="CSV 目录，默认 infra/qlib/source/cn_1d",
     )
     parser.add_argument(
         "-o",

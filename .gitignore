@@ -153,12 +153,12 @@ apps/server/certificates/
 apps/server/data/*.sqlite
 apps/server/data/*.sqlite-wal
 apps/server/data/*.sqlite-shm
-/data/qlib/qlib_data/
-/data/qlib/qlib_data/**/*.bin
-/data/qlib/source/
-/data/qlib/**/__MACOSX/
-/data/qlib/state/
-/data/qlib/logs/
+/infra/qlib/qlib_data/
+/infra/qlib/qlib_data/**/*.bin
+/infra/qlib/source/
+/infra/qlib/**/__MACOSX/
+/infra/qlib/state/
+/infra/qlib/logs/
 /local_report/
 
 # @agent/graph test debug dumps (fileLog / resetFileLog)
