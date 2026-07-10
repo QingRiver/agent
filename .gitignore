@@ -162,6 +162,9 @@ apps/server/data/*.sqlite-shm
 /infra/qlib/state/
 /infra/qlib/logs/
 
+/infra/qdrant/qdrant_data/
+/infra/qdrant/snapshots/
+
 # Qlib 共享数据包 zip（仓库根目录）
 /source.zip
 /qlib-source-*.zip

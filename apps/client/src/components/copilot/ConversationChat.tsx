@@ -4,10 +4,12 @@ import {
   CopilotChatConfigurationProvider,
 } from '@copilotkit/react-core/v2'
 import { CopilotRuntimeReady } from './CopilotRuntimeReady'
+import { KbAgentState } from './KbAgentState'
 
 interface ConversationChatProps {
   graphsName: GraphsName
   threadId: string
+  kbId?: string
   chatClassName?: string
   placeholder?: string
   /** HITL 挂起时禁用输入，避免 CopilotKit 因未 resume 而拒绝新 run */
@@ -20,6 +22,7 @@ interface ConversationChatProps {
 export function ConversationChat({
   graphsName,
   threadId,
+  kbId = 'kb_default',
   chatClassName = 'h-full min-h-[24rem]',
   placeholder = '输入消息…',
   blockInput = false,
@@ -34,11 +37,16 @@ export function ConversationChat({
     >
       <CopilotRuntimeReady>
         <div className="relative h-full min-h-0">
+          {graphsName === 'kb' && <KbAgentState kbId={kbId} />}
           <CopilotChat
             key={threadId}
             agentId={graphsName}
             className={chatClassName}
             labels={{ chatInputPlaceholder: placeholder }}
+            messageView={{
+              assistantMessage: { copyButton: () => null },
+              userMessage: { copyButton: () => null },
+            }}
           />
           {blockInput && (
             <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-10 border-t border-amber-700/50 bg-slate-900/95 px-3 py-2 text-sm text-amber-200">

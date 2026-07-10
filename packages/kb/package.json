@@ -1,0 +1,23 @@
+{
+  "name": "@agent/kb",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "tc": "pnpm -w run tsc-go --noEmit"
+  },
+  "dependencies": {
+    "@agent/env": "workspace:*",
+    "@langchain/core": "catalog:",
+    "@langchain/openai": "catalog:",
+    "@qdrant/js-client-rest": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,13 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "${QDRANT_API_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    env_file:
+      - ../../.env
+    volumes:
+      - ./qdrant_data:/qdrant/storage
+      - ./snapshots:/qdrant/snapshots
+    restart: unless-stopped
