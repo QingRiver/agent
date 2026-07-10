@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const QLIB_ROOT = join(REPO_ROOT, 'data/qlib')
+const QLIB_ROOT = join(REPO_ROOT, 'infra/qlib')
 const SOURCE_BARS = join(QLIB_ROOT, 'source/cn_1d')
 const QLIB_DATA = join(QLIB_ROOT, 'qlib_data/cn_data')
 const CONTAINER = 'qlib-api'
@@ -84,7 +84,7 @@ function ensureContainer(build = false): void {
   const args = build ? ['compose', 'up', '-d', '--build'] : ['compose', 'up', '-d']
   run('docker', args, { cwd: QLIB_ROOT })
   if (!isContainerRunning(CONTAINER))
-    fail(`${CONTAINER} 启动失败，请检查: cd data/qlib && docker compose logs`)
+    fail(`${CONTAINER} 启动失败，请检查: cd infra/qlib && docker compose logs`)
   log(`→ ${CONTAINER} 已就绪`)
 }
 

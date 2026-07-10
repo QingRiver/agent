@@ -15,7 +15,7 @@ from app.config import Settings, get_settings
 
 
 def resolve_local_paths(settings: Settings) -> tuple[Path, Path]:
-    """本地开发时 /app/source 不存在，回退到 data/qlib/source。"""
+    """本地开发时 /app/source 不存在，回退到 infra/qlib/source。"""
     source_root = settings.source_root
     if str(source_root).startswith("/app") and not source_root.parent.exists():
         source_root = ROOT / "source"

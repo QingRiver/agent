@@ -22,7 +22,7 @@ def _env_file_paths() -> tuple[str, ...]:
     root = _monorepo_root()
     if root is None:
         return ()
-    paths = [root / ".env", root / "data" / "qlib" / ".env"]
+    paths = [root / ".env", root / "infra" / "qlib" / ".env"]
     return tuple(str(p) for p in paths if p.exists())
 
 
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
         validation_alias="TUSHARE_REQUEST_INTERVAL_MAX_SEC",
     )
     qlib_api_port: int = Field(default=8000, validation_alias="QLIB_API_PORT")
-    qlib_data_dir: str = Field(default="data/qlib/qlib_data/cn_data", validation_alias="QLIB_DATA_DIR")
+    qlib_data_dir: str = Field(default="infra/qlib/qlib_data/cn_data", validation_alias="QLIB_DATA_DIR")
     qlib_source_dir: str = Field(default="/app/source", validation_alias="QLIB_SOURCE_DIR")
     qlib_config_dir: str = Field(default="/app/config", validation_alias="QLIB_CONFIG_DIR")
 
