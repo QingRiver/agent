@@ -22,7 +22,7 @@ def _env_file_paths() -> tuple[str, ...]:
     root = _monorepo_root()
     if root is None:
         return ()
-    paths = [root / ".env", root / "data" / "qlib" / ".env"]
+    paths = [root / ".env", root / "infra" / "qlib" / ".env"]
     return tuple(str(p) for p in paths if p.exists())
 
 
