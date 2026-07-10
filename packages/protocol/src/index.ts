@@ -113,6 +113,13 @@ export interface ThreadState {
 }
 
 export {
+  KB_CITATIONS_EVENT,
+  type KbCitation,
+  KbCitationSchema,
+  type KbCitationsPayload,
+  KbCitationsPayloadSchema,
+} from './kb'
+export {
   computeHunks,
   type Hunk,
   hunkKey,

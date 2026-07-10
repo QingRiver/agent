@@ -12,6 +12,8 @@
   "dependencies": {
     "@ag-ui/core": "catalog:",
     "@agent/claude-agent": "workspace:*",
+    "@agent/env": "workspace:*",
+    "@agent/kb": "workspace:*",
     "@agent/protocol": "workspace:*",
     "@agent/tools": "workspace:*",
     "@langchain/core": "catalog:",

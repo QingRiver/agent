@@ -11,13 +11,14 @@ import { ConversationService } from '../service/conversation'
 
 export interface StreamGraphAguiOptions {
   resolveStreamInput: (input: RunAgentInput) => unknown
+  resolveConfigurable?: (input: RunAgentInput) => Record<string, unknown>
 }
 
 /** 带 `aguiTransformerFactory` 编译的图，`streamEvents(v3)` 才有 `extensions.aguiEvents` */
 export interface AguiTransformerGraphApp {
   streamEvents: (
     input: unknown,
-    options: { version: 'v3', configurable?: { thread_id: string } },
+    options: { version: 'v3', configurable?: Record<string, unknown> },
   ) => Promise<AguiTransformerGraphStream>
 }
 
@@ -52,9 +53,10 @@ export async function* streamGraphAguiEvents(
     aguiRunContext.current = { threadId, runId }
 
     const streamInput = options.resolveStreamInput(input)
+    const extraConfigurable = options.resolveConfigurable?.(input) ?? {}
     const stream = await graph.streamEvents(streamInput, {
       version: 'v3',
-      configurable: { thread_id: threadId },
+      configurable: { thread_id: threadId, ...extraConfigurable },
     })
 
     // drain 主迭代器驱动 transformer；stream 内部节点出错时该迭代器会 reject，

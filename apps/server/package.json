@@ -24,6 +24,7 @@
     "@agent/claude-agent": "workspace:*",
     "@agent/env": "workspace:*",
     "@agent/graph": "workspace:*",
+    "@agent/kb": "workspace:*",
     "@agent/protocol": "workspace:*",
     "@copilotkit/runtime": "catalog:",
     "@hono/node-server": "catalog:",

@@ -1,6 +1,7 @@
 import type { RunAgentInput } from '@ag-ui/core'
 import type { GraphsName } from '@agent/graph'
 import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
+import { env } from '@agent/env'
 import {
   aguiTransformerFactory,
   Graphs,
@@ -16,6 +17,7 @@ import { streamGraphAguiEvents } from './streamGraphAguiEvents'
 interface GraphAgentDefinition {
   description: string
   resolveStreamInput: (input: RunAgentInput) => unknown
+  resolveConfigurable?: (input: RunAgentInput) => Record<string, unknown>
 }
 
 const GRAPH_AGENT_DEFINITIONS = {
@@ -95,6 +97,20 @@ const GRAPH_AGENT_DEFINITIONS = {
       return { messages: [] }
     },
   },
+  kb: {
+    description: '知识库 RAG（混合召回 + rerank + 引文溯源）',
+    resolveStreamInput: input => buildMessagesInput(extractLastUserMessage(input, {
+      stateKeys: ['message'],
+      defaultMessage: '知识库中有哪些退款政策？',
+    })),
+    resolveConfigurable: (input) => {
+      const state = input.state as { kbId?: unknown } | undefined
+      const kbId = typeof state?.kbId === 'string' && state.kbId.trim()
+        ? state.kbId.trim()
+        : env.KB_COLLECTION
+      return { kbId }
+    },
+  },
 } as const satisfies Record<GraphsName, GraphAgentDefinition>
 
 export function listGraphAgentCatalog(): { name: GraphsName, description: string }[] {
@@ -122,10 +138,14 @@ export function getAguiGraphApp(name: GraphsName): AguiTransformerGraphApp {
 
 function createGraphAgent(name: GraphsName): GraphTransformerAguiAgent {
   const definition = GRAPH_AGENT_DEFINITIONS[name]
+  const resolveConfigurable = 'resolveConfigurable' in definition
+    ? definition.resolveConfigurable
+    : undefined
   return new GraphTransformerAguiAgent(
     { agentId: name, description: definition.description },
     input => streamGraphAguiEvents(input, getAguiGraphApp(name), {
       resolveStreamInput: definition.resolveStreamInput,
+      ...(resolveConfigurable ? { resolveConfigurable } : {}),
     }),
   )
 }

@@ -1,0 +1,9 @@
+services:
+  markitdown:
+    build: .
+    container_name: markitdown
+    ports:
+      - "${KB_MARKITDOWN_PORT:-8200}:8200"
+    env_file:
+      - ../../.env
+    restart: unless-stopped

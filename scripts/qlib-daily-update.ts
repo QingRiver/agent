@@ -72,7 +72,7 @@ function ensureDocker(): void {
   fail(
     'Docker 未运行，请先启动 Docker Desktop。\n'
     + '  macOS: open -a Docker\n'
-    + '启动后重试: pnpm qlib:update',
+    + '启动后重试: pnpm devops qlib update',
   )
 }
 
@@ -113,7 +113,7 @@ function cmdInit(): void {
   const csvCount = countCsv()
   if (csvCount === 0) {
     log('→ source/cn_1d 无 CSV，请先解包共享数据:')
-    log('  pnpm qlib:unpack')
+    log('  pnpm devops qlib unpack')
     log('或执行历史回填后再 dump。')
   }
   else {
@@ -147,7 +147,7 @@ function cmdInit(): void {
   }
 
   log('\n初始化完成。日常更新请执行:')
-  log('  pnpm qlib:update')
+  log('  pnpm devops qlib update')
 }
 
 function cmdUpdate(tradeDate?: string, dryRun = false): void {
@@ -156,7 +156,7 @@ function cmdUpdate(tradeDate?: string, dryRun = false): void {
 
   const csvCount = countCsv()
   if (csvCount === 0)
-    fail('source/cn_1d 无 CSV，请先 pnpm qlib:unpack 或回填历史数据')
+    fail('source/cn_1d 无 CSV，请先 pnpm devops qlib unpack 或回填历史数据')
 
   const watermark = readWatermark()
   if (watermark)
@@ -169,28 +169,25 @@ function cmdUpdate(tradeDate?: string, dryRun = false): void {
   run('docker', ['compose', 'exec', '-T', CONTAINER, 'python', ...syncArgs], { cwd: QLIB_ROOT })
 
   log('\n[2/2] 增量 dump qlib bin（先日历，再更新变动股票）…')
-  const dumpArgs = ['scripts/dump_daily.py']
-  if (dryRun)
-    dumpArgs.push('--dry-run')
-  dockerExec(dumpArgs[0], dumpArgs.slice(1))
+  dockerExec('scripts/dump_daily.py', dryRun ? ['--dry-run'] : [])
 
   const newWatermark = readWatermark()
   log(`\n完成。水位: ${newWatermark || watermark || '(未知)'}`)
   if (!hasQlibData())
-    log('提示: qlib_data 仍为空，请执行 pnpm qlib:init')
+    log('提示: qlib_data 仍为空，请执行 pnpm devops qlib init')
 }
 
 function printHelp(): void {
   console.log(`用法:
-  pnpm qlib:init              首次初始化（启动 Docker、检查数据、必要时全量 dump）
-  pnpm qlib:update            每日更新（增量 CSV + 按需 dump bin）
-  pnpm qlib:update -- --date 20260702   补洞至指定交易日
-  pnpm qlib:update -- --dry-run         仅预览 dump 计划
+  pnpm devops qlib init              首次初始化（启动 Docker、检查数据、必要时全量 dump）
+  pnpm devops qlib update            每日更新（增量 CSV + 按需 dump bin）
+  pnpm devops qlib update -- --date 20260702   补洞至指定交易日
+  pnpm devops qlib update -- --dry-run         仅预览 dump 计划
 
 说明:
   - 自动检测 Docker / qlib-api 容器；未运行时提示并尝试启动
   - dump 不会扫描全市场重写字段，仅更新日历 + 有新区间的股票
-  - 首次无 qlib_data 时请用 qlib:init
+  - 首次无 qlib_data 时请用 devops qlib init
 `)
 }
 
