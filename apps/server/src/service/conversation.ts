@@ -21,7 +21,7 @@ function rowToThread(row: typeof conversationThreads.$inferSelect): Conversation
     id: row.id,
     agentId: GraphsNameSchema.parse(row.agentId),
     title: row.title,
-    pinned: row.pinned === 1,
+    pinned: row.pinned,
     seq: row.seq,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -29,48 +29,46 @@ function rowToThread(row: typeof conversationThreads.$inferSelect): Conversation
 }
 
 export class ConversationService {
-  static list(userId: string): ConversationThread[] {
-    const rows = db
+  static async list(userId: string): Promise<ConversationThread[]> {
+    const rows = await db
       .select()
       .from(conversationThreads)
       .where(eq(conversationThreads.userId, userId))
       .orderBy(desc(conversationThreads.pinned), desc(conversationThreads.updatedAt))
-      .all()
     return rows.map(rowToThread)
   }
 
-  static get(userId: string, id: string): ConversationThread | null {
-    const row = db
+  static async get(userId: string, id: string): Promise<ConversationThread | null> {
+    const rows = await db
       .select()
       .from(conversationThreads)
       .where(and(eq(conversationThreads.id, id), eq(conversationThreads.userId, userId)))
-      .get()
+    const row = rows[0]
     return row ? rowToThread(row) : null
   }
 
-  static create(userId: string, agentId: GraphsName): ConversationThread {
+  static async create(userId: string, agentId: GraphsName): Promise<ConversationThread> {
     const now = Date.now()
-    const seqRow = db
+    const seqRows = await db
       .select({
         nextSeq: sql<number>`COALESCE(MAX(${conversationThreads.seq}), 0) + 1`.as('next_seq'),
       })
       .from(conversationThreads)
       .where(eq(conversationThreads.userId, userId))
-      .get()
-    const seq = seqRow?.nextSeq ?? 1
+    const seq = seqRows[0]?.nextSeq ?? 1
     const id = randomUUID()
     const title = formatTitle(seq, now)
 
-    db.insert(conversationThreads).values({
+    await db.insert(conversationThreads).values({
       id,
       userId,
       agentId,
       title,
-      pinned: 0,
+      pinned: false,
       seq,
       createdAt: now,
       updatedAt: now,
-    }).run()
+    })
 
     return ConversationThreadSchema.parse({
       id,
@@ -83,32 +81,31 @@ export class ConversationService {
     })
   }
 
-  static setPinned(userId: string, id: string, pinned: boolean): boolean {
-    const result = db
+  static async setPinned(userId: string, id: string, pinned: boolean): Promise<boolean> {
+    const updated = await db
       .update(conversationThreads)
-      .set({ pinned: pinned ? 1 : 0, updatedAt: Date.now() })
+      .set({ pinned, updatedAt: Date.now() })
       .where(and(eq(conversationThreads.id, id), eq(conversationThreads.userId, userId)))
-      .run()
-    return result.changes > 0
+      .returning({ id: conversationThreads.id })
+    return updated.length > 0
   }
 
-  static delete(userId: string, id: string): boolean {
-    const result = db
+  static async delete(userId: string, id: string): Promise<boolean> {
+    const deleted = await db
       .delete(conversationThreads)
       .where(and(eq(conversationThreads.id, id), eq(conversationThreads.userId, userId)))
-      .run()
-    return result.changes > 0
+      .returning({ id: conversationThreads.id })
+    return deleted.length > 0
   }
 
-  static touch(userId: string, id: string): void {
-    db
+  static async touch(userId: string, id: string): Promise<void> {
+    await db
       .update(conversationThreads)
       .set({ updatedAt: Date.now() })
       .where(and(eq(conversationThreads.id, id), eq(conversationThreads.userId, userId)))
-      .run()
   }
 
-  static ownedByUser(userId: string, id: string): boolean {
-    return ConversationService.get(userId, id) != null
+  static async ownedByUser(userId: string, id: string): Promise<boolean> {
+    return (await ConversationService.get(userId, id)) != null
   }
 }

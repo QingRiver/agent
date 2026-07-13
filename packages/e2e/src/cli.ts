@@ -1,29 +1,30 @@
 #!/usr/bin/env tsx
+import type { InfraTarget } from './devops/paths'
 /**
- * 统一 devops CLI：infra 启停/检查、e2e、qlib 数据
+ * 统一 devops CLI：infra 启停/检查、e2e、qlib 数据。
  *
- * 用法见 `.cursor/skills/devops/SKILL.md` 或 `pnpm devops --help`
+ * 用法见 `.cursor/skills/devops/SKILL.md` 或 `pnpm devops --help`。
+ * 本文件仅作命令分发，具体实现位于 ./devops/{infra,e2e,qlib,docker,paths}。
  */
 import process from 'node:process'
 import { parseArgs } from 'node:util'
-import { runE2e } from './lib/e2e'
-import { infraDown, infraStatus, infraUp } from './lib/infra'
-import type { InfraTarget } from './lib/paths'
-import { fail } from './lib/docker'
-import { qlibInit, qlibPackage, qlibUpdate } from './lib/qlib'
+import { fail } from './devops/docker'
+import { runE2e } from './devops/e2e'
+import { infraDown, infraStatus, infraUp } from './devops/infra'
+import { qlibInit, qlibPackage, qlibUpdate } from './devops/qlib'
 
 function printHelp(): void {
   console.log(`用法: pnpm devops <command> [subcommand] [options]
 
 infra — Docker 基础设施
-  up [qdrant|markitdown|qlib|kb|all] [--build]   启动（kb = qdrant + markitdown）
-  down [qdrant|markitdown|qlib|kb|all]            停止
-  status [qdrant|markitdown|qlib|kb|all]          容器 + 健康检查
+  up [postgres|qdrant|markitdown|qlib|kb|all] [--build]   启动（kb = qdrant + markitdown）
+  down [postgres|qdrant|markitdown|qlib|kb|all]            停止
+  status [postgres|qdrant|markitdown|qlib|kb|all]          容器 + 健康检查
 
 e2e — 端到端测试与种子数据
   all              auth seed + kb seed + kb/hitl vitest（不含 agent SSE）
   seed             auth seed + kb seed
-  auth             写入 E2E 测试账号到 auth.sqlite
+  auth             写入 E2E 测试账号到 postgres（需 infra up postgres）
   kb               kb 管线 vitest（需 infra up kb）
   hitl             hitl 图 vitest（不需 server）
   agent            kb agent CopilotKit SSE（需 pnpm dev + e2e seed）
@@ -46,10 +47,10 @@ qlib — 行情数据（委托 scripts/qlib-*.ts）
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
-    build: { type: 'boolean', default: false },
-    date: { type: 'string' },
+    'build': { type: 'boolean', default: false },
+    'date': { type: 'string' },
     'dry-run': { type: 'boolean', default: false },
-    help: { type: 'boolean', short: 'h', default: false },
+    'help': { type: 'boolean', short: 'h', default: false },
   },
 })
 
@@ -83,8 +84,9 @@ async function main(): Promise<void> {
     case 'qlib': {
       if (!sub)
         fail('qlib 子命令: init | update | package | unpack')
-      if (sub === 'init')
+      if (sub === 'init') {
         qlibInit()
+      }
       else if (sub === 'update') {
         const args: string[] = []
         if (values.date)
@@ -93,10 +95,12 @@ async function main(): Promise<void> {
           args.push('--dry-run')
         qlibUpdate(args)
       }
-      else if (sub === 'package' || sub === 'unpack')
+      else if (sub === 'package' || sub === 'unpack') {
         qlibPackage(sub, rest)
-      else
+      }
+      else {
         fail(`未知 qlib 子命令: ${sub}`)
+      }
       break
     }
     default:

@@ -22,6 +22,7 @@
     "@ag-ui/client": "catalog:",
     "@ag-ui/core": "catalog:",
     "@agent/claude-agent": "workspace:*",
+    "@agent/e2e": "workspace:*",
     "@agent/env": "workspace:*",
     "@agent/graph": "workspace:*",
     "@agent/kb": "workspace:*",
@@ -32,17 +33,17 @@
     "@langchain/core": "catalog:",
     "@langchain/langgraph": "catalog:",
     "@langchain/langgraph-checkpoint": "catalog:",
-    "@langchain/langgraph-checkpoint-sqlite": "catalog:",
+    "@langchain/langgraph-checkpoint-postgres": "catalog:",
     "better-auth": "catalog:",
-    "better-sqlite3": "catalog:",
     "drizzle-orm": "catalog:",
     "hono": "catalog:",
+    "pg": "catalog:",
     "radash": "catalog:",
     "rxjs": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "catalog:",
+    "@types/pg": "catalog:",
     "drizzle-kit": "catalog:",
     "tsx": "catalog:"
   }

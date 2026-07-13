@@ -1,6 +1,11 @@
 import { spawnSync } from 'node:child_process'
-import { REPO_ROOT } from './paths'
 import { fail } from './docker'
+import { REPO_ROOT } from './paths'
+
+/**
+ * qlib 数据运维：委托仓库根的 `scripts/qlib-daily-update.ts` 与 `scripts/qlib-package-source.ts`。
+ * 本文件只做 argv 透传，不重复实现 qlib 逻辑。
+ */
 
 function delegate(script: string, args: string[]): void {
   const result = spawnSync('tsx', [script, ...args], {

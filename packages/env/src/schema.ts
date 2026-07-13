@@ -16,6 +16,9 @@ export const ServerEnvSchema = LlmEnvSchema.extend({
   DATA_DIR: z.string().default('apps/server/data'),
   BETTER_AUTH_SECRET: z.string().min(1).default('dev-secret-change-me-in-production'),
   BETTER_AUTH_URL: z.string().url().default('https://localhost:3000'),
+  // PostgreSQL（infra/postgres/）：better-auth + drizzle + langgraph checkpoint 共用
+  DATABASE_URL: z.string().url('DATABASE_URL 须为合法 postgres 连接串'),
+  POSTGRES_PORT: z.coerce.number().int().positive().default(5432),
   TUSHARE_TOKEN: z.string().min(1).optional(),
   QDRANT_URL: z.string().url().default('http://localhost:6333'),
   SILICONFLOW_API_KEY: z.string().min(1).optional(),

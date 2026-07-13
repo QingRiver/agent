@@ -1,7 +1,16 @@
 import { spawnSync } from 'node:child_process'
-import { HITL_AGENT_E2E_TS, KB_AGENT_E2E_SH, REPO_ROOT } from './paths'
-import { fail, run } from './docker'
+import process from 'node:process'
+import { fail } from './docker'
+import { E2E_RUNNER_TS, REPO_ROOT } from './paths'
 
+/**
+ * e2e 编排：seed / vitest / agent flow 的执行入口。
+ *
+ * 注意：agent flow 的测试实现已迁入 packages/e2e/src/flows/，经 runner.ts 调度；
+ * 本文件只负责 spawn（pnpm vitest / server seed tsx / e2e runner），不含任何 flow 逻辑与业务断言。
+ */
+
+/** 在 REPO_ROOT 跑命令，注入额外 env；非 0 退出即 fail。 */
 function runInRepo(command: string, args: string[], env?: Record<string, string>): void {
   const result = spawnSync(command, args, {
     cwd: REPO_ROOT,
@@ -12,38 +21,43 @@ function runInRepo(command: string, args: string[], env?: Record<string, string>
     fail(`${command} ${args.join(' ')} 失败 (exit ${result.status ?? 'unknown'})`)
 }
 
+/** 写入 E2E 账号到 server postgres（直接调 better-auth API，server 进程内执行） */
 export function e2eAuthSeed(): void {
   console.log('[devops] e2e auth seed')
   runInRepo('pnpm', ['--filter', 'server', 'exec', 'tsx', 'scripts/seed-e2e-user.ts'])
 }
 
+/** 写入 kb 种子数据（packages/kb vitest，KB_SEED=1） */
 export function e2eKbSeed(): void {
   console.log('[devops] e2e kb seed')
   runInRepo('pnpm', ['exec', 'vitest', 'run', 'packages/kb/src/seed.test.ts'], { KB_SEED: '1' })
 }
 
+/** kb 管线 e2e（packages/kb vitest，E2E=1，需 infra up kb） */
 export function e2eKb(): void {
   console.log('[devops] e2e kb pipeline (vitest)')
   runInRepo('pnpm', ['exec', 'vitest', 'run', 'packages/kb/src/e2e.test.ts'], { E2E: '1' })
 }
 
+/** kb agent SSE flow（需 pnpm dev + e2e seed + infra up kb） */
 export function e2eKbAgent(): void {
   console.log('[devops] e2e kb agent (需要 server: pnpm dev)')
-  const result = run('bash', [KB_AGENT_E2E_SH], { inherit: true })
-  if (!result.ok)
-    fail('kb agent e2e 失败（确认 server 已启动: pnpm dev）')
+  runInRepo('pnpm', ['exec', 'tsx', E2E_RUNNER_TS, 'kb-agent'])
 }
 
+/** hitl 图 vitest（packages/graph，不需 server） */
 export function e2eHitl(): void {
   console.log('[devops] e2e hitl graph (vitest)')
   runInRepo('pnpm', ['exec', 'vitest', 'run', 'packages/graph/src/hitlGraph.test.ts'])
 }
 
+/** hitl agent SSE flow（需 pnpm dev + e2e auth） */
 export function e2eHitlAgent(): void {
   console.log('[devops] e2e hitl agent (需要 server: pnpm dev)')
-  runInRepo('pnpm', ['exec', 'tsx', HITL_AGENT_E2E_TS])
+  runInRepo('pnpm', ['exec', 'tsx', E2E_RUNNER_TS, 'hitl-agent'])
 }
 
+/** e2e all：seed → kb vitest → hitl vitest（不含 agent SSE，需另起 dev） */
 export function e2eAll(): void {
   console.log('[devops] e2e all: seed → kb vitest → hitl vitest\n')
   e2eAuthSeed()

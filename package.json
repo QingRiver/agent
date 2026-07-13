@@ -23,7 +23,7 @@
     "format": "pnpm exec eslint apps packages --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "devops": "tsx .cursor/skills/devops/scripts/cli.ts"
+    "devops": "tsx packages/e2e/src/cli.ts"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:",

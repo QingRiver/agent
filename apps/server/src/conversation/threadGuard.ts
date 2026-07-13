@@ -1,5 +1,5 @@
 import { ConversationService } from '../service/conversation'
 
-export function assertThreadOwnedByUser(userId: string, threadId: string): boolean {
+export async function assertThreadOwnedByUser(userId: string, threadId: string): Promise<boolean> {
   return ConversationService.ownedByUser(userId, threadId)
 }

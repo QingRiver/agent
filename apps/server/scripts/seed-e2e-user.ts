@@ -1,11 +1,12 @@
 import process from 'node:process'
+import { E2E_ACCOUNT } from '@agent/e2e'
 import { getAuth } from '../src/auth/auth'
 import { bootstrapDatabases } from '../src/db/bootstrap'
 
-/** Agent / CI 用的固定 E2E 账号（写入 auth.sqlite，密码经 better-auth 哈希） */
+/** Agent / CI 用的固定 E2E 账号（写入 postgres，密码经 better-auth 哈希） */
 export const E2E_USER = {
-  email: 'agent-e2e@cursor.local',
-  password: 'agent-e2e-pass',
+  email: E2E_ACCOUNT.email,
+  password: E2E_ACCOUNT.password,
   name: 'Cursor Agent',
 } as const
 

@@ -1,0 +1,16 @@
+{
+  "name": "@agent/e2e",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "tc": "pnpm -w run tsc-go --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "catalog:"
+  }
+}

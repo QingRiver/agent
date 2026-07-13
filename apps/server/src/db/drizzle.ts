@@ -1,5 +1,5 @@
-import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { pool } from './client'
 import * as schema from './schema'
-import { appDb } from './sqlite'
 
-export const db = drizzle(appDb(), { schema })
+export const db = drizzle(pool, { schema })

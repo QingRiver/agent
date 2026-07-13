@@ -14,16 +14,18 @@ export class ConversationHandlers {
     return c.json({ graphs: listGraphAgentCatalog() })
   }
 
-  static list(c: Context<AppEnv>, user: AuthUser) {
-    return c.json({ conversations: ConversationService.list(user.id) })
+  static async list(c: Context<AppEnv>, user: AuthUser) {
+    const conversations = await ConversationService.list(user.id)
+    return c.json({ conversations })
   }
 
-  static create(c: Context<AppEnv>, user: AuthUser, req: CreateConversationRequest) {
-    return c.json({ conversation: ConversationService.create(user.id, req.agentId) })
+  static async create(c: Context<AppEnv>, user: AuthUser, req: CreateConversationRequest) {
+    const conversation = await ConversationService.create(user.id, req.agentId)
+    return c.json({ conversation })
   }
 
-  static detail(c: Context<AppEnv>, user: AuthUser, req: ConversationIdRequest) {
-    const conversation = ConversationService.get(user.id, req.id)
+  static async detail(c: Context<AppEnv>, user: AuthUser, req: ConversationIdRequest) {
+    const conversation = await ConversationService.get(user.id, req.id)
     if (!conversation)
       return c.json({ error: 'Not found' }, 404)
 
@@ -35,7 +37,7 @@ export class ConversationHandlers {
     user: AuthUser,
     req: ConversationIdRequest,
   ) {
-    const conversation = ConversationService.get(user.id, req.id)
+    const conversation = await ConversationService.get(user.id, req.id)
     if (!conversation)
       return c.json({ error: 'Not found' }, 404)
 
@@ -46,15 +48,15 @@ export class ConversationHandlers {
     })
   }
 
-  static pin(c: Context<AppEnv>, user: AuthUser, req: ConversationIdRequest) {
-    if (!ConversationService.setPinned(user.id, req.id, true))
+  static async pin(c: Context<AppEnv>, user: AuthUser, req: ConversationIdRequest) {
+    if (!(await ConversationService.setPinned(user.id, req.id, true)))
       return c.json({ error: 'Not found' }, 404)
 
     return c.json({ ok: true })
   }
 
-  static unpin(c: Context<AppEnv>, user: AuthUser, req: ConversationIdRequest) {
-    if (!ConversationService.setPinned(user.id, req.id, false))
+  static async unpin(c: Context<AppEnv>, user: AuthUser, req: ConversationIdRequest) {
+    if (!(await ConversationService.setPinned(user.id, req.id, false)))
       return c.json({ error: 'Not found' }, 404)
 
     return c.json({ ok: true })
@@ -65,7 +67,7 @@ export class ConversationHandlers {
     user: AuthUser,
     req: ConversationIdRequest,
   ) {
-    if (!ConversationService.delete(user.id, req.id))
+    if (!(await ConversationService.delete(user.id, req.id)))
       return c.json({ error: 'Not found' }, 404)
 
     await getCheckpointer().deleteThread(req.id)

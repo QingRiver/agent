@@ -1,14 +1,14 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { bigint, boolean, index, integer, pgTable, text } from 'drizzle-orm/pg-core'
 
-export const conversationThreads = sqliteTable('conversation_threads', {
+export const conversationThreads = pgTable('conversation_threads', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(),
   agentId: text('agent_id').notNull(),
   title: text('title').notNull(),
-  pinned: integer('pinned').notNull().default(0),
+  pinned: boolean('pinned').notNull().default(false),
   seq: integer('seq').notNull(),
-  createdAt: integer('created_at').notNull(),
-  updatedAt: integer('updated_at').notNull(),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
 }, table => [
   index('idx_conv_user_list').on(table.userId, table.pinned, table.updatedAt),
 ])

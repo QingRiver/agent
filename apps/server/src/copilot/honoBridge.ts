@@ -66,7 +66,7 @@ async function assertCopilotThreadAccess(
   if (!threadId)
     return null
 
-  if (!assertThreadOwnedByUser(userId, threadId)) {
+  if (!(await assertThreadOwnedByUser(userId, threadId))) {
     return new Response(JSON.stringify({ error: 'Forbidden: thread not owned by user' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },

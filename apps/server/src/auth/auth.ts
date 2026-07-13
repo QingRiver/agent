@@ -1,12 +1,12 @@
 import process from 'node:process'
 import { betterAuth } from 'better-auth'
 import { bearer } from 'better-auth/plugins'
-import { authDb } from '../db/sqlite'
+import { pool } from '../db/client'
 import { DEV_TRUSTED_HOSTS } from './devOrigins'
 
 function createAuth() {
   return betterAuth({
-    database: authDb() as never,
+    database: pool as never,
     emailAndPassword: { enabled: true },
     plugins: [bearer()],
     baseURL: process.env.BETTER_AUTH_URL ?? 'https://localhost:3000',

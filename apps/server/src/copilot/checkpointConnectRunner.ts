@@ -94,7 +94,7 @@ async function buildCheckpointConnectEvents(threadId: string): Promise<BaseEvent
   if (!ctx)
     return []
 
-  const conversation = ConversationService.get(ctx.userId, threadId)
+  const conversation = await ConversationService.get(ctx.userId, threadId)
   if (!conversation)
     return []
 
