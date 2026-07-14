@@ -27,16 +27,16 @@ export function e2eAuthSeed(): void {
   runInRepo('pnpm', ['--filter', 'server', 'exec', 'tsx', 'scripts/seed-e2e-user.ts'])
 }
 
-/** 写入 kb 种子数据（packages/kb vitest，KB_SEED=1） */
+/** 写入 kb 种子数据（server：草稿 → commit） */
 export function e2eKbSeed(): void {
   console.log('[devops] e2e kb seed')
-  runInRepo('pnpm', ['exec', 'vitest', 'run', 'packages/kb/src/seed.test.ts'], { KB_SEED: '1' })
+  runInRepo('pnpm', ['--filter', 'server', 'exec', 'tsx', 'scripts/seed-kb.ts'])
 }
 
-/** kb 管线 e2e（packages/kb vitest，E2E=1，需 infra up kb） */
+/** kb 管线 e2e（apps/server vitest，E2E=1，需 infra up kb + postgres） */
 export function e2eKb(): void {
   console.log('[devops] e2e kb pipeline (vitest)')
-  runInRepo('pnpm', ['exec', 'vitest', 'run', 'packages/kb/src/e2e.test.ts'], { E2E: '1' })
+  runInRepo('pnpm', ['exec', 'vitest', 'run', 'apps/server/src/kb.e2e.test.ts'], { E2E: '1' })
 }
 
 /** kb agent SSE flow（需 pnpm dev + e2e seed + infra up kb） */

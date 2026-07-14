@@ -60,7 +60,7 @@ pnpm devops infra status all
 pnpm devops e2e all          # auth seed → kb seed → kb/hitl vitest（不含 agent SSE）
 pnpm devops e2e seed         # auth seed + kb seed
 pnpm devops e2e auth         # 写入 E2E 测试账号到 postgres（需 infra up postgres）
-pnpm devops e2e kb           # packages/kb vitest E2E=1（需 infra up kb）
+pnpm devops e2e kb           # apps/server kb.e2e（E2E=1，需 infra up kb + postgres）
 pnpm devops e2e hitl         # packages/graph hitlGraph vitest（不需 server）
 pnpm devops e2e agent        # kb CopilotKit SSE（需 pnpm dev + infra up kb + e2e seed）
 pnpm devops e2e hitl-agent   # hitl 4 步 interrupt + resume SSE（需 pnpm dev + e2e auth）

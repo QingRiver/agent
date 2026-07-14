@@ -79,7 +79,7 @@ export function TextEditor() {
                 ? (
                     <div
                       ref={thinkingRef}
-                      className="dark-scrollbar max-h-48 overflow-y-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-slate-400"
+                      className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-slate-400"
                     >
                       {thinking}
                       <span className="text-slate-600">▌</span>

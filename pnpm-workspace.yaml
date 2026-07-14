@@ -54,7 +54,7 @@ catalog:
   ink-testing-library: ^4.0.0
   jotai: ^2.12.5
   lucide-react: ^1.21.0
-  marked: ^18.0.0
+  marked: ^18.0.5
   openai: ^6.41.0
   pg: ^8.22.0
   radash: ^12.1.1

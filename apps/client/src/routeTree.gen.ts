@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TextEditorRouteImport } from './routes/text-editor'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as KbRouteImport } from './routes/kb'
 import { Route as IndexRouteImport } from './routes/index'
 
 const TextEditorRoute = TextEditorRouteImport.update({
@@ -29,6 +30,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const KbRoute = KbRouteImport.update({
+  id: '/kb',
+  path: '/kb',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -37,12 +43,14 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/kb': typeof KbRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/text-editor': typeof TextEditorRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/kb': typeof KbRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/text-editor': typeof TextEditorRoute
@@ -50,20 +58,22 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/kb': typeof KbRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/text-editor': typeof TextEditorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/register' | '/text-editor'
+  fullPaths: '/' | '/kb' | '/login' | '/register' | '/text-editor'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/register' | '/text-editor'
-  id: '__root__' | '/' | '/login' | '/register' | '/text-editor'
+  to: '/' | '/kb' | '/login' | '/register' | '/text-editor'
+  id: '__root__' | '/' | '/kb' | '/login' | '/register' | '/text-editor'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  KbRoute: typeof KbRoute
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   TextEditorRoute: typeof TextEditorRoute
@@ -92,6 +102,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/kb': {
+      id: '/kb'
+      path: '/kb'
+      fullPath: '/kb'
+      preLoaderRoute: typeof KbRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -104,6 +121,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  KbRoute: KbRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   TextEditorRoute: TextEditorRoute,

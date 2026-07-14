@@ -1,12 +1,9 @@
 export {
-  chunkPointId,
-  deleteByDocId,
+  deleteByPointIds,
   ensureCollection,
   getQdrantClient,
-  getStoredContentHash,
-  listDocumentSummaries,
   payloadToRetrievedChunk,
-  type ScrollDocSummary,
+  setPayloadByDocId,
   type UpsertChunkInput,
   upsertChunks,
 } from './client'

@@ -1,8 +1,6 @@
 export {
   type ChunkerOptions,
   chunkMarkdown,
-  deriveSourceDocId,
-  deriveStableDocId,
   hashContent,
 } from './chunker'
 export { cleanMarkdown, type CleanMarkdownOptions } from './cleaner'
@@ -13,8 +11,4 @@ export {
   loadDocumentMarkdown,
   type MarkitdownOptions,
 } from './markitdown'
-export {
-  ingestDirectory,
-  ingestDocument,
-  type IngestDocumentInput,
-} from './pipeline'
+export { embedAndUpsert } from './pipeline'
