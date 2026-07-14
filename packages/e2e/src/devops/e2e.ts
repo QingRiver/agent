@@ -45,6 +45,12 @@ export function e2eKbAgent(): void {
   runInRepo('pnpm', ['exec', 'tsx', E2E_RUNNER_TS, 'kb-agent'])
 }
 
+/** playwright UI flow（需 pnpm dev + e2e auth）：驱动真实浏览器验证 AG-UI 前端交互 */
+export function e2eUi(): void {
+  console.log('[devops] e2e ui (playwright,需要 server: pnpm dev)')
+  runInRepo('pnpm', ['--filter', '@agent/e2e', 'exec', 'playwright', 'test', '--reporter=line'])
+}
+
 /** hitl 图 vitest（packages/graph，不需 server） */
 export function e2eHitl(): void {
   console.log('[devops] e2e hitl graph (vitest)')
@@ -67,7 +73,7 @@ export function e2eAll(): void {
   console.log('\n[devops] 跳过 agent SSE（需另开终端 `pnpm dev` 后执行 `pnpm devops e2e agent` 或 `hitl-agent`）')
 }
 
-export type E2eTarget = 'all' | 'seed' | 'auth' | 'kb' | 'hitl' | 'agent' | 'hitl-agent'
+export type E2eTarget = 'all' | 'seed' | 'auth' | 'kb' | 'hitl' | 'agent' | 'hitl-agent' | 'ui'
 
 export function runE2e(target: E2eTarget): void {
   switch (target) {
@@ -92,6 +98,9 @@ export function runE2e(target: E2eTarget): void {
       break
     case 'hitl-agent':
       e2eHitlAgent()
+      break
+    case 'ui':
+      e2eUi()
       break
     default:
       fail(`未知 e2e 目标: ${target}`)

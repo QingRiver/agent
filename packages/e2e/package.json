@@ -7,10 +7,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "tc": "pnpm -w run tsc-go --noEmit"
+    "tc": "pnpm -w run tsc-go --noEmit",
+    "e2e:ui": "playwright test"
   },
   "dependencies": {},
   "devDependencies": {
+    "@playwright/test": "catalog:",
     "@types/node": "catalog:"
   }
 }

@@ -8,6 +8,7 @@ import {
 } from '@agent/graph'
 import { getRequestContext } from '../context/requestContext'
 import { ConversationService } from '../service/conversation'
+import { serializeAgentError } from './serializeError'
 
 export interface StreamGraphAguiOptions {
   resolveStreamInput: (input: RunAgentInput) => unknown
@@ -37,6 +38,7 @@ export async function* streamGraphAguiEvents(
   input: RunAgentInput,
   graph: AguiTransformerGraphApp,
   options: StreamGraphAguiOptions,
+  agentId?: string,
 ): AsyncGenerator<BaseEvent> {
   const { threadId, runId } = input
 
@@ -105,14 +107,19 @@ export async function* streamGraphAguiEvents(
     }
   }
   catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
     // stream 内部错误不会被 honoBridge 的 catch 捕获，必须在此打印，否则 server 终端无任何线索
     console.error(`[streamGraphAguiEvents] thread=${threadId} run=${runId} failed:`, err)
     // RUN_ERROR 已是 ag-ui 终态，不能再发 RUN_FINISHED（ag-ui client 会抛 AGUIError）
     if (!hasAnyRunFinished(collected)) {
+      // 统一序列化：挂 message/code/name/json 到 RUN_ERROR 事件，
+      // ag-ui schema 是 passthrough，CopilotKit runtime 原样透传，前端 onError 的 context.event 可拿到
+      const serialized = serializeAgentError(err, { agentId: agentId ?? '', threadId, runId })
       yield {
         type: EventType.RUN_ERROR,
-        message,
+        message: serialized.message,
+        code: serialized.code,
+        name: serialized.name,
+        json: serialized.json,
       }
     }
   }

@@ -1,3 +1,4 @@
+import type { AgentErrorInfo } from '@components/copilot/AgentErrorBanner'
 import type { RefObject } from 'react'
 import type { TextEditorSession, WriterAgent } from './TextEditorSession'
 import type { Suggestion } from './types'
@@ -10,9 +11,11 @@ export interface UseTextEditorResult {
   polishing: boolean
   suggestions: Suggestion[]
   thinking: string
+  agentError: AgentErrorInfo | null
   polish: () => void
   accept: (sid: string) => void
   reject: (sid: string) => void
+  dismissError: () => void
 }
 
 export function useTextEditor(): UseTextEditorResult {
@@ -25,6 +28,7 @@ export function useTextEditor(): UseTextEditorResult {
   const [polishing, setPolishing] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [thinking, setThinking] = useState('')
+  const [agentError, setAgentError] = useState<AgentErrorInfo | null>(null)
 
   useEffect(() => {
     const mount = mountRef.current
@@ -37,6 +41,7 @@ export function useTextEditor(): UseTextEditorResult {
       onSuggestionsChange: setSuggestions,
       onPolishingChange: setPolishing,
       onThinkingChange: setThinking,
+      onAgentError: setAgentError,
     })
     session.start()
     sessionRef.current = session
@@ -52,8 +57,13 @@ export function useTextEditor(): UseTextEditorResult {
     polishing,
     suggestions,
     thinking,
-    polish: () => { void sessionRef.current?.polish() },
+    agentError,
+    polish: () => {
+      setAgentError(null)
+      void sessionRef.current?.polish()
+    },
     accept: sid => sessionRef.current?.accept(sid),
     reject: sid => sessionRef.current?.reject(sid),
+    dismissError: () => setAgentError(null),
   }
 }

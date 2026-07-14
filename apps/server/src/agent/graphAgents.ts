@@ -146,7 +146,7 @@ function createGraphAgent(name: GraphsName): GraphTransformerAguiAgent {
     input => streamGraphAguiEvents(input, getAguiGraphApp(name), {
       resolveStreamInput: definition.resolveStreamInput,
       ...(resolveConfigurable ? { resolveConfigurable } : {}),
-    }),
+    }, name),
   )
 }
 

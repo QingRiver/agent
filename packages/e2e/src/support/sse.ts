@@ -60,7 +60,7 @@ export async function drainSse(
     }
     opts.onEvent?.(event)
     if (event.type === 'RUN_ERROR')
-      fail(`SSE RUN_ERROR: ${event.message ?? JSON.stringify(event)}`)
+      fail(`SSE RUN_ERROR [${event.code ?? 'UNKNOWN'}]: ${event.message ?? JSON.stringify(event)}${event.json ? `\n${event.json}` : ''}`)
   }
 }
 

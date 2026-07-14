@@ -1,5 +1,6 @@
 import type { Hunk, WriterChangeSummary } from '@agent/protocol'
 import type { ViewUpdate } from '@codemirror/view'
+import type { AgentErrorInfo } from '@components/copilot/AgentErrorBanner'
 import type { Suggestion } from './types'
 import { computeHunks, hunkKey, WRITER_CHANGE_SUMMARIES_EVENT } from '@agent/protocol'
 import { Conversation } from '@apis/conversation-api'
@@ -36,6 +37,8 @@ export interface TextEditorSessionOptions {
   onPolishingChange: (polishing: boolean) => void
   /** AI 思考流（reasoning_content）变化时回调,供 UI 流式展示 */
   onThinkingChange: (thinking: string) => void
+  /** agent 出错时回调（RUN_ERROR 事件或本地异常兜底），供 UI 展示可展开错误条 */
+  onAgentError?: (error: AgentErrorInfo) => void
 }
 
 /** gutter 圆点 marker,携带该行所有建议的 summary */
@@ -301,12 +304,38 @@ export class TextEditorSession {
             // summary 到达时流已结束、aiText 为终态,直接做 final 提交(含尾部 hunk)
             this.syncSuggestions(original, aiText, { final: true })
           }
+          else if (event.type === 'RUN_ERROR') {
+            // RUN_ERROR 扩展字段由后端 serializeAgentError 挂载（ag-ui passthrough 透传）
+            const ev = event as unknown as Record<string, unknown>
+            const str = (k: string): string => {
+              const v = ev[k]
+              return typeof v === 'string' ? v : ''
+            }
+            this.options.onAgentError?.({
+              message: str('message') || '润色失败',
+              code: str('code'),
+              name: str('name'),
+              json: str('json'),
+            })
+          }
         },
       })
     }
     catch (err) {
-      if (this.alive())
+      if (this.alive()) {
         console.error('writer agent 失败:', err)
+        // 本地异常兜底（非 RUN_ERROR 事件路径，如 runAgent reject）
+        const message = err instanceof Error ? err.message : String(err)
+        const detail: Record<string, string> = {}
+        if (err instanceof Error && err.stack)
+          detail.stack = err.stack
+        this.options.onAgentError?.({
+          message,
+          code: 'AGENT_LOCAL',
+          name: err instanceof Error ? err.name : 'Error',
+          json: JSON.stringify(detail, null, 2),
+        })
+      }
     }
     finally {
       if (this.alive()) {

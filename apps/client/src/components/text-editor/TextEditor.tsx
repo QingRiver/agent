@@ -1,9 +1,20 @@
+import { AgentErrorBanner } from '@components/copilot/AgentErrorBanner'
 import { useEffect, useRef, useState } from 'react'
 import { DiffView } from './DiffView'
 import { useTextEditor } from './useTextEditor'
 
 export function TextEditor() {
-  const { mountRef, polishing, suggestions, thinking, polish, accept, reject } = useTextEditor()
+  const {
+    mountRef,
+    polishing,
+    suggestions,
+    thinking,
+    agentError,
+    polish,
+    accept,
+    reject,
+    dismissError,
+  } = useTextEditor()
   const [activeSid, setActiveSid] = useState<string | null>(null)
   const activeSuggestion = suggestions.find(s => s.sid === activeSid) ?? null
   const thinkingRef = useRef<HTMLDivElement>(null)
@@ -40,6 +51,10 @@ export function TextEditor() {
           {polishing ? 'AI 润色中…' : '让 AI 润色这段话'}
         </button>
       </div>
+
+      {agentError && (
+        <AgentErrorBanner error={agentError} onDismiss={dismissError} />
+      )}
 
       <div className="flex min-h-0 flex-1 gap-4">
         <div

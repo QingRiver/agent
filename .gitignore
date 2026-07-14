@@ -175,3 +175,8 @@ apps/server/data/*.sqlite-shm
 
 # @agent/graph test debug dumps (fileLog / resetFileLog)
 packages/graph/src/debug/
+
+# Playwright 产物(截图/报告/trace)
+packages/e2e/test-results/
+packages/e2e/playwright-report/
+packages/e2e/blob-report/

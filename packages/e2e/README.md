@@ -17,11 +17,14 @@ src/
     hitl-agent.ts 4 步 interrupt + resume，校验「已批准执行」
     kb-agent.ts   单轮 RAG，echo SSE
     index.ts      FLOWS 注册表 + runFlow(name)
+  ui/          Playwright 浏览器层：驱动真实前端 UI 验证 AG-UI 交互（错误条渲染/展开等）
+    kb-error.spec.ts  停 qdrant 后断言可展开错误条出现
   runner.ts     CLI 入口：tsx src/runner.ts <flow>
   index.ts      公共导出
+  playwright.config.ts  Playwright 配置（ignoreHTTPSErrors 放行自签证书，复用已在跑的 pnpm dev）
 ```
 
-**职责边界**：`client` 只管连接，`support` 只管机械操作（建会话/读流/断言退出），`flows` 才含「4 步序列」「最终回复含 X」这类业务断言。新增 agent flow 只动 `flows/`，不影响其余层与 devops skill。
+**职责边界**：`client` 只管连接，`support` 只管机械操作（建会话/读流/断言退出），`flows` 只管 SSE 原始流断言，`ui` 驱动真实浏览器验证前端交互。新增 agent flow 只动 `flows/`，新增 UI 断言只动 `ui/`，互不影响。
 
 ## 前置
 
@@ -36,6 +39,7 @@ src/
 ```bash
 pnpm devops e2e hitl-agent
 pnpm devops e2e agent          # kb agent SSE
+pnpm devops e2e ui             # playwright 前端 UI（停 qdrant 验证错误条）
 ```
 
 直接调 runner：

@@ -29,6 +29,7 @@ e2e — 端到端测试与种子数据
   hitl             hitl 图 vitest（不需 server）
   agent            kb agent CopilotKit SSE（需 pnpm dev + e2e seed）
   hitl-agent       hitl agent SSE 全链路（需 pnpm dev + e2e auth）
+  ui               playwright 前端 UI（需 pnpm dev + e2e auth，驱动真实浏览器）
 
 qlib — 行情数据（委托 scripts/qlib-*.ts）
   init             首次初始化
