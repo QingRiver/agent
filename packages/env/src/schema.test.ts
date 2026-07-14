@@ -13,6 +13,7 @@ describe('serverEnvSchema', () => {
     const result = ServerEnvSchema.safeParse({
       OPENAI_API_KEY: 'sk-test',
       OPENAI_BASE_URL: 'https://api.deepseek.com',
+      DATABASE_URL: 'postgres://postgres:postgres@127.0.0.1:5432/agent',
     })
     expect(result.success).toBe(true)
     if (result.success) {

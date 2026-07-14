@@ -222,28 +222,41 @@ function MarkdownTable({ token, ctx }: { token: Tokens.Table, ctx: RenderCtx }):
     return 'flex-start'
   }
 
-  const renderRow = (cells: Tokens.TableCell[], isHeader: boolean): React.ReactNode => (
-    <Box flexDirection="row">
-      <Text>│</Text>
-      {cells.map((cell, ci) => (
-        <React.Fragment key={ci}>
-          <Box width={colWidths[ci]} paddingLeft={1} paddingRight={1} justifyContent={alignOf(ci, isHeader)}>
-            <Text {...(isHeader ? { bold: true } : {})}>{renderInlineTokens(cell.tokens, null, ctx)}</Text>
-          </Box>
-          <Text>│</Text>
-        </React.Fragment>
-      ))}
-    </Box>
-  )
+  const renderRow = (cells: Tokens.TableCell[], isHeader: boolean, rowKey: string): React.ReactNode => {
+    const cols = cells.map((cell, ci) => ({
+      id: `${rowKey}-c${ci}-${hashContent(tokenPlainText(cell.tokens))}`,
+      cell,
+      ci,
+    }))
+    return (
+      <Box flexDirection="row">
+        <Text>│</Text>
+        {cols.map(({ id, cell, ci }) => (
+          <React.Fragment key={id}>
+            <Box width={colWidths[ci]} paddingLeft={1} paddingRight={1} justifyContent={alignOf(ci, isHeader)}>
+              <Text {...(isHeader ? { bold: true } : {})}>{renderInlineTokens(cell.tokens, null, ctx)}</Text>
+            </Box>
+            <Text>│</Text>
+          </React.Fragment>
+        ))}
+      </Box>
+    )
+  }
+
+  const rows = token.rows.map((row, ri) => ({
+    id: `r${ri}-${hashContent(row.map(c => tokenPlainText(c.tokens)).join('|'))}`,
+    row,
+    ri,
+  }))
 
   return (
     <Box flexDirection="column">
       <Text>{border('┌', '─', '┬', '┐')}</Text>
-      {renderRow(token.header, true)}
+      {renderRow(token.header, true, 'h')}
       <Text>{border('├', '─', '┼', '┤')}</Text>
-      {token.rows.map((row, ri) => (
-        <React.Fragment key={ri}>
-          {renderRow(row, false)}
+      {rows.map(({ id, row, ri }) => (
+        <React.Fragment key={id}>
+          {renderRow(row, false, id)}
           {ri < token.rows.length - 1 && <Text>{border('├', '─', '┼', '┤')}</Text>}
         </React.Fragment>
       ))}
@@ -291,13 +304,17 @@ function ListItem({
 // CodeTokens：shiki token 二维数组 → Ink <Text color={hex}> 片段。
 // fontStyle 位掩码：1=italic 2=bold 4=underline。空行渲染一个空格保高度。
 function CodeTokens({ tokens }: { tokens: HighlightToken[][] }): React.ReactNode {
+  const lines = tokens.map((line, i) => ({
+    id: `L${i}-${hashContent(line.map(t => t.content).join(''))}`,
+    parts: line.map((t, j) => ({ id: `L${i}T${j}-${hashContent(t.content)}`, t })),
+  }))
   return (
     <Box flexDirection="column">
-      {tokens.map((line, i) => (
-        <Text key={i}>
-          {line.length === 0
+      {lines.map(({ id, parts }) => (
+        <Text key={id}>
+          {parts.length === 0
             ? ' '
-            : line.map((t, j) => {
+            : parts.map(({ id: partId, t }) => {
                 const props: {
                   color?: string
                   italic?: boolean
@@ -315,7 +332,7 @@ function CodeTokens({ tokens }: { tokens: HighlightToken[][] }): React.ReactNode
                     props.underline = true
                 }
                 return (
-                  <Text key={j} {...props}>
+                  <Text key={partId} {...props}>
                     {t.content}
                   </Text>
                 )
@@ -370,10 +387,15 @@ function renderBlockToken(token: Token, ctx: RenderCtx, listDepth = 0): React.Re
     }
     case 'list': {
       const t = token as Tokens.List
+      const items = t.items.map((item, i) => ({
+        id: `li${i}-${hashContent(item.raw ?? String(i))}`,
+        item,
+        i,
+      }))
       return (
         <Box key={k} flexDirection="column">
-          {t.items.map((item, i) => (
-            <ListItem key={i} item={item} ordered={t.ordered} start={Number(t.start)} index={i} depth={listDepth} ctx={ctx} />
+          {items.map(({ id, item, i }) => (
+            <ListItem key={id} item={item} ordered={t.ordered} start={Number(t.start)} index={i} depth={listDepth} ctx={ctx} />
           ))}
         </Box>
       )
@@ -408,18 +430,20 @@ interface MarkdownProps {
 
 export const Markdown = memo(({ children, dimColor, highlight }: MarkdownProps) => {
   configureMarked()
-  const ctx: RenderCtx = { highlight }
   const elements = useMemo(() => {
     const tokens = cachedLexer(children)
-    return tokens.map(token => renderBlockToken(token, ctx))
-    // highlight 影响 code 分支必须入 deps
+    const ctx: RenderCtx = { highlight }
+    return tokens.map((token, i) => ({
+      id: `${token.type}-${i}-${hashContent(token.raw ?? '')}`,
+      node: renderBlockToken(token, ctx),
+    }))
   }, [children, highlight])
 
   return (
     <Box flexDirection="column" gap={0}>
-      {elements.map((el, i) => (
-        <Box key={i} {...(dimColor != null ? { dimColor } : {})}>
-          {el}
+      {elements.map(({ id, node }) => (
+        <Box key={id} {...(dimColor != null ? { dimColor } : {})}>
+          {node}
         </Box>
       ))}
     </Box>

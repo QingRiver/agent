@@ -81,10 +81,11 @@ function wordDiff(a: string, b: string): [number, string][] {
 
 /** 整行块:每行一个 div,整行背景染色 */
 function LineBlock({ text, className }: { text: string, className: string }) {
+  const lines = text.split('\n').map((ln, i) => ({ id: `${className}:${i}:${ln}`, ln }))
   return (
     <>
-      {text.split('\n').map((ln, i) => (
-        <div key={i} className={`whitespace-pre-wrap break-words px-2 ${className}`}>
+      {lines.map(({ id, ln }) => (
+        <div key={id} className={`whitespace-pre-wrap break-words px-2 ${className}`}>
           {ln === '' ? ' ' : ln}
         </div>
       ))}
@@ -100,7 +101,10 @@ function LineBlock({ text, className }: { text: string, className: string }) {
  */
 export function DiffView({ originalText, newText }: DiffViewProps) {
   const segments = useMemo(
-    () => groupSegments(lineDiff(originalText, newText)),
+    () => groupSegments(lineDiff(originalText, newText)).map((seg, i) => ({
+      id: `${seg.type}-${i}`,
+      seg,
+    })),
     [originalText, newText],
   )
 
@@ -111,21 +115,25 @@ export function DiffView({ originalText, newText }: DiffViewProps) {
           （空内容）
         </div>
       )}
-      {segments.map((seg, i) => {
+      {segments.map(({ id, seg }) => {
         if (seg.type === 'equal')
-          return <LineBlock key={i} text={seg.text} className="text-slate-500" />
+          return <LineBlock key={id} text={seg.text} className="text-slate-500" />
         if (seg.type === 'add')
-          return <LineBlock key={i} text={seg.text} className="bg-emerald-500/20 text-emerald-200" />
+          return <LineBlock key={id} text={seg.text} className="bg-emerald-500/20 text-emerald-200" />
         if (seg.type === 'delete')
-          return <LineBlock key={i} text={seg.text} className="bg-red-500/20 text-red-200 line-through" />
+          return <LineBlock key={id} text={seg.text} className="bg-red-500/20 text-red-200 line-through" />
         // modify:按相似度决定 inline 词高亮 vs 整行染色
-        const wd = wordDiff(seg.removed, seg.added)
-        const eqLen = wd.filter(([op]) => op === 0).reduce((s, [, t]) => s + t.length, 0)
+        const wd = wordDiff(seg.removed, seg.added).map(([op, text], j) => ({
+          id: `${id}-w${j}-${op}`,
+          op,
+          text,
+        }))
+        const eqLen = wd.filter(({ op }) => op === 0).reduce((s, { text }) => s + text.length, 0)
         const similar = eqLen / Math.max(seg.removed.length, seg.added.length, 1)
         if (similar < 0.4) {
           // 整行重写:红底旧行 + 绿底新行
           return (
-            <div key={i}>
+            <div key={id}>
               <LineBlock text={seg.removed} className="bg-red-500/20 text-red-200 line-through" />
               <LineBlock text={seg.added} className="bg-emerald-500/20 text-emerald-200" />
             </div>
@@ -133,10 +141,10 @@ export function DiffView({ originalText, newText }: DiffViewProps) {
         }
         // 部分/单词改动:红绿集中在同一文本流,只高亮变更词
         return (
-          <div key={i} className="whitespace-pre-wrap break-words px-2">
-            {wd.map(([op, text], j) => (
+          <div key={id} className="whitespace-pre-wrap break-words px-2">
+            {wd.map(({ id: partId, op, text }) => (
               <span
-                key={j}
+                key={partId}
                 className={
                   op === -1
                     ? 'rounded bg-red-500/30 text-red-200 line-through'
