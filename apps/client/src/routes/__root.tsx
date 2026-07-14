@@ -29,6 +29,12 @@ function RootLayout() {
               >
                 编辑器
               </Link>
+              <Link
+                to="/kb"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
+              >
+                知识库
+              </Link>
               <div className="ml-auto">
                 <UserAvatarMenu />
               </div>

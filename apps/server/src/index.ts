@@ -11,6 +11,7 @@ import { getAuth } from './auth/auth'
 import { resolveDevCorsOrigin } from './auth/devOrigins'
 import { bootstrapDatabases } from './db/bootstrap'
 import { copilotKitMiddleware } from './copilot/honoBridge'
+import { handleAppError } from './http/errors'
 import { logger } from './middleware/logger'
 import { apiRoutes } from './routes'
 import type { AppEnv } from './types'
@@ -48,10 +49,7 @@ app.use('*', async (c, next) => {
 app.use('*', copilotKitMiddleware)
 app.route('/', apiRoutes)
 
-app.onError((err, c) => {
-  console.error('[server]', err)
-  return c.json({ error: err.message }, 500)
-})
+app.onError(handleAppError)
 
 const certificatesDir = path.resolve(process.cwd(), 'certificates')
 

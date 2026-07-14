@@ -157,7 +157,7 @@ catalogs:
       specifier: ^1.21.0
       version: 1.21.0
     marked:
-      specifier: ^18.0.0
+      specifier: ^18.0.5
       version: 18.0.5
     openai:
       specifier: ^6.41.0
@@ -312,6 +312,9 @@ importers:
       lucide-react:
         specifier: 'catalog:'
         version: 1.21.0(react@19.2.6)
+      marked:
+        specifier: 'catalog:'
+        version: 18.0.5
       react:
         specifier: 'catalog:'
         version: 19.2.6
@@ -605,7 +608,7 @@ importers:
         version: 1.5.4(@langchain/core@1.2.2(@opentelemetry/api@1.9.1)(openai@6.45.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0))(ws@8.21.0)
       '@qdrant/js-client-rest':
         specifier: 'catalog:'
-        version: 1.18.0(typescript@7.0.1-rc)
+        version: 1.18.0(@typescript/typescript6@6.0.1)
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -9049,10 +9052,10 @@ snapshots:
 
   '@protobuf-ts/protoc@2.11.1': {}
 
-  '@qdrant/js-client-rest@1.18.0(typescript@7.0.1-rc)':
+  '@qdrant/js-client-rest@1.18.0(@typescript/typescript6@6.0.1)':
     dependencies:
       '@qdrant/openapi-typescript-fetch': 1.2.6
-      typescript: 7.0.1-rc
+      typescript: '@typescript/typescript6@6.0.1'
       undici: 6.27.0
 
   '@qdrant/openapi-typescript-fetch@1.2.6': {}
@@ -10089,8 +10092,8 @@ snapshots:
 
   '@typescript-eslint/project-service@8.60.0(@typescript/typescript6@6.0.1)':
     dependencies:
-      '@typescript-eslint/tsconfig-utils': 8.60.0(@typescript/typescript6@6.0.1)
-      '@typescript-eslint/types': 8.60.0
+      '@typescript-eslint/tsconfig-utils': 8.62.0(@typescript/typescript6@6.0.1)
+      '@typescript-eslint/types': 8.62.0
       debug: 4.4.3
       typescript: '@typescript/typescript6@6.0.1'
     transitivePeerDependencies:

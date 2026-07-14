@@ -148,11 +148,3 @@ function extractPageNumber(text: string): number | undefined {
 export function hashContent(content: string): string {
   return createHash('sha256').update(content).digest('hex')
 }
-
-export function deriveStableDocId(filename: string): string {
-  return filename.replace(/\.[^.]+$/, '').replace(/[^\w-]+/g, '_') || 'document'
-}
-
-export function deriveSourceDocId(filename: string, contentHash: string): string {
-  return `${deriveStableDocId(filename)}_${contentHash.slice(0, 8)}`
-}

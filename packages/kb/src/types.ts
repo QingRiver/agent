@@ -34,13 +34,6 @@ export interface RetrievedChunk extends KbChunk {
   rerank_score?: number
 }
 
-export interface IngestResult {
-  source_doc_id: string
-  skipped: boolean
-  chunks_written: number
-  content_hash: string
-}
-
 export interface KbCitation {
   index: number
   chunk_id: string

@@ -43,22 +43,22 @@ body {
   color: var(--foreground);
 }
 
-/* 暗色滚动条:用于 thinking 流式等深色容器 */
-.dark-scrollbar {
+/* 全局暗色滚动条（应用整体为 dark UI） */
+* {
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.5) transparent;
 }
-.dark-scrollbar::-webkit-scrollbar {
+*::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-.dark-scrollbar::-webkit-scrollbar-track {
+*::-webkit-scrollbar-track {
   background: transparent;
 }
-.dark-scrollbar::-webkit-scrollbar-thumb {
+*::-webkit-scrollbar-thumb {
   background-color: rgba(100, 116, 139, 0.4);
   border-radius: 3px;
 }
-.dark-scrollbar::-webkit-scrollbar-thumb:hover {
+*::-webkit-scrollbar-thumb:hover {
   background-color: rgba(100, 116, 139, 0.65);
 }
