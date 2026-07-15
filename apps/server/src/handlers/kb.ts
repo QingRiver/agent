@@ -7,10 +7,13 @@ import type {
   KbDraftUpdate,
   KbIngestPathRequest,
   KbIngestText,
-  KbListDocsQuery,
+  KbListDocsRequest,
+  KbListNodesRequest,
+  KbListTagsRequest,
   KbMetaUpdate,
+  KbMoveNode,
   KbQueryRequest,
-  KbUpdateNode,
+  KbRenameNode,
 } from '../../shared/kb'
 import type { AppEnv, AuthUser } from '../types'
 import { Buffer } from 'node:buffer'
@@ -21,8 +24,8 @@ import { KbService } from '../service/kb'
 export class KbHandlers {
   // ---------- 文件夹节点 ----------
 
-  static async listNodes(c: Context<AppEnv>, user: AuthUser, kbId?: string) {
-    const nodes = await KbService.listNodes(KbService.resolveKbId(kbId), user.id)
+  static async listNodes(c: Context<AppEnv>, user: AuthUser, req: KbListNodesRequest) {
+    const nodes = await KbService.listNodes(KbService.resolveKbId(req.kbId), user.id)
     return c.json({ nodes })
   }
 
@@ -36,14 +39,25 @@ export class KbHandlers {
     return c.json({ node })
   }
 
-  static async updateNode(c: Context<AppEnv>, user: AuthUser, id: string, req: KbUpdateNode) {
+  static async renameNode(c: Context<AppEnv>, user: AuthUser, id: string, req: KbRenameNode) {
     const existing = requireOwned(await KbService.getNode(id), user.id)
-    const node = await KbService.updateFolder({
-      kbId: existing.kbId,
-      nodeId: id,
-      ...(req.name != null ? { name: req.name } : {}),
-      ...(req.parentId !== undefined ? { parentId: req.parentId } : {}),
-    })
+    const node = await KbService.renameFolder(existing.kbId, id, req.name)
+    if (!node)
+      notFound()
+    return c.json({ node })
+  }
+
+  static async moveNode(c: Context<AppEnv>, user: AuthUser, id: string, req: KbMoveNode) {
+    const existing = requireOwned(await KbService.getNode(id), user.id)
+    const node = await KbService.moveFolder(existing.kbId, id, req.parentId)
+    if (!node)
+      notFound()
+    return c.json({ node })
+  }
+
+  static async moveNodeToRoot(c: Context<AppEnv>, user: AuthUser, id: string) {
+    const existing = requireOwned(await KbService.getNode(id), user.id)
+    const node = await KbService.moveFolderToRoot(existing.kbId, id)
     if (!node)
       notFound()
     return c.json({ node })
@@ -58,14 +72,14 @@ export class KbHandlers {
 
   // ---------- 文档草稿 ----------
 
-  static async listDocs(c: Context<AppEnv>, user: AuthUser, q: KbListDocsQuery) {
+  static async listDocs(c: Context<AppEnv>, user: AuthUser, q: KbListDocsRequest) {
     // 默认只看自己的；显式 owner 也只能等于当前用户
     const owner = q.owner != null && q.owner === user.id ? q.owner : user.id
     const docs = await KbService.listDocs({
       kbId: KbService.resolveKbId(q.kbId),
       owner,
       ...(q.tag != null ? { tag: q.tag } : {}),
-      ...(q.vdir != null ? { vdirPrefix: q.vdir } : {}),
+      ...(q.vdirPrefix != null ? { vdirPrefix: q.vdirPrefix } : {}),
       ...(q.parentNodeId !== undefined ? { parentNodeId: q.parentNodeId } : {}),
     })
     return c.json({ docs })
@@ -83,30 +97,22 @@ export class KbHandlers {
       name: req.name,
       ...(req.content != null ? { content: req.content } : {}),
       owner: user.id,
-      ...(req.tags ? { tags: req.tags } : {}),
+      tags: req.tags,
     })
     return c.json({ doc })
   }
 
-  static async patchDoc(c: Context<AppEnv>, user: AuthUser, id: string, req: KbDraftUpdate & KbMetaUpdate) {
+  static async patchDraft(c: Context<AppEnv>, user: AuthUser, id: string, req: KbDraftUpdate) {
     requireOwned(await KbService.getDoc(id), user.id)
+    const doc = await KbService.saveDraft(id, req)
+    if (!doc)
+      notFound()
+    return c.json({ doc })
+  }
 
-    // 有 content → 草稿保存；否则元数据更新
-    let doc = null
-    if (req.content !== undefined) {
-      doc = await KbService.saveDraft(id, { content: req.content, ...(req.name != null ? { name: req.name } : {}) })
-    }
-    else {
-      const { name, tags, parentNodeId, owner, visibility, pinned } = req
-      doc = await KbService.updateMeta(id, {
-        ...(name != null ? { name } : {}),
-        ...(tags != null ? { tags } : {}),
-        ...(parentNodeId !== undefined ? { parentNodeId } : {}),
-        ...(owner !== undefined ? { owner } : {}),
-        ...(visibility != null ? { visibility } : {}),
-        ...(pinned != null ? { pinned } : {}),
-      })
-    }
+  static async patchMeta(c: Context<AppEnv>, user: AuthUser, id: string, req: KbMetaUpdate) {
+    requireOwned(await KbService.getDoc(id), user.id)
+    const doc = await KbService.updateMeta(id, req)
     if (!doc)
       notFound()
     return c.json({ doc })
@@ -114,14 +120,14 @@ export class KbHandlers {
 
   static async commit(c: Context<AppEnv>, user: AuthUser, id: string, req: KbCommit) {
     requireOwned(await KbService.getDoc(id), user.id)
-    const doc = await KbService.commit(id, { ...(req.skipEnrich ? { skipEnrich: true } : {}) })
+    const doc = await KbService.commit(id, { skipEnrich: req.skipEnrich === true })
     return c.json({ doc })
   }
 
   static async batchCommit(c: Context<AppEnv>, user: AuthUser, req: KbBatchCommit) {
     for (const id of req.ids)
       requireOwned(await KbService.getDoc(id), user.id)
-    await KbService.commitBatch(req.ids, { ...(req.skipEnrich ? { skipEnrich: true } : {}) })
+    await KbService.commitBatch(req.ids, { skipEnrich: req.skipEnrich === true })
     return c.json({ ok: true })
   }
 
@@ -132,8 +138,8 @@ export class KbHandlers {
     return c.json({ ok: true })
   }
 
-  static async listTags(c: Context<AppEnv>, user: AuthUser, kbId?: string) {
-    const tags = await KbService.listTags(KbService.resolveKbId(kbId), user.id)
+  static async listTags(c: Context<AppEnv>, user: AuthUser, req: KbListTagsRequest) {
+    const tags = await KbService.listTags(KbService.resolveKbId(req.kbId), user.id)
     return c.json({ tags })
   }
 
@@ -149,6 +155,8 @@ export class KbHandlers {
       throw new HTTPException(400, { message: 'files is required' })
 
     const kbId = typeof body.kbId === 'string' ? body.kbId : undefined
+    if (!kbId)
+      throw new HTTPException(400, { message: 'kbId is required' })
     const tags = typeof body.tags === 'string'
       ? body.tags.split(',').map(t => t.trim()).filter(Boolean)
       : undefined
@@ -175,7 +183,7 @@ export class KbHandlers {
       serverPath: req.path,
       ...(req.base ? { base: req.base } : {}),
       owner: user.id,
-      ...(req.tags ? { tags: req.tags } : {}),
+      tags: req.tags,
     })
     return c.json({ items })
   }
@@ -187,24 +195,16 @@ export class KbHandlers {
       name: req.name,
       ...(req.parentNodeId != null ? { parentNodeId: req.parentNodeId } : {}),
       owner: user.id,
-      ...(req.tags ? { tags: req.tags } : {}),
+      tags: req.tags,
     })
     return c.json({ doc })
   }
 
-  // ---------- 检索（兼容） ----------
+  // ---------- 检索 ----------
 
   static async query(c: Context<AppEnv>, _user: AuthUser, req: KbQueryRequest) {
-    const result = await KbService.query(req.query, req.kbId)
+    const { query, kbId, ...opts } = req
+    const result = await KbService.query(query, kbId, opts)
     return c.json({ result })
-  }
-
-  static async manage(c: Context<AppEnv>, user: AuthUser) {
-    const kbId = c.req.query('kbId') ?? undefined
-    const docs = await KbService.listDocs({
-      kbId: KbService.resolveKbId(kbId),
-      owner: user.id,
-    })
-    return c.json({ kbId: KbService.resolveKbId(kbId), documents: docs })
   }
 }

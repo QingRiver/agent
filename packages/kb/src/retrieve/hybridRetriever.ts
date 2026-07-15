@@ -13,6 +13,7 @@ export interface HybridRetrieveOptions {
   sparseProvider?: SparseProvider
 }
 
+/** 混合召回 */
 export async function hybridRetrieve(
   options: HybridRetrieveOptions,
 ): Promise<RetrievedChunk[]> {
@@ -32,6 +33,7 @@ export async function hybridRetrieve(
   return rrfFusion([denseHits, sparseHits], recallK)
 }
 
+/** RRF 融合 */
 export function rrfFusion(
   rankedLists: RetrievedChunk[][],
   topK: number,

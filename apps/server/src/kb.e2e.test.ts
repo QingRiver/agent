@@ -99,7 +99,10 @@ describe.runIf(runE2e)('kb e2e（业务流：草稿 → 提交 → 检索）', (
     })
     expect(hybrid.some(chunk => chunk.raw_text.includes('SKU-9001'))).toBe(true)
 
-    const reranked = await retrieveAndRerank(KB_ID, '工号 E12345 负责什么')
+    const reranked = await retrieveAndRerank(KB_ID, '工号 E12345 负责什么', {
+      skipRerank: false,
+      recallK: env.KB_RECALL_K,
+    })
     expect(reranked.chunks.some(c => c.raw_text.includes('E12345'))).toBe(true)
     expect(reranked.chunks.some(c => c.source_doc_id === docId)).toBe(true)
   })

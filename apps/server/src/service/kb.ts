@@ -1,5 +1,6 @@
 import type { KbChunk } from '@agent/kb'
 import type { Buffer } from 'node:buffer'
+import type { KbDraftUpdate, KbMetaUpdate, KbQueryRequest } from '../../shared/kb'
 import { randomUUID } from 'node:crypto'
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -223,34 +224,68 @@ export class KbService {
   }
 
   /**
-   * 重命名/移动文件夹（可同时改 name + parentId），一次 vdir 重算 + Qdrant setPayload。
-   * newParentId 若为自身或其后代 → KbConflictError。
+   * 重命名文件夹：改 name，一次 vdir 重算 + Qdrant setPayload。
+   * 同级重名 → KbConflictError(409)。
    */
-  static async updateFolder(args: {
-    kbId: string
-    nodeId: string
-    name?: string
-    parentId?: string | null
-  }): Promise<KbNodeRow | null> {
-    const { kbId, nodeId } = args
-    if (args.parentId !== undefined)
-      await KbService.assertNoFolderCycle(kbId, nodeId, args.parentId)
-
+  static async renameFolder(kbId: string, nodeId: string, name: string): Promise<KbNodeRow | null> {
     const ts = now()
     let updated: (typeof kbNodes.$inferSelect)[]
     try {
       updated = await db
         .update(kbNodes)
-        .set({
-          updatedAt: ts,
-          ...(args.name != null ? { name: args.name } : {}),
-          ...(args.parentId !== undefined ? { parentId: args.parentId } : {}),
-        })
+        .set({ updatedAt: ts, name })
         .where(and(eq(kbNodes.id, nodeId), eq(kbNodes.kbId, kbId)))
         .returning()
     }
     catch (err) {
-      // uniq_kb_nodes_parent_name (kb_id, parent_id, name) 冲突 → 同级重名
+      if (isUniqueViolation(err))
+        throw new KbConflictError('a folder with the same name already exists at the target location')
+      throw err
+    }
+    if (!updated[0])
+      return null
+    await KbService.recomputeAllVdirs(kbId)
+    return nodeRow(updated[0])
+  }
+
+  /**
+   * 移动文件夹到指定父下。newParentId 若为自身或其后代 → KbConflictError。
+   * 同级重名 → KbConflictError(409)。
+   */
+  static async moveFolder(kbId: string, nodeId: string, parentId: string): Promise<KbNodeRow | null> {
+    await KbService.assertNoFolderCycle(kbId, nodeId, parentId)
+    const ts = now()
+    let updated: (typeof kbNodes.$inferSelect)[]
+    try {
+      updated = await db
+        .update(kbNodes)
+        .set({ updatedAt: ts, parentId })
+        .where(and(eq(kbNodes.id, nodeId), eq(kbNodes.kbId, kbId)))
+        .returning()
+    }
+    catch (err) {
+      if (isUniqueViolation(err))
+        throw new KbConflictError('a folder with the same name already exists at the target location')
+      throw err
+    }
+    if (!updated[0])
+      return null
+    await KbService.recomputeAllVdirs(kbId)
+    return nodeRow(updated[0])
+  }
+
+  /** 移动文件夹到根级（parent_id = null）。同级重名 → KbConflictError(409)。 */
+  static async moveFolderToRoot(kbId: string, nodeId: string): Promise<KbNodeRow | null> {
+    const ts = now()
+    let updated: (typeof kbNodes.$inferSelect)[]
+    try {
+      updated = await db
+        .update(kbNodes)
+        .set({ updatedAt: ts, parentId: null })
+        .where(and(eq(kbNodes.id, nodeId), eq(kbNodes.kbId, kbId)))
+        .returning()
+    }
+    catch (err) {
       if (isUniqueViolation(err))
         throw new KbConflictError('a folder with the same name already exists at the target location')
       throw err
@@ -262,11 +297,11 @@ export class KbService {
   }
 
   static async renameNode(kbId: string, nodeId: string, name: string): Promise<KbNodeRow | null> {
-    return KbService.updateFolder({ kbId, nodeId, name })
+    return KbService.renameFolder(kbId, nodeId, name)
   }
 
-  static async moveNode(kbId: string, nodeId: string, newParentId: string | null): Promise<KbNodeRow | null> {
-    return KbService.updateFolder({ kbId, nodeId, parentId: newParentId })
+  static async moveNode(kbId: string, nodeId: string, newParentId: string): Promise<KbNodeRow | null> {
+    return KbService.moveFolder(kbId, nodeId, newParentId)
   }
 
   static async deleteFolder(kbId: string, nodeId: string): Promise<boolean> {
@@ -453,7 +488,7 @@ export class KbService {
     return rows.map(docSummary)
   }
 
-  static async saveDraft(id: string, patch: { content?: string, name?: string }): Promise<KbDoc | null> {
+  static async saveDraft(id: string, patch: KbDraftUpdate): Promise<KbDoc | null> {
     // 内容变才标脏（completed→draft）；改名不触发重 embed 但仍记 updated_at
     const before = await db.select({ status: kbDocuments.indexingStatus }).from(kbDocuments).where(eq(kbDocuments.id, id)).limit(1)
     if (!before[0])
@@ -480,14 +515,7 @@ export class KbService {
     return docFull(updated[0])
   }
 
-  static async updateMeta(id: string, patch: {
-    tags?: string[]
-    parentNodeId?: string | null
-    name?: string
-    owner?: string
-    visibility?: string
-    pinned?: boolean
-  }): Promise<KbDoc | null> {
+  static async updateMeta(id: string, patch: KbMetaUpdate): Promise<KbDoc | null> {
     const updated = await db
       .update(kbDocuments)
       .set({
@@ -551,9 +579,11 @@ export class KbService {
   /**
    * 提交草稿：chunk + enrich + embed + Qdrant 重建。
    * status:indexing 期间拒绝重复提交（KbConflictError）；失败置 error。
-   * opts.skipEnrich 跳过 LLM enrich（测试/离线用）。
+   * @param id 文档 ID
+   * @param opts 提交选项
+   * @param opts.skipEnrich 跳过 LLM enrich（测试/离线用）。
    */
-  static async commit(id: string, opts: { skipEnrich?: boolean } = {}): Promise<KbDoc> {
+  static async commit(id: string, opts: { skipEnrich: boolean }): Promise<KbDoc> {
     const ts = now()
     const claimed = await db
       .update(kbDocuments)
@@ -564,7 +594,7 @@ export class KbService {
       throw new KbConflictError('document is already indexing')
 
     try {
-      await KbService.runCommit(claimed[0], opts.skipEnrich ?? false)
+      await KbService.runCommit(claimed[0], opts.skipEnrich)
       const row = await db.select().from(kbDocuments).where(eq(kbDocuments.id, id)).limit(1)
       return docFull(row[0]!)
     }
@@ -575,7 +605,7 @@ export class KbService {
     }
   }
 
-  static async commitBatch(ids: string[], opts: { skipEnrich?: boolean } = {}): Promise<void> {
+  static async commitBatch(ids: string[], opts: { skipEnrich: boolean }): Promise<void> {
     for (const id of ids)
       await KbService.commit(id, opts)
   }
@@ -785,9 +815,18 @@ export class KbService {
     })
   }
 
-  // ---------- 检索（兼容旧入口） ----------
-
-  static async query(query: string, kbId?: string) {
-    return retrieveAndRerank(KbService.resolveKbId(kbId), query)
+  /**
+   * 检索
+   * @description 检索知识库，返回检索结果
+   */
+  static async query(
+    query: string,
+    kbId?: string,
+    req?: Omit<KbQueryRequest, 'query' | 'kbId'>,
+  ) {
+    return retrieveAndRerank(KbService.resolveKbId(kbId), query, {
+      skipRerank: req?.options?.skipRerank === true,
+      recallK: req?.options?.recallK ?? 60,
+    })
   }
 }

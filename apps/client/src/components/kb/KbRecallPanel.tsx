@@ -1,6 +1,6 @@
 import type { KbQueryResult } from '@apis/kb-api'
 import type { FormEvent } from 'react'
-import { KbApi } from '@apis/kb-api'
+import { KB_DEFAULT_ID, KbApi } from '@apis/kb-api'
 import { Button } from '@components/ui/button'
 import { Loader2, Search, X } from 'lucide-react'
 import { useState } from 'react'
@@ -14,6 +14,7 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<KbQueryResult | null>(null)
+  const [enableRerank, setEnableRerank] = useState(true)
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -23,7 +24,7 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
     setLoading(true)
     setError(null)
     try {
-      const next = await KbApi.query(query)
+      const next = await KbApi.query(KB_DEFAULT_ID, query, { skipRerank: !enableRerank })
       setResult(next)
     }
     catch (err) {
@@ -67,6 +68,17 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
           {loading ? <Loader2 className="size-3.5 animate-spin" /> : '查询'}
         </Button>
       </form>
+
+      <label className="flex items-center gap-2 border-b border-slate-800 px-3 py-2 text-xs text-slate-400">
+        <input
+          type="checkbox"
+          checked={enableRerank}
+          onChange={e => setEnableRerank(e.target.checked)}
+          className="size-3.5 accent-sky-500"
+        />
+        启用 rerank
+        <span className="text-slate-600">（关闭则仅 RRF 直出，更快，用于测试/自验）</span>
+      </label>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {error && (

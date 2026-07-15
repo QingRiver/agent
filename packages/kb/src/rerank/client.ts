@@ -24,6 +24,10 @@ function requireApiKey(apiKey?: string): string {
   return key
 }
 
+/**
+ * 重排
+ * @description 基于硅流大模型的重排，返回重排后的文档ID和相关度得分
+ */
 export async function rerankDocuments(
   query: string,
   documents: RerankDocument[],

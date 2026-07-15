@@ -1,5 +1,5 @@
 import type { KbDoc, KbDocSummary, KbNodeRow } from '@apis/kb-api'
-import { KbApi } from '@apis/kb-api'
+import { KB_DEFAULT_ID, KbApi } from '@apis/kb-api'
 import { atom, getDefaultStore } from 'jotai'
 
 const LS_ACTIVE = 'kb.activeId'
@@ -129,9 +129,9 @@ export class KbStore {
     store.set(KbStore.errorAtom, null)
     try {
       const [nodes, docs, tags] = await Promise.all([
-        KbApi.listNodes(),
-        KbApi.listDocs(),
-        KbApi.listTags(),
+        KbApi.listNodes(KB_DEFAULT_ID),
+        KbApi.listDocs(KB_DEFAULT_ID),
+        KbApi.listTags(KB_DEFAULT_ID),
       ])
       store.set(KbStore.nodesAtom, nodes)
       store.set(KbStore.docsAtom, docs)
@@ -210,7 +210,7 @@ export class KbStore {
     store.set(KbStore.savingAtom, true)
     store.set(KbStore.errorAtom, null)
     try {
-      const updated = await KbApi.patchDoc(doc.id, { content: doc.content, name: doc.name })
+      const updated = await KbApi.saveDraft(doc.id, { content: doc.content, name: doc.name })
       store.set(KbStore.activeDocAtom, updated)
       store.set(KbStore.localDirtyAtom, false)
       store.set(KbStore.docsAtom, prev => prev.map(d => d.id === updated.id ? toSummary(updated) : d))
@@ -255,7 +255,7 @@ export class KbStore {
 
   static async createBlank(): Promise<KbDoc> {
     const store = KbStore.store()
-    const doc = await KbApi.createDoc({ name: '未命名', content: '' })
+    const doc = await KbApi.createDoc(KB_DEFAULT_ID, { name: '未命名', content: '' })
     store.set(KbStore.docsAtom, prev => [toSummary(doc), ...prev])
     store.set(KbStore.activeIdAtom, doc.id)
     store.set(KbStore.activeDocAtom, doc)

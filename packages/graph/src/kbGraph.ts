@@ -86,13 +86,19 @@ async function mergeRetrieveResult(
   kbId: string,
   query: string,
 ): Promise<{ clarifyMessage?: string, retryWider?: boolean }> {
-  const result = await retrieveAndRerank(kbId, query)
+  const result = await retrieveAndRerank(kbId, query, {
+    skipRerank: false,
+    recallK: env.KB_RECALL_K,
+  })
 
   if (result.fallback?.decision === 'clarify')
     return { clarifyMessage: result.fallback.message }
 
   if (result.fallback?.decision === 'retry_wider') {
-    const wider = await retrieveAndRerank(kbId, query, { widerRecall: true })
+    const wider = await retrieveAndRerank(kbId, query, {
+      skipRerank: false,
+      recallK: env.KB_RECALL_K * 2,
+    })
     for (const chunk of wider.chunks) {
       const key = `${chunk.source_doc_id}:${chunk.chunk_id}`
       if (!chunkMap.has(key))

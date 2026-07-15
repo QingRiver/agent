@@ -7,13 +7,17 @@ import {
   KbCreateDocSchema,
   KbCreateNodeSchema,
   KbDocIdParamSchema,
-  KbDocPatchSchema,
+  KbDraftUpdateSchema,
   KbIngestPathRequestSchema,
   KbIngestTextSchema,
-  KbListDocsQuerySchema,
+  KbListDocsRequestSchema,
+  KbListNodesRequestSchema,
+  KbListTagsRequestSchema,
+  KbMetaUpdateSchema,
+  KbMoveNodeSchema,
   KbNodeIdParamSchema,
   KbQueryRequestSchema,
-  KbUpdateNodeSchema,
+  KbRenameNodeSchema,
 } from '../../shared/kb'
 import { KbHandlers } from '../handlers/kb'
 import { handleAppError } from '../http/errors'
@@ -24,29 +28,50 @@ export const kbRoutes = new Hono<AppEnv>()
   .use('*', requireAuth)
 
   // ---------- 文件夹节点 ----------
-  .get('/nodes', c => KbHandlers.listNodes(c, c.get('user')!, c.req.query('kbId')))
-  .post('/nodes', zValidator('json', KbCreateNodeSchema), c => KbHandlers.createNode(c, c.get('user')!, c.req.valid('json')))
-  .patch(
-    '/nodes/:id',
+  .post('/nodes/list', zValidator('json', KbListNodesRequestSchema), c => KbHandlers.listNodes(c, c.get('user')!, c.req.valid('json')))
+  .post('/nodes/create', zValidator('json', KbCreateNodeSchema), c => KbHandlers.createNode(c, c.get('user')!, c.req.valid('json')))
+  .post(
+    '/nodes/:id/rename',
     zValidator('param', KbNodeIdParamSchema),
-    zValidator('json', KbUpdateNodeSchema),
-    c => KbHandlers.updateNode(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
+    zValidator('json', KbRenameNodeSchema),
+    c => KbHandlers.renameNode(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
   )
-  .delete(
-    '/nodes/:id',
+  .post(
+    '/nodes/:id/move',
+    zValidator('param', KbNodeIdParamSchema),
+    zValidator('json', KbMoveNodeSchema),
+    c => KbHandlers.moveNode(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
+  )
+  .post(
+    '/nodes/:id/move-to-root',
+    zValidator('param', KbNodeIdParamSchema),
+    c => KbHandlers.moveNodeToRoot(c, c.get('user')!, c.req.valid('param').id),
+  )
+  .post(
+    '/nodes/:id/delete',
     zValidator('param', KbNodeIdParamSchema),
     c => KbHandlers.deleteNode(c, c.get('user')!, c.req.valid('param').id),
   )
 
   // ---------- 文档草稿 ----------
-  .get('/documents', zValidator('query', KbListDocsQuerySchema), c => KbHandlers.listDocs(c, c.get('user')!, c.req.valid('query')))
-  .get('/documents/:id', zValidator('param', KbDocIdParamSchema), c => KbHandlers.getDoc(c, c.get('user')!, c.req.valid('param').id))
-  .post('/documents', zValidator('json', KbCreateDocSchema), c => KbHandlers.createDoc(c, c.get('user')!, c.req.valid('json')))
-  .patch(
-    '/documents/:id',
+  .post('/documents/list', zValidator('json', KbListDocsRequestSchema), c => KbHandlers.listDocs(c, c.get('user')!, c.req.valid('json')))
+  .post(
+    '/documents/:id/get',
     zValidator('param', KbDocIdParamSchema),
-    zValidator('json', KbDocPatchSchema),
-    c => KbHandlers.patchDoc(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
+    c => KbHandlers.getDoc(c, c.get('user')!, c.req.valid('param').id),
+  )
+  .post('/documents/create', zValidator('json', KbCreateDocSchema), c => KbHandlers.createDoc(c, c.get('user')!, c.req.valid('json')))
+  .post(
+    '/documents/:id/save-draft',
+    zValidator('param', KbDocIdParamSchema),
+    zValidator('json', KbDraftUpdateSchema),
+    c => KbHandlers.patchDraft(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
+  )
+  .post(
+    '/documents/:id/update-meta',
+    zValidator('param', KbDocIdParamSchema),
+    zValidator('json', KbMetaUpdateSchema),
+    c => KbHandlers.patchMeta(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
   )
   .post(
     '/documents/:id/commit',
@@ -55,18 +80,17 @@ export const kbRoutes = new Hono<AppEnv>()
     c => KbHandlers.commit(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
   )
   .post('/documents/batch-commit', zValidator('json', KbBatchCommitSchema), c => KbHandlers.batchCommit(c, c.get('user')!, c.req.valid('json')))
-  .delete(
-    '/documents/:id',
+  .post(
+    '/documents/:id/delete',
     zValidator('param', KbDocIdParamSchema),
     c => KbHandlers.deleteDoc(c, c.get('user')!, c.req.valid('param').id),
   )
-  .get('/tags', c => KbHandlers.listTags(c, c.get('user')!, c.req.query('kbId')))
+  .post('/tags/list', zValidator('json', KbListTagsRequestSchema), c => KbHandlers.listTags(c, c.get('user')!, c.req.valid('json')))
 
   // ---------- 引入（markitdown → 草稿） ----------
-  .post('/ingest', c => KbHandlers.ingest(c, c.get('user')!))
+  .post('/ingest/files', c => KbHandlers.ingest(c, c.get('user')!))
   .post('/ingest/path', zValidator('json', KbIngestPathRequestSchema), c => KbHandlers.ingestPath(c, c.get('user')!, c.req.valid('json')))
   .post('/ingest/text', zValidator('json', KbIngestTextSchema), c => KbHandlers.ingestText(c, c.get('user')!, c.req.valid('json')))
 
-  // ---------- 检索（兼容） ----------
+  // ---------- 检索 ----------
   .post('/query', zValidator('json', KbQueryRequestSchema), c => KbHandlers.query(c, c.get('user')!, c.req.valid('json')))
-  .get('/manage', c => KbHandlers.manage(c, c.get('user')!))

@@ -14,7 +14,7 @@ export {
   type ThreadState,
 } from '@agent/protocol'
 
-export const ConversationIdSchema = z.string().uuid()
+export const ConversationIdSchema = z.uuid()
 export type ConversationId = z.infer<typeof ConversationIdSchema>
 
 /** GET query 或 POST body：`{ id }` */

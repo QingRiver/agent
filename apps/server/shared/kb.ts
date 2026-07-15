@@ -1,66 +1,67 @@
+import { KbQueryOptionsSchema } from '@agent/kb'
 import { z } from 'zod'
 
-// ---------- 查询/检索（兼容旧入口） ----------
+export { type KbQueryOptions, KbQueryOptionsSchema } from '@agent/kb'
 
 export const KbQueryRequestSchema = z.object({
   query: z.string().min(1),
-  kbId: z.string().optional(),
+  kbId: z.string().min(1),
+  options: KbQueryOptionsSchema.optional(),
 })
 export type KbQueryRequest = z.infer<typeof KbQueryRequestSchema>
 
 export const KbIngestPathRequestSchema = z.object({
   path: z.string().min(1),
-  kbId: z.string().optional(),
+  kbId: z.string().min(1),
   base: z.string().optional(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string()).default([]),
   owner: z.string().optional(),
 })
 export type KbIngestPathRequest = z.infer<typeof KbIngestPathRequestSchema>
 
 // ---------- 文件夹节点 ----------
 
-export const KbNodeIdParamSchema = z.object({ id: z.string().uuid() })
+export const KbNodeIdParamSchema = z.object({ id: z.uuid() })
 
 export const KbCreateNodeSchema = z.object({
-  kbId: z.string().min(1).optional(),
-  parentId: z.string().uuid().nullable().optional(),
+  kbId: z.string().min(1),
+  parentId: z.uuid().nullable().optional(),
   name: z.string().min(1),
   owner: z.string().optional(),
 })
 export type KbCreateNode = z.infer<typeof KbCreateNodeSchema>
 
-export const KbUpdateNodeSchema = z.object({
-  name: z.string().min(1).optional(),
-  parentId: z.string().uuid().nullable().optional(),
-})
-export type KbUpdateNode = z.infer<typeof KbUpdateNodeSchema>
+export const KbListNodesRequestSchema = z.object({ kbId: z.string().min(1) })
+export type KbListNodesRequest = z.infer<typeof KbListNodesRequestSchema>
+
+/** rename：name 必填 */
+export const KbRenameNodeSchema = z.object({ name: z.string().min(1) })
+export type KbRenameNode = z.infer<typeof KbRenameNodeSchema>
+
+/** move：parentId 必填（目标父，string），移到根级走 move-to-root 无 body */
+export const KbMoveNodeSchema = z.object({ parentId: z.uuid() })
+export type KbMoveNode = z.infer<typeof KbMoveNodeSchema>
 
 // ---------- 文档草稿 ----------
 
-export const KbDocIdParamSchema = z.object({ id: z.string().uuid() })
+export const KbDocIdParamSchema = z.object({ id: z.uuid() })
 
-/** query parentNodeId：uuid | 字面量 "null"（根级） */
-const KbParentNodeIdQuery = z
-  .union([z.literal('null'), z.string().uuid()])
-  .optional()
-  .transform(v => (v === undefined ? undefined : v === 'null' ? null : v))
-
-export const KbListDocsQuerySchema = z.object({
-  kbId: z.string().optional(),
+export const KbListDocsRequestSchema = z.object({
+  kbId: z.string().min(1),
   tag: z.string().optional(),
   owner: z.string().optional(),
-  vdir: z.string().optional(),
-  parentNodeId: KbParentNodeIdQuery,
+  vdirPrefix: z.string().optional(),
+  parentNodeId: z.uuid().nullable().optional(),
 })
-export type KbListDocsQuery = z.infer<typeof KbListDocsQuerySchema>
+export type KbListDocsRequest = z.infer<typeof KbListDocsRequestSchema>
 
 export const KbCreateDocSchema = z.object({
-  kbId: z.string().optional(),
-  parentNodeId: z.string().uuid().nullable().optional(),
+  kbId: z.string().min(1),
+  parentNodeId: z.uuid().nullable().optional(),
   name: z.string().min(1),
   content: z.string().optional(),
   owner: z.string().optional(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string()).default([]),
 })
 export type KbCreateDoc = z.infer<typeof KbCreateDocSchema>
 
@@ -72,7 +73,7 @@ export type KbDraftUpdate = z.infer<typeof KbDraftUpdateSchema>
 
 export const KbMetaUpdateSchema = z.object({
   tags: z.array(z.string()).optional(),
-  parentNodeId: z.string().uuid().nullable().optional(),
+  parentNodeId: z.uuid().nullable().optional(),
   name: z.string().min(1).optional(),
   owner: z.string().optional(),
   visibility: z.string().optional(),
@@ -80,12 +81,8 @@ export const KbMetaUpdateSchema = z.object({
 })
 export type KbMetaUpdate = z.infer<typeof KbMetaUpdateSchema>
 
-/** PATCH /kb/documents/:id：草稿保存（含 content）或元数据更新（二选一，handler 按 content 是否存在分发） */
-export const KbDocPatchSchema = KbDraftUpdateSchema.extend(KbMetaUpdateSchema.shape)
-export type KbDocPatch = z.infer<typeof KbDocPatchSchema>
-
 export const KbBatchCommitSchema = z.object({
-  ids: z.array(z.string().uuid()).min(1),
+  ids: z.array(z.uuid()).min(1),
   skipEnrich: z.boolean().optional(),
 })
 export type KbBatchCommit = z.infer<typeof KbBatchCommitSchema>
@@ -95,14 +92,17 @@ export const KbCommitSchema = z.object({
 })
 export type KbCommit = z.infer<typeof KbCommitSchema>
 
+export const KbListTagsRequestSchema = z.object({ kbId: z.string().min(1) })
+export type KbListTagsRequest = z.infer<typeof KbListTagsRequestSchema>
+
 // ---------- 引入（文本） ----------
 
 export const KbIngestTextSchema = z.object({
-  kbId: z.string().optional(),
+  kbId: z.string().min(1),
   content: z.string().min(1),
   name: z.string().min(1),
-  parentNodeId: z.string().uuid().nullable().optional(),
+  parentNodeId: z.uuid().nullable().optional(),
   owner: z.string().optional(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string()).default([]),
 })
 export type KbIngestText = z.infer<typeof KbIngestTextSchema>

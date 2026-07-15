@@ -260,7 +260,7 @@ describe('kb PG 逻辑', () => {
     await KbService.createFolder({ kbId, name: 'dup', owner: TEST_USER.id })
     const y = await KbService.createFolder({ kbId, name: 'y', owner: TEST_USER.id })
     // 把 y 改名为已存在的 dup → uniq_kb_nodes_parent_name 冲突
-    await expect(KbService.updateFolder({ kbId, nodeId: y.id, name: 'dup' })).rejects.toBeInstanceOf(KbConflictError)
+    await expect(KbService.renameFolder(kbId, y.id, 'dup')).rejects.toBeInstanceOf(KbConflictError)
   })
 })
 
@@ -270,8 +270,8 @@ describe('kb PG 逻辑', () => {
 describe('kb HTTP 路由', () => {
   const kbId = newKb()
 
-  it('路由建文件夹 POST /nodes → 200', async () => {
-    const res = await app.request('/nodes', {
+  it('路由建文件夹 POST /nodes/create → 200', async () => {
+    const res = await app.request('/nodes/create', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ kbId, name: 'rnode' }),
@@ -282,10 +282,10 @@ describe('kb HTTP 路由', () => {
     expect(body.node.kbId).toBe(kbId)
   })
 
-  it('路由 updateNode 用资源 kbId（非默认 collection）', async () => {
+  it('路由 renameNode 用资源 kbId（非默认 collection）', async () => {
     const created = await KbService.createFolder({ kbId, name: 'to-rename', owner: TEST_USER.id })
-    const res = await app.request(`/nodes/${created.id}`, {
-      method: 'PATCH',
+    const res = await app.request(`/nodes/${created.id}/rename`, {
+      method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'renamed' }),
     })
@@ -295,10 +295,14 @@ describe('kb HTTP 路由', () => {
     expect(body.node.kbId).toBe(kbId)
   })
 
-  it('路由列表文档 GET /documents 默认只看自己', async () => {
+  it('路由列表文档 POST /documents/list 默认只看自己', async () => {
     await KbService.createDraft({ kbId, name: 'rdoc', content: 'c', owner: TEST_USER.id })
     await KbService.createDraft({ kbId, name: 'other-doc', content: 'c', owner: OTHER_USER.id })
-    const res = await app.request(`/documents?kbId=${kbId}`)
+    const res = await app.request('/documents/list', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kbId }),
+    })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.docs.some((d: { name: string }) => d.name === 'rdoc')).toBe(true)
@@ -307,24 +311,24 @@ describe('kb HTTP 路由', () => {
 
   it('他人 getDoc → 404', async () => {
     const doc = await KbService.createDraft({ kbId, name: 'private-doc', content: 'secret', owner: TEST_USER.id })
-    const res = await otherApp.request(`/documents/${doc.id}`)
+    const res = await otherApp.request(`/documents/${doc.id}/get`, { method: 'POST' })
     expect(res.status).toBe(404)
   })
 
-  it('他人 patchDoc → 404', async () => {
+  it('他人 patchDraft → 404', async () => {
     const doc = await KbService.createDraft({ kbId, name: 'priv-patch', content: 'a', owner: TEST_USER.id })
-    const res = await otherApp.request(`/documents/${doc.id}`, {
-      method: 'PATCH',
+    const res = await otherApp.request(`/documents/${doc.id}/save-draft`, {
+      method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ content: 'hacked' }),
     })
     expect(res.status).toBe(404)
   })
 
-  it('路由草稿保存 PATCH /documents/:id（含 content）', async () => {
+  it('路由草稿保存 POST /documents/:id/save-draft（含 content）', async () => {
     const doc = await KbService.createDraft({ kbId, name: 'rpatch', content: 'a', owner: TEST_USER.id })
-    const res = await app.request(`/documents/${doc.id}`, {
-      method: 'PATCH',
+    const res = await app.request(`/documents/${doc.id}/save-draft`, {
+      method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ content: 'b' }),
     })
@@ -334,12 +338,12 @@ describe('kb HTTP 路由', () => {
   })
 
   it('路由取不存在文档 404', async () => {
-    const res = await app.request(`/documents/${randomUUID()}`)
+    const res = await app.request(`/documents/${randomUUID()}/get`, { method: 'POST' })
     expect(res.status).toBe(404)
   })
 
   it('路由校验失败 400', async () => {
-    const res = await app.request('/documents', {
+    const res = await app.request('/documents/create', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ kbId }), // 缺 name
@@ -351,7 +355,11 @@ describe('kb HTTP 路由', () => {
     const folder = await KbService.createFolder({ kbId, name: 'only-folder', owner: TEST_USER.id })
     await KbService.createDraft({ kbId, parentNodeId: folder.id, name: 'in-folder', content: 'x', owner: TEST_USER.id })
     const rootDoc = await KbService.createDraft({ kbId, name: 'root-only', content: 'y', owner: TEST_USER.id })
-    const res = await app.request(`/documents?kbId=${kbId}&parentNodeId=null`)
+    const res = await app.request('/documents/list', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kbId, parentNodeId: null }),
+    })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.docs.some((d: { id: string }) => d.id === rootDoc.id)).toBe(true)
@@ -506,9 +514,10 @@ describe.runIf(hasEmbedding)('kb 召回', () => {
     ['Q3 知识库排期', 'weekly-meeting'],
   ]
 
+  // 走 RRF（跳过 rerank）加速召回用例；top1 命中仍由 dense+sparse 双路保证
   for (const [query, expectedName] of cases) {
     it(`召回「${query}」→ 命中 ${expectedName}`, async () => {
-      const result = await KbService.query(query, kbId)
+      const result = await KbService.query(query, kbId, { options: { skipRerank: true } })
       expect(result.chunks.length).toBeGreaterThan(0)
       const expectedDocId = docs.get(expectedName)!
       expect(result.chunks[0]!.source_doc_id).toBe(expectedDocId)
@@ -517,7 +526,7 @@ describe.runIf(hasEmbedding)('kb 召回', () => {
   }
 
   it('不相关查询也能返回结果但不要求特定文档', async () => {
-    const result = await KbService.query('今天天气怎么样', kbId)
+    const result = await KbService.query('今天天气怎么样', kbId, { options: { skipRerank: true } })
     expect(result).toBeDefined()
     expect(Array.isArray(result.chunks)).toBe(true)
   })
