@@ -85,3 +85,10 @@ await fetch(`${E2E_BASE_URL}/copilotkit/agent/hitl/run`, {
 | `DEV_ORIGIN` | `https://localhost:5173` | 前端 Origin（CORS / trustedOrigins） |
 | `HITL_INPUT` | `向账户 0x123 转账 100 ETH` | hitl flow 输入 |
 | `KB_ID` / `QUESTION` | `kb_default` / `怎么开电子发票` | kb flow 参数 |
+
+## 相关文档
+
+- 仓库根 [README](../../README.md)
+- [`.cursor/skills/devops/SKILL.md`](../../.cursor/skills/devops/SKILL.md) — `pnpm devops` 统一入口
+- [apps/server/README.md](../../apps/server/README.md)
+- [apps/client/README.md](../../apps/client/README.md)

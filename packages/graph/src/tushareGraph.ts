@@ -137,7 +137,7 @@ export { buildTushareToolset }
 
 /**
  * 懒加载 MCP 工具集：首次调用才连接 Tushare MCP（避免模块加载期强依赖 TUSHARE_TOKEN，
- * 与 weatherGraph/obsidianGraph 顶层构造不同——MCP 需异步建连）。
+ * 与 weatherGraph 顶层构造不同——MCP 需异步建连）。
  * 失败时重置 promise，允许后续重试建连。
  */
 let toolsetPromise: Promise<TushareToolset> | null = null

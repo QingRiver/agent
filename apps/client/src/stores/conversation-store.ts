@@ -2,7 +2,7 @@ import type { ConversationThread, GraphsName, ThreadState } from '@apis/api-type
 import { Conversation } from '@apis/conversation-api'
 import { atom, getDefaultStore } from 'jotai'
 
-const DEFAULT_GRAPHS_NAME: GraphsName = 'simple'
+const DEFAULT_GRAPHS_NAME: GraphsName = 'weather'
 
 export interface UseConversationsResult {
   conversations: ConversationThread[]

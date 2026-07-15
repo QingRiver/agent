@@ -2,8 +2,6 @@ import { z } from 'zod'
 import { claudeAgentGraph } from './claudeAgentGraph'
 import { hitlGraph } from './hitlGraph'
 import { kbGraph } from './kbGraph'
-import { obsidianGraph } from './obsidianGraph'
-import { simpleGraph } from './simpleGraph'
 import { simpleToolCallGraph } from './simpleToolCallGraph'
 import { tushareGraph } from './tushareGraph'
 import { weatherGraph } from './weatherGraph'
@@ -15,20 +13,14 @@ export {
   kbGraph,
 } from './kbGraph'
 export {
-  MAX_SEARCH_RESULTS,
-  OBSIDIAN_SEARCH_TOOL_NAME,
-} from './obsidianGraph'
-export {
   FETCH_USER_ORDER_TOOL_NAME,
   ORDER_TOOL_PROGRESS_EVENT,
 } from './simpleToolCallGraph'
 
 export const Graphs = {
   claudeAgent: claudeAgentGraph,
-  simple: simpleGraph,
   simpleToolCall: simpleToolCallGraph,
   weather: weatherGraph,
-  obsidian: obsidianGraph,
   hitl: hitlGraph,
   kb: kbGraph,
   tushare: tushareGraph,

@@ -27,15 +27,6 @@ const GRAPH_AGENT_DEFINITIONS = {
       defaultMessage: '你好，请简要介绍这个仓库的结构。',
     })),
   },
-  simple: {
-    description: '两节点示例图',
-    resolveStreamInput: (input) => {
-      const userText = extractLastUserMessage(input, { defaultMessage: '' })
-      if (userText.trim())
-        return buildMessagesInput(userText)
-      return { messages: [] }
-    },
-  },
   simpleToolCall: {
     description: 'simpleToolCallGraph）',
     resolveStreamInput: input => buildMessagesInput(extractLastUserMessage(input, {
@@ -47,12 +38,6 @@ const GRAPH_AGENT_DEFINITIONS = {
     resolveStreamInput: input => buildMessagesInput(extractLastUserMessage(input, {
       stateKeys: ['message'],
       defaultMessage: '北京今天天气怎么样？',
-    })),
-  },
-  obsidian: {
-    description: 'Obsidian 检索 ReAct）',
-    resolveStreamInput: input => buildMessagesInput(extractLastUserMessage(input, {
-      defaultMessage: '子集和真子集有什么区别？',
     })),
   },
   hitl: {
