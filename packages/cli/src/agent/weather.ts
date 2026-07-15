@@ -48,7 +48,9 @@ const weatherTool: ToolDef = {
     if (!place)
       return `找不到城市「${city}」,请检查名称或尝试英文名。`
 
-    const current = yield* Effect.promise(() => openMeteo.getCurrentWeather(place.latitude, place.longitude)).pipe(
+    const current = yield* Effect.promise(
+      () => openMeteo.getCurrentWeather(place.latitude, place.longitude),
+    ).pipe(
       Effect.match({ onFailure: () => null, onSuccess: c => c }),
     )
     if (!current)

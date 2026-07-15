@@ -43,7 +43,11 @@ export function findQueryTool(tools: McpTool[]): McpTool | null {
   }) ?? null
 }
 
-export function buildStockBasicArgs(tool: McpTool, name?: string, ts_code?: string): Record<string, unknown> {
+export function buildStockBasicArgs(
+  tool: McpTool,
+  name?: string,
+  ts_code?: string,
+): Record<string, unknown> {
   if (tool.name === 'stock_basic') {
     const args: Record<string, unknown> = { list_status: 'L' }
     if (ts_code)
@@ -139,6 +143,9 @@ export async function queryStockBasic(
   queryTool: McpTool,
   args: { name?: string, ts_code?: string },
 ): Promise<StockCandidate[]> {
-  const result = await mcp.callTool(queryTool.name, buildStockBasicArgs(queryTool, args.name, args.ts_code))
+  const result = await mcp.callTool(
+    queryTool.name,
+    buildStockBasicArgs(queryTool, args.name, args.ts_code),
+  )
   return parseStockCandidates(result)
 }

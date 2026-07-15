@@ -1,7 +1,7 @@
 import { Button } from '@components/ui/button'
 import { useKbDocuments } from '@hooks/useKbDocuments'
 import { isDocDirty } from '@stores/kb-store'
-import { FilePlus, Loader2 } from 'lucide-react'
+import { FilePlus, Loader2, Plus, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { KbMarkdownEditor } from './KbMarkdownEditor'
 import { KbMarkdownPreview } from './KbMarkdownPreview'
@@ -11,6 +11,7 @@ type ViewMode = 'edit' | 'split' | 'preview'
 export function KbEditor() {
   const {
     activeDoc,
+    tags: allTags,
     saving,
     committing,
     error,
@@ -18,12 +19,25 @@ export function KbEditor() {
     updateLocalContent,
     updateLocalName,
     saveDraft,
+    updateMeta,
     commit,
     createBlank,
   } = useKbDocuments()
 
-  const [mode, setMode] = useState<ViewMode>('edit')
+  const [mode, setMode] = useState<ViewMode>(() => {
+    const saved = (typeof localStorage !== 'undefined' && localStorage.getItem('kb.editorMode')) as ViewMode | null
+    return saved === 'edit' || saved === 'split' || saved === 'preview' ? saved : 'edit'
+  })
+
+  function changeMode(m: ViewMode) {
+    setMode(m)
+    try {
+      localStorage.setItem('kb.editorMode', m)
+    }
+    catch { /* ignore */ }
+  }
   const [busy, setBusy] = useState(false)
+  const [tagInput, setTagInput] = useState('')
 
   const dirty = activeDoc
     ? localDirty || isDocDirty(activeDoc)
@@ -58,6 +72,34 @@ export function KbEditor() {
       setBusy(false)
     }
   }, [activeDoc, saving, committing, commit])
+
+  const onAddTag = useCallback(async () => {
+    if (!activeDoc)
+      return
+    const name = tagInput.trim()
+    if (!name)
+      return
+    const next = [...new Set([...(activeDoc.tags ?? []), name])]
+    setTagInput('')
+    try {
+      await updateMeta(activeDoc.id, { tags: next })
+    }
+    catch {
+      // store 已记 error
+    }
+  }, [activeDoc, tagInput, updateMeta])
+
+  const onRemoveTag = useCallback(async (tag: string) => {
+    if (!activeDoc)
+      return
+    const next = (activeDoc.tags ?? []).filter(t => t !== tag)
+    try {
+      await updateMeta(activeDoc.id, { tags: next })
+    }
+    catch {
+      // store 已记 error
+    }
+  }, [activeDoc, updateMeta])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -131,7 +173,7 @@ export function KbEditor() {
             <button
               key={m}
               type="button"
-              onClick={() => setMode(m)}
+              onClick={() => changeMode(m)}
               className={`rounded px-2 py-1 text-xs ${
                 mode === m ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:text-slate-200'
               }`}
@@ -159,6 +201,51 @@ export function KbEditor() {
           {committing ? <Loader2 className="size-3.5 animate-spin" /> : null}
           提交
         </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        {(activeDoc.tags ?? []).map((tag) => {
+          const meta = allTags.find(t => t.name === tag)
+          const color = meta?.color
+          return (
+            <span
+              key={tag}
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ring-1 ring-inset ring-slate-700"
+              style={color ? { backgroundColor: `${color}33`, color, borderColor: color } : undefined}
+            >
+              {tag}
+              <button
+                type="button"
+                onClick={() => void onRemoveTag(tag)}
+                className="text-slate-500 hover:text-red-400"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          )
+        })}
+        <div className="flex items-center gap-1">
+          <input
+            value={tagInput}
+            onChange={e => setTagInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                void onAddTag()
+              }
+            }}
+            placeholder="加标签"
+            className="w-24 rounded-md border border-slate-800 bg-transparent px-2 py-0.5 text-xs text-slate-200 outline-none focus:border-slate-600"
+          />
+          <button
+            type="button"
+            onClick={() => void onAddTag()}
+            disabled={!tagInput.trim()}
+            className="rounded p-0.5 text-slate-400 hover:text-slate-200 disabled:opacity-40"
+          >
+            <Plus className="size-3.5" />
+          </button>
+        </div>
       </div>
 
       {error && (

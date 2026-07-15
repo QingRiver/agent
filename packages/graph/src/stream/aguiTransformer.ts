@@ -58,7 +58,11 @@ export class AguiTransformer implements StreamTransformer<AguiExtensions> {
   #toolEvents!: StreamChannel<AguiToolEvent>
   #customEvents!: StreamChannel<CustomEvent>
   #messageEvents!: StreamChannel<AguiTextMessageEvent>
-  readonly #textMessageState = { activeMessageId: null as string | null, activeReasoningMessageId: null as string | null }
+  readonly #textMessageState = {
+    activeMessageId: null as string | null,
+    activeReasoningMessageId: null as string | null,
+  }
+
   #lastValues: Record<string, unknown> | undefined
   readonly #interrupts = new Map<string, InterruptPayload>()
   #emittedRunFinished = false

@@ -106,7 +106,10 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ])
 }
 
-async function connectClient(url: URL, token: string): Promise<{ client: Client, transport: { close: () => Promise<void> } }> {
+async function connectClient(
+  url: URL,
+  token: string,
+): Promise<{ client: Client, transport: { close: () => Promise<void> } }> {
   const client = new Client({ name: 'agent-mcp', version: '0.0.0' })
   const { streamable, sse } = createTransports(url, token)
 
@@ -137,9 +140,13 @@ async function connectClient(url: URL, token: string): Promise<{ client: Client,
     }
     catch (sseError) {
       await sse.close().catch(() => undefined)
-      const streamableMsg = streamableError instanceof Error ? streamableError.message : String(streamableError)
+      const streamableMsg = streamableError instanceof Error
+        ? streamableError.message
+        : String(streamableError)
       const sseMsg = sseError instanceof Error ? sseError.message : String(sseError)
-      throw new Error(`连接 Tushare MCP 失败（Streamable HTTP: ${streamableMsg}; SSE: ${sseMsg}）`)
+      throw new Error(
+        `连接 Tushare MCP 失败（Streamable HTTP: ${streamableMsg}; SSE: ${sseMsg}）`,
+      )
     }
   }
 }

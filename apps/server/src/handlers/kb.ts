@@ -4,8 +4,9 @@ import type {
   KbCommit,
   KbCreateDoc,
   KbCreateNode,
+  KbCreateTag,
+  KbDeleteTag,
   KbDraftUpdate,
-  KbIngestPathRequest,
   KbIngestText,
   KbListDocsRequest,
   KbListNodesRequest,
@@ -14,6 +15,8 @@ import type {
   KbMoveNode,
   KbQueryRequest,
   KbRenameNode,
+  KbRenameTag,
+  KbUpdateTagColor,
 } from '../../shared/kb'
 import type { AppEnv, AuthUser } from '../types'
 import { Buffer } from 'node:buffer'
@@ -143,6 +146,42 @@ export class KbHandlers {
     return c.json({ tags })
   }
 
+  static async createTag(c: Context<AppEnv>, user: AuthUser, req: KbCreateTag) {
+    const tag = await KbService.createTag({
+      kbId: KbService.resolveKbId(req.kbId),
+      name: req.name,
+      ...(req.color != null ? { color: req.color } : {}),
+      owner: user.id,
+    })
+    return c.json({ tag })
+  }
+
+  static async renameTag(c: Context<AppEnv>, user: AuthUser, id: string, req: KbRenameTag) {
+    const result = await KbService.renameTag(id, req.name, user.id)
+    if (!result)
+      notFound()
+    return c.json({ affectedDocs: result.affectedDocs })
+  }
+
+  static async deleteTag(c: Context<AppEnv>, user: AuthUser, id: string, req: KbDeleteTag) {
+    const result = await KbService.deleteTag(id, user.id, req.dryRun === true)
+    if (!result)
+      notFound()
+    return c.json({ affectedDocs: result.affectedDocs })
+  }
+
+  static async updateTagColor(
+    c: Context<AppEnv>,
+    user: AuthUser,
+    id: string,
+    req: KbUpdateTagColor,
+  ) {
+    const tag = await KbService.updateTagColor(id, req.color, user.id)
+    if (!tag)
+      notFound()
+    return c.json({ tag })
+  }
+
   // ---------- 引入（markitdown → 草稿） ----------
 
   static async ingest(c: Context<AppEnv>, user: AuthUser) {
@@ -177,13 +216,26 @@ export class KbHandlers {
     return c.json({ items })
   }
 
-  static async ingestPath(c: Context<AppEnv>, user: AuthUser, req: KbIngestPathRequest) {
-    const items = await KbService.ingestFromPath({
-      kbId: KbService.resolveKbId(req.kbId),
-      serverPath: req.path,
-      ...(req.base ? { base: req.base } : {}),
+  static async ingestZip(c: Context<AppEnv>, user: AuthUser) {
+    const body = await c.req.parseBody({ all: true })
+    const rawFile = body.file
+    const file = Array.isArray(rawFile) ? rawFile[0] : rawFile
+    if (!(file instanceof File))
+      throw new HTTPException(400, { message: 'file (zip) is required' })
+
+    const kbId = typeof body.kbId === 'string' ? body.kbId : undefined
+    if (!kbId)
+      throw new HTTPException(400, { message: 'kbId is required' })
+    const tags = typeof body.tags === 'string'
+      ? body.tags.split(',').map(t => t.trim()).filter(Boolean)
+      : undefined
+
+    const zip = Buffer.from(await file.arrayBuffer())
+    const items = await KbService.ingestFromZip({
+      kbId: KbService.resolveKbId(kbId),
+      zip,
       owner: user.id,
-      tags: req.tags,
+      ...(tags ? { tags } : {}),
     })
     return c.json({ items })
   }

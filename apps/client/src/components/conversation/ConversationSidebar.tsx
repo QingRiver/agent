@@ -7,7 +7,16 @@ import { NewConversationDialog } from './NewConversationDialog'
 
 export function ConversationSidebar() {
   const [dialogOpen, setDialogOpen] = useState(false)
-  const { conversations, activeId, isLoading, error, select, pin, unpin, remove } = useConversations()
+  const {
+    conversations,
+    activeId,
+    isLoading,
+    error,
+    select,
+    pin,
+    unpin,
+    remove,
+  } = useConversations()
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-950/80">

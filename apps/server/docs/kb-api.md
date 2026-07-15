@@ -119,10 +119,27 @@
 
 ## 标签
 
+标签元数据存 `kb_tags` 表（id/kbId/name/color/owner，唯一 (kbId,name)）；文档仍用 `kb_documents.tags` text[] 存 tag **name**，但必须是 `kb_tags` 表成员（加 tag 时 name 不在表则 service 自动建标签）。重命名/删除标签时同步刷所有引用文档的 `kb_documents.tags` + 已提交文档 Qdrant payload tags。
+
 ### POST `/tags/list`
-当前用户文档的 distinct 标签。body: `{ kbId: string }`（必填）。响应：`{ tags: string[] }`
+列出当前用户标签。body: `{ kbId: string }`（必填）。响应：`{ tags: KbTagRow[] }`（`{id,name,color,owner,...}`）
+
+### POST `/tags/create`
+新建标签。body: `{ kbId: string, name: string, color?: string }`（`kbId`/`name` 必填）。`owner` 由 `user.id` 覆盖。同名（同 kb+owner）→ **409**。响应：`{ tag: KbTagRow }`
+
+### POST `/tags/:id/rename`
+重命名标签。body: `{ name: string }`。刷所有引用旧 name 的文档 `kb_documents.tags` → 新 name + 已提交文档 Qdrant payload tags；再改 `kb_tags.name`。同名冲突 → **409**；非本人 → **404**。响应：`{ affectedDocs: number }`
+
+### POST `/tags/:id/delete`
+删除标签。body: `{ dryRun?: boolean }`。
+- `dryRun=true`：只查影响数，**不删**。响应：`{ affectedDocs: number }`（引用该标签的文档数）
+- `dryRun=false`（默认）：从所有引用文档的 `kb_documents.tags` 移除该 name + 已提交文档 Qdrant payload 同步；删 `kb_tags` 行。**文档保留**（只去标签）。非本人 → **404**。响应：`{ affectedDocs: number }`
+
+### POST `/tags/:id/update-color`
+改标签颜色。body: `{ color: string | null }`。仅改 `kb_tags.color`，不触文档/Qdrant。非本人 → **404**。响应：`{ tag: KbTagRow }`
 
 ---
+
 
 ## 引入（markitdown → 草稿，不自动提交）
 
@@ -134,11 +151,12 @@
 - 响应：`{ items: [{ docId, name, vdir, skipped }][] }`
 - markitdown 服务不可达 → 500 `{ error: "markitdown convert failed (...)" }`
 
-### POST `/ingest/path`
-服务端路径/目录导入（相对起点**最多递归 5 层**子目录）。
-- body: `{ path: string, kbId: string, base?: string, tags?: string[], owner?: string }`（`kbId` 必填）
-- 遍历目录树，`rel = path.relative(base, file)` → `ensureNodePath` 建文件夹链 → 同 `ingest/files` 流程
-- 支持 `.md/.markdown/.docx/.pdf/.html/.htm/.txt`
+### POST `/ingest/zip`
+zip 压缩包上传导入（`multipart/form-data`，按包内目录结构还原，**最多递归 5 层**子目录）。
+- 字段：`file`（File，zip）、`kbId`（必填）、`tags?`（逗号分隔字符串）
+- 解压遍历 entry，相对路径段 → `ensureNodePath` 建文件夹链（挂根级）→ 同 `ingest/files` 流程
+- 支持 `.md/.markdown/.docx/.pdf/.html/.htm/.txt`；自动忽略目录与 `__MACOSX`/`.DS_Store` 等
+- zip slip 防护：含 `..` 逃逸段的 entry 跳过，不中断整批
 - 响应：`{ items: [...] }`
 
 ### POST `/ingest/text`

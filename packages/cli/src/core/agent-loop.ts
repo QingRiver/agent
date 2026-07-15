@@ -10,7 +10,11 @@ import { Effect } from 'effect'
 import { match, P } from 'ts-pattern'
 
 /** 一轮用户输入的完整 react 循环(requirement: Driver | UI,由 helpers 汇出) */
-export function agentLoop(userText: string, tools: ToolDef[], llmMessages: ChatCompletionMessageParam[]) {
+export function agentLoop(
+  userText: string,
+  tools: ToolDef[],
+  llmMessages: ChatCompletionMessageParam[],
+) {
   return Effect.gen(function* () {
     // 用户消息入真相 + UI 投影
     llmMessages.push({ role: 'user', content: userText })
@@ -36,7 +40,11 @@ export function agentLoop(userText: string, tools: ToolDef[], llmMessages: ChatC
 }
 
 /** 处理单个 tool_call:确认(HITL)→ 执行 → 拼入 tool 消息(requirement: UI) */
-function handleToolCall(tc: ChatCompletionMessageFunctionToolCall, tools: ToolDef[], llmMessages: ChatCompletionMessageParam[]) {
+function handleToolCall(
+  tc: ChatCompletionMessageFunctionToolCall,
+  tools: ToolDef[],
+  llmMessages: ChatCompletionMessageParam[],
+) {
   return Effect.gen(function* () {
     const name = tc.function.name
     const tool = tools.find(t => t.schema.function.name === name)
@@ -83,7 +91,9 @@ function toolCallsOf(message: ChatCompletionMessageParam): ChatCompletionMessage
     .otherwise(() => [])
 }
 
-function isFunctionToolCall(tc: ChatCompletionMessageToolCall): tc is ChatCompletionMessageFunctionToolCall {
+function isFunctionToolCall(
+  tc: ChatCompletionMessageToolCall,
+): tc is ChatCompletionMessageFunctionToolCall {
   return tc.type === 'function'
 }
 

@@ -4,7 +4,10 @@ import { Driver, UI } from '@core/types'
 import { Effect } from 'effect'
 
 /** 发起一次 LLM chat(流式 delta 直接灌入 UI.streaming buffer),返回 assistant 消息 */
-export function chat(messages: ChatCompletionMessageParam[], tools?: ChatCompletionFunctionTool[]): Effect.Effect<ChatCompletionMessageParam, never, Driver | UI> {
+export function chat(
+  messages: ChatCompletionMessageParam[],
+  tools?: ChatCompletionFunctionTool[],
+): Effect.Effect<ChatCompletionMessageParam, never, Driver | UI> {
   return Effect.gen(function* () {
     const driver = yield* Driver
     const ui = yield* UI
@@ -42,7 +45,9 @@ export function chat(messages: ChatCompletionMessageParam[], tools?: ChatComplet
 }
 
 /** 发起一次人机交互,挂起直到用户响应(UI.interact 内部 Effect.async) */
-export function interact(request: InteractionRequest): Effect.Effect<InteractionResponse, never, UI> {
+export function interact(
+  request: InteractionRequest,
+): Effect.Effect<InteractionResponse, never, UI> {
   return Effect.gen(function* () {
     const ui = yield* UI
     return yield* ui.interact(request)

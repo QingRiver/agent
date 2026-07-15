@@ -25,7 +25,9 @@ export interface WriterAgent {
   runAgent: (
     input: Record<string, never>,
     options: {
-      onEvent: (ctx: { event: { type: string, delta?: string, name?: string, value?: unknown } }) => void
+      onEvent: (ctx: {
+        event: { type: string, delta?: string, name?: string, value?: unknown }
+      }) => void
     },
   ) => Promise<unknown>
 }
@@ -115,7 +117,9 @@ const suggestionsField = StateField.define<Suggestion[]>({
 const gutterField = StateField.define<RangeSet<MrDot>>({
   create: state => buildGutterSet(state),
   update: (val, tr) => {
-    const sugChanged = tr.effects.some(e => e.is(setSuggestionsEffect) || e.is(removeSuggestionEffect))
+    const sugChanged = tr.effects.some(
+      e => e.is(setSuggestionsEffect) || e.is(removeSuggestionEffect),
+    )
     return tr.docChanged || sugChanged ? buildGutterSet(tr.state) : val
   },
 })
@@ -132,7 +136,11 @@ function buildGutterSet(state: EditorState): RangeSet<MrDot> {
     if (to < from)
       continue
     const startLine = doc.lineAt(Math.min(from, Math.max(0, docLen))).number
-    const endLine = doc.lineAt(to > from ? Math.min(to - 1, Math.max(0, docLen - 1)) : Math.min(from, Math.max(0, docLen))).number
+    const endLine = doc.lineAt(
+      to > from
+        ? Math.min(to - 1, Math.max(0, docLen - 1))
+        : Math.min(from, Math.max(0, docLen)),
+    ).number
     for (let n = startLine; n <= endLine; n++) {
       const arr = lineItems.get(n) ?? []
       arr.push({ sid: s.sid, summary: s.summary })
@@ -214,7 +222,9 @@ export class TextEditorSession {
           mrGutter,
           // 只在面板相关签名变化时推 React,避免每次按键重渲染
           EditorView.updateListener.of((v: ViewUpdate) => {
-            if (sugSignature(v.startState.field(suggestionsField)) !== sugSignature(v.state.field(suggestionsField)))
+            const before = sugSignature(v.startState.field(suggestionsField))
+            const after = sugSignature(v.state.field(suggestionsField))
+            if (before !== after)
               this.options.onSuggestionsChange(v.state.field(suggestionsField))
           }),
           editorTheme,

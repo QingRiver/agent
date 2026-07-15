@@ -10,15 +10,6 @@ export const KbQueryRequestSchema = z.object({
 })
 export type KbQueryRequest = z.infer<typeof KbQueryRequestSchema>
 
-export const KbIngestPathRequestSchema = z.object({
-  path: z.string().min(1),
-  kbId: z.string().min(1),
-  base: z.string().optional(),
-  tags: z.array(z.string()).default([]),
-  owner: z.string().optional(),
-})
-export type KbIngestPathRequest = z.infer<typeof KbIngestPathRequestSchema>
-
 // ---------- 文件夹节点 ----------
 
 export const KbNodeIdParamSchema = z.object({ id: z.uuid() })
@@ -94,6 +85,24 @@ export type KbCommit = z.infer<typeof KbCommitSchema>
 
 export const KbListTagsRequestSchema = z.object({ kbId: z.string().min(1) })
 export type KbListTagsRequest = z.infer<typeof KbListTagsRequestSchema>
+
+export const KbTagIdParamSchema = z.object({ id: z.uuid() })
+
+export const KbCreateTagSchema = z.object({
+  kbId: z.string().min(1),
+  name: z.string().min(1),
+  color: z.string().optional(),
+})
+export type KbCreateTag = z.infer<typeof KbCreateTagSchema>
+
+export const KbRenameTagSchema = z.object({ name: z.string().min(1) })
+export type KbRenameTag = z.infer<typeof KbRenameTagSchema>
+
+export const KbUpdateTagColorSchema = z.object({ color: z.string().nullable() })
+export type KbUpdateTagColor = z.infer<typeof KbUpdateTagColorSchema>
+
+export const KbDeleteTagSchema = z.object({ dryRun: z.boolean().optional() })
+export type KbDeleteTag = z.infer<typeof KbDeleteTagSchema>
 
 // ---------- 引入（文本） ----------
 

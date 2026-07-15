@@ -75,6 +75,23 @@ export const kbDocuments = pgTable('kb_documents', {
   index('idx_kb_docs_kb_list').on(table.kbId, table.pinned, table.updatedAt),
   // tags 用 GIN（迁移 idx_kb_docs_tags）；@>  containment
 ])
+/**
+ * 标签元数据表：name/color/owner 隔离。文档仍用 kb_documents.tags text[] 存 tag **name**，
+ * 但必须是此表成员（加 tag 时 name 不在则 service 自动建）。唯一 (kb_id, name)。
+ * 重命名/删除标签时同步刷所有引用文档的 kb_documents.tags + 已提交文档 Qdrant payload tags。
+ */
+export const kbTags = pgTable('kb_tags', {
+  id: text('id').primaryKey(),
+  kbId: text('kb_id').notNull(),
+  name: text('name').notNull(),
+  color: text('color'),
+  owner: text('owner'),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+}, table => [
+  index('idx_kb_tags_kb_owner').on(table.kbId, table.owner),
+  // 同级不重名：真实唯一约束见迁移 uniq_kb_tags_kb_name（COALESCE(owner,'')）
+])
 
 /**
  * chunk 桥接表：持有 Qdrant point id（id = point id），PG 拥有映射权。

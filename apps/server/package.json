@@ -37,6 +37,7 @@
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",
     "hono": "catalog:",
+    "jszip": "catalog:",
     "pg": "catalog:",
     "radash": "catalog:",
     "rxjs": "catalog:",

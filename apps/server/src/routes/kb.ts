@@ -6,9 +6,10 @@ import {
   KbCommitSchema,
   KbCreateDocSchema,
   KbCreateNodeSchema,
+  KbCreateTagSchema,
+  KbDeleteTagSchema,
   KbDocIdParamSchema,
   KbDraftUpdateSchema,
-  KbIngestPathRequestSchema,
   KbIngestTextSchema,
   KbListDocsRequestSchema,
   KbListNodesRequestSchema,
@@ -18,6 +19,9 @@ import {
   KbNodeIdParamSchema,
   KbQueryRequestSchema,
   KbRenameNodeSchema,
+  KbRenameTagSchema,
+  KbTagIdParamSchema,
+  KbUpdateTagColorSchema,
 } from '../../shared/kb'
 import { KbHandlers } from '../handlers/kb'
 import { handleAppError } from '../http/errors'
@@ -86,10 +90,29 @@ export const kbRoutes = new Hono<AppEnv>()
     c => KbHandlers.deleteDoc(c, c.get('user')!, c.req.valid('param').id),
   )
   .post('/tags/list', zValidator('json', KbListTagsRequestSchema), c => KbHandlers.listTags(c, c.get('user')!, c.req.valid('json')))
+  .post('/tags/create', zValidator('json', KbCreateTagSchema), c => KbHandlers.createTag(c, c.get('user')!, c.req.valid('json')))
+  .post(
+    '/tags/:id/rename',
+    zValidator('param', KbTagIdParamSchema),
+    zValidator('json', KbRenameTagSchema),
+    c => KbHandlers.renameTag(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
+  )
+  .post(
+    '/tags/:id/delete',
+    zValidator('param', KbTagIdParamSchema),
+    zValidator('json', KbDeleteTagSchema.optional().default({})),
+    c => KbHandlers.deleteTag(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
+  )
+  .post(
+    '/tags/:id/update-color',
+    zValidator('param', KbTagIdParamSchema),
+    zValidator('json', KbUpdateTagColorSchema),
+    c => KbHandlers.updateTagColor(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
+  )
 
   // ---------- 引入（markitdown → 草稿） ----------
   .post('/ingest/files', c => KbHandlers.ingest(c, c.get('user')!))
-  .post('/ingest/path', zValidator('json', KbIngestPathRequestSchema), c => KbHandlers.ingestPath(c, c.get('user')!, c.req.valid('json')))
+  .post('/ingest/zip', c => KbHandlers.ingestZip(c, c.get('user')!))
   .post('/ingest/text', zValidator('json', KbIngestTextSchema), c => KbHandlers.ingestText(c, c.get('user')!, c.req.valid('json')))
 
   // ---------- 检索 ----------

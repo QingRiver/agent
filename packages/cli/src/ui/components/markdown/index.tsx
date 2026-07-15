@@ -222,7 +222,11 @@ function MarkdownTable({ token, ctx }: { token: Tokens.Table, ctx: RenderCtx }):
     return 'flex-start'
   }
 
-  const renderRow = (cells: Tokens.TableCell[], isHeader: boolean, rowKey: string): React.ReactNode => {
+  const renderRow = (
+    cells: Tokens.TableCell[],
+    isHeader: boolean,
+    rowKey: string,
+  ): React.ReactNode => {
     const cols = cells.map((cell, ci) => ({
       id: `${rowKey}-c${ci}-${hashContent(tokenPlainText(cell.tokens))}`,
       cell,
@@ -233,8 +237,15 @@ function MarkdownTable({ token, ctx }: { token: Tokens.Table, ctx: RenderCtx }):
         <Text>│</Text>
         {cols.map(({ id, cell, ci }) => (
           <React.Fragment key={id}>
-            <Box width={colWidths[ci]} paddingLeft={1} paddingRight={1} justifyContent={alignOf(ci, isHeader)}>
-              <Text {...(isHeader ? { bold: true } : {})}>{renderInlineTokens(cell.tokens, null, ctx)}</Text>
+            <Box
+              width={colWidths[ci]}
+              paddingLeft={1}
+              paddingRight={1}
+              justifyContent={alignOf(ci, isHeader)}
+            >
+              <Text {...(isHeader ? { bold: true } : {})}>
+                {renderInlineTokens(cell.tokens, null, ctx)}
+              </Text>
             </Box>
             <Text>│</Text>
           </React.Fragment>
@@ -395,7 +406,15 @@ function renderBlockToken(token: Token, ctx: RenderCtx, listDepth = 0): React.Re
       return (
         <Box key={k} flexDirection="column">
           {items.map(({ id, item, i }) => (
-            <ListItem key={id} item={item} ordered={t.ordered} start={Number(t.start)} index={i} depth={listDepth} ctx={ctx} />
+            <ListItem
+              key={id}
+              item={item}
+              ordered={t.ordered}
+              start={Number(t.start)}
+              index={i}
+              depth={listDepth}
+              ctx={ctx}
+            />
           ))}
         </Box>
       )

@@ -1,13 +1,11 @@
 import type { AppEnv, AuthUser } from './types'
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
 import { env } from '@agent/env'
 import { getQdrantClient, resolveCollectionName } from '@agent/kb'
 import { eq } from 'drizzle-orm'
 import { Hono } from 'hono'
+import JSZip from 'jszip'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db } from './db/drizzle'
 import { migrateAppSchema } from './db/migrate'
@@ -158,12 +156,14 @@ describe('kb PG 逻辑', () => {
 
   it('listTags 聚合（可按 owner）', async () => {
     const tags = await KbService.listTags(kbId, TEST_USER.id)
-    expect(tags).toContain('t1')
+    expect(tags.map(t => t.name)).toContain('t1')
   })
 
   it('commit 409 守卫（手动置 indexing）', async () => {
     await db.update(kbDocuments).set({ indexingStatus: 'indexing' }).where(eq(kbDocuments.id, docId))
-    await expect(KbService.commit(docId, { skipEnrich: true })).rejects.toBeInstanceOf(KbConflictError)
+    await expect(KbService.commit(docId, { skipEnrich: true }))
+      .rejects
+      .toBeInstanceOf(KbConflictError)
     await db.update(kbDocuments).set({ indexingStatus: 'draft' }).where(eq(kbDocuments.id, docId))
   })
 
@@ -198,53 +198,47 @@ describe('kb PG 逻辑', () => {
     expect(r2[0]!.skipped).toBe(true)
   })
 
-  it('ingestFromPath 递归两层目录', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'kb-ingest-'))
-    try {
-      await mkdir(path.join(root, 'sub'), { recursive: true })
-      await writeFile(path.join(root, 'top.md'), '# Top\nhello')
-      await writeFile(path.join(root, 'sub', 'nested.md'), '# Nested\nworld')
-      const items = await KbService.ingestFromPath({ kbId, serverPath: root, base: root, owner: TEST_USER.id })
-      expect(items.length).toBe(2)
-      const nested = items.find(i => i.name === 'nested')
-      expect(nested).toBeDefined()
-      expect(nested!.vdir).toBe('sub/nested')
-      const top = items.find(i => i.name === 'top')
-      expect(top!.vdir).toBe('top')
-    }
-    finally {
-      await rm(root, { recursive: true, force: true })
-    }
+  /** 用 jszip 构造测试压缩包：files 为 { 路径: 内容 } */
+  async function makeZip(files: Record<string, string>): Promise<Buffer> {
+    const zip = new JSZip()
+    for (const [name, content] of Object.entries(files))
+      zip.file(name, content)
+    return Buffer.from(await zip.generateAsync({ type: 'uint8array' }))
+  }
+
+  it('ingestFromZip 递归两层目录', async () => {
+    const zip = await makeZip({
+      'top.md': '# Top\nhello',
+      'sub/nested.md': '# Nested\nworld',
+    })
+    const items = await KbService.ingestFromZip({ kbId, zip, owner: TEST_USER.id })
+    expect(items.length).toBe(2)
+    const nested = items.find(i => i.name === 'nested')
+    expect(nested).toBeDefined()
+    expect(nested!.vdir).toBe('sub/nested')
+    const top = items.find(i => i.name === 'top')
+    expect(top!.vdir).toBe('top')
   })
 
-  it('ingestFromPath 超过 5 层子目录则跳过', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'kb-ingest-deep-'))
-    try {
-      const deep = path.join(root, 'a', 'b', 'c', 'd', 'e', 'f')
-      await mkdir(deep, { recursive: true })
-      await writeFile(path.join(root, 'a', 'b', 'c', 'd', 'e', 'ok.md'), '# ok')
-      await writeFile(path.join(deep, 'too-deep.md'), '# too deep')
-      const items = await KbService.ingestFromPath({ kbId, serverPath: root, base: root, owner: TEST_USER.id })
-      expect(items.some(i => i.name === 'ok')).toBe(true)
-      expect(items.some(i => i.name === 'too-deep')).toBe(false)
-    }
-    finally {
-      await rm(root, { recursive: true, force: true })
-    }
+  it('ingestFromZip 超过 5 层子目录则跳过', async () => {
+    const zip = await makeZip({
+      'a/b/c/d/e/ok.md': '# ok',
+      'a/b/c/d/e/f/too-deep.md': '# too deep',
+    })
+    const items = await KbService.ingestFromZip({ kbId, zip, owner: TEST_USER.id })
+    expect(items.some(i => i.name === 'ok')).toBe(true)
+    expect(items.some(i => i.name === 'too-deep')).toBe(false)
   })
 
-  it('ingestFromPath base 非 ancestor → .. 逃逸拒绝', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'kb-esc-'))
-    const other = await mkdtemp(path.join(tmpdir(), 'kb-esc-other-'))
-    try {
-      await writeFile(path.join(root, 'a.md'), '# a')
-      // base=other 不含 root/a.md → rel 含 '..' → sanitize 抛 KbConflictError
-      await expect(KbService.ingestFromPath({ kbId, serverPath: root, base: other, owner: TEST_USER.id })).rejects.toBeInstanceOf(KbConflictError)
-    }
-    finally {
-      await rm(root, { recursive: true, force: true })
-      await rm(other, { recursive: true, force: true })
-    }
+  it('ingestFromZip 只导入支持扩展名的文件', async () => {
+    const zip = await makeZip({
+      'readme.md': '# readme',
+      'image.png': 'fake-png',
+      'data.json': '{}',
+      'sub/notes.txt': 'notes',
+    })
+    const items = await KbService.ingestFromZip({ kbId, zip, owner: TEST_USER.id })
+    expect(items.map(i => i.name).sort()).toEqual(['notes', 'readme'])
   })
 
   it('saveDraft 把 error 复位 draft 并清 error', async () => {
@@ -363,7 +357,9 @@ describe('kb HTTP 路由', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.docs.some((d: { id: string }) => d.id === rootDoc.id)).toBe(true)
-    expect(body.docs.every((d: { parentNodeId: string | null }) => d.parentNodeId == null)).toBe(true)
+    expect(body.docs.every(
+      (d: { parentNodeId: string | null }) => d.parentNodeId == null,
+    )).toBe(true)
   })
 })
 
@@ -393,7 +389,10 @@ describe.runIf(hasEmbedding)('kb 提交流水线', () => {
     expect(committed.publishedHash).toBe(committed.draftHash)
     expect(committed.indexedAt).not.toBeNull()
 
-    const chunks = await db.select({ id: kbChunks.id }).from(kbChunks).where(eq(kbChunks.docId, docId))
+    const chunks = await db
+      .select({ id: kbChunks.id })
+      .from(kbChunks)
+      .where(eq(kbChunks.docId, docId))
     chunkIdsBefore = chunks.map(c => c.id)
     expect(chunks.length).toBeGreaterThan(0)
 
@@ -401,6 +400,19 @@ describe.runIf(hasEmbedding)('kb 提交流水线', () => {
     const coll = resolveCollectionName(kbId)
     const count = await client.count(coll, { exact: true, filter: { must: [{ key: 'source_doc_id', match: { value: docId } }] } })
     expect(count.count).toBe(chunks.length)
+  })
+
+  it('commitBatch 并发：单篇失败不中断，聚合抛错', async () => {
+    const doc = await KbService.createDraft({
+      kbId,
+      name: 'batch-ok',
+      content: '# 批量提交\n并发提交应不因单篇失败而中断其余。',
+      owner: TEST_USER.id,
+    })
+    // 一个正常 id + 一个不存在的 id：后者 commit 抛错被收集，前者仍 completed
+    await expect(KbService.commitBatch([doc.id, randomUUID()], { skipEnrich: true })).rejects.toThrow(/commitBatch: 1\/2 failed/)
+    const row = await db.select().from(kbDocuments).where(eq(kbDocuments.id, doc.id)).limit(1)
+    expect(row[0]!.indexingStatus).toBe('completed')
   })
 
   it('retrieve 命中提交内容', async () => {
@@ -412,15 +424,26 @@ describe.runIf(hasEmbedding)('kb 提交流水线', () => {
     const folder = await KbService.createFolder({ kbId, name: 'moved', owner: TEST_USER.id })
     await KbService.updateMeta(docId, { parentNodeId: folder.id })
 
-    const chunksAfter = (await db.select({ id: kbChunks.id }).from(kbChunks).where(eq(kbChunks.docId, docId))).map(c => c.id)
+    const chunksAfter = (await db
+      .select({ id: kbChunks.id })
+      .from(kbChunks)
+      .where(eq(kbChunks.docId, docId)))
+      .map(c => c.id)
     expect([...chunksAfter].sort()).toEqual([...chunkIdsBefore].sort())
 
     const client = getQdrantClient()
     const coll = resolveCollectionName(kbId)
-    const count = await client.count(coll, { exact: true, filter: { must: [{ key: 'source_doc_id', match: { value: docId } }] } })
+    const count = await client.count(coll, {
+      exact: true,
+      filter: { must: [{ key: 'source_doc_id', match: { value: docId } }] },
+    })
     expect(count.count).toBe(chunkIdsBefore.length)
 
-    const scrolled = await client.scroll(coll, { limit: 1, with_payload: true, filter: { must: [{ key: 'source_doc_id', match: { value: docId } }] } })
+    const scrolled = await client.scroll(coll, {
+      limit: 1,
+      with_payload: true,
+      filter: { must: [{ key: 'source_doc_id', match: { value: docId } }] },
+    })
     const vdir = scrolled.points[0]?.payload?.vdir
     expect(vdir).toBe('moved/commit-test')
   })
@@ -430,7 +453,11 @@ describe.runIf(hasEmbedding)('kb 提交流水线', () => {
     const moved = (await KbService.listNodes(kbId)).find(n => n.name === 'moved')!
     await KbService.renameNode(kbId, moved.id, 'moved-renamed')
 
-    const chunksAfter = (await db.select({ id: kbChunks.id }).from(kbChunks).where(eq(kbChunks.docId, docId))).map(c => c.id)
+    const chunksAfter = (await db
+      .select({ id: kbChunks.id })
+      .from(kbChunks)
+      .where(eq(kbChunks.docId, docId)))
+      .map(c => c.id)
     expect([...chunksAfter].sort()).toEqual([...chunkIdsBefore].sort())
 
     const client = getQdrantClient()
@@ -501,7 +528,12 @@ describe.runIf(hasEmbedding)('kb 召回', () => {
     ]
 
     for (const s of seed) {
-      const doc = await KbService.createDraft({ kbId, name: s.name, content: s.content, owner: TEST_USER.id })
+      const doc = await KbService.createDraft({
+        kbId,
+        name: s.name,
+        content: s.content,
+        owner: TEST_USER.id,
+      })
       docs.set(s.name, doc.id)
       await KbService.commit(doc.id, { skipEnrich: true })
     }

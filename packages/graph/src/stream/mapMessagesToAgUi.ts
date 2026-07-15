@@ -104,7 +104,10 @@ export function mapMessagesEventDataToAgUi(
       const events: (AguiTextMessageEvent | AguiReasoningEvent)[] = []
       // 兜底：reasoning 块未发 END 的在此补发
       if (state.activeReasoningMessageId) {
-        events.push({ type: EventType.REASONING_MESSAGE_END, messageId: state.activeReasoningMessageId })
+        events.push({
+          type: EventType.REASONING_MESSAGE_END,
+          messageId: state.activeReasoningMessageId,
+        })
         state.activeReasoningMessageId = null
       }
       if (state.activeMessageId) {

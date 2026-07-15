@@ -1,8 +1,7 @@
 import type { KbChunk } from '@agent/kb'
-import type { Buffer } from 'node:buffer'
 import type { KbDraftUpdate, KbMetaUpdate, KbQueryRequest } from '../../shared/kb'
+import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
-import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { env } from '@agent/env'
 import {
@@ -16,13 +15,16 @@ import {
   retrieveAndRerank,
   setPayloadByDocId,
 } from '@agent/kb'
-import { and, desc, eq, isNull, not, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, not, or, sql } from 'drizzle-orm'
+import JSZip from 'jszip'
 import { db } from '../db/drizzle'
-import { kbChunks, kbDocuments, kbNodes } from '../db/schema'
+import { kbChunks, kbDocuments, kbNodes, kbTags } from '../db/schema'
 
 const SUPPORTED_EXTENSIONS = new Set(['.md', '.markdown', '.docx', '.pdf', '.html', '.htm', '.txt'])
 /** ingestFromPath 相对起点最多下钻的子目录层数（根目录本身为第 0 层） */
 const INGEST_PATH_MAX_DEPTH = 5
+/** commitBatch 并发提交数（受上游 LLM/embedding 限流约束，保守取 5） */
+const KB_COMMIT_CONCURRENCY = 5
 
 export class KbConflictError extends Error {
   constructor(message: string) {
@@ -41,6 +43,16 @@ export interface KbNodeRow {
   owner: string | null
   visibility: string
   sortOrder: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface KbTagRow {
+  id: string
+  kbId: string
+  name: string
+  color: string | null
+  owner: string | null
   createdAt: number
   updatedAt: number
 }
@@ -153,14 +165,22 @@ function docSummary(row: typeof kbDocuments.$inferSelect): KbDocSummary {
 }
 
 function docFull(row: typeof kbDocuments.$inferSelect): KbDoc {
-  return { ...docSummary(row), content: row.content, permissions: (row.permissions ?? {}) as Record<string, unknown> }
+  return {
+    ...docSummary(row),
+    content: row.content,
+    permissions: (row.permissions ?? {}) as Record<string, unknown>,
+  }
 }
 
 /**
  * 由父链 walk 派生 vdir。nodesMap 为该 kb 全部文件夹（id→row）。
  * 根级文档（parentId=null）→ vdir = name。
  */
-function computeVdir(parentId: string | null, name: string, nodesMap: Map<string, typeof kbNodes.$inferSelect>): string {
+function computeVdir(
+  parentId: string | null,
+  name: string,
+  nodesMap: Map<string, typeof kbNodes.$inferSelect>,
+): string {
   const segments: string[] = []
   const guard = new Set<string>()
   let cur = parentId
@@ -252,7 +272,11 @@ export class KbService {
    * 移动文件夹到指定父下。newParentId 若为自身或其后代 → KbConflictError。
    * 同级重名 → KbConflictError(409)。
    */
-  static async moveFolder(kbId: string, nodeId: string, parentId: string): Promise<KbNodeRow | null> {
+  static async moveFolder(
+    kbId: string,
+    nodeId: string,
+    parentId: string,
+  ): Promise<KbNodeRow | null> {
     await KbService.assertNoFolderCycle(kbId, nodeId, parentId)
     const ts = now()
     let updated: (typeof kbNodes.$inferSelect)[]
@@ -300,7 +324,11 @@ export class KbService {
     return KbService.renameFolder(kbId, nodeId, name)
   }
 
-  static async moveNode(kbId: string, nodeId: string, newParentId: string): Promise<KbNodeRow | null> {
+  static async moveNode(
+    kbId: string,
+    nodeId: string,
+    newParentId: string,
+  ): Promise<KbNodeRow | null> {
     return KbService.moveFolder(kbId, nodeId, newParentId)
   }
 
@@ -317,12 +345,19 @@ export class KbService {
   }
 
   /** newParentId 不能是 nodeId 自身或其任意后代。 */
-  private static async assertNoFolderCycle(kbId: string, nodeId: string, newParentId: string | null): Promise<void> {
+  private static async assertNoFolderCycle(
+    kbId: string,
+    nodeId: string,
+    newParentId: string | null,
+  ): Promise<void> {
     if (newParentId == null)
       return
     if (newParentId === nodeId)
       throw new KbConflictError('cannot move folder under itself')
-    const nodes = await db.select({ id: kbNodes.id, parentId: kbNodes.parentId }).from(kbNodes).where(eq(kbNodes.kbId, kbId))
+    const nodes = await db
+      .select({ id: kbNodes.id, parentId: kbNodes.parentId })
+      .from(kbNodes)
+      .where(eq(kbNodes.kbId, kbId))
     const parentOf = new Map(nodes.map(n => [n.id, n.parentId]))
     let cur: string | null = newParentId
     const guard = new Set<string>()
@@ -353,13 +388,22 @@ export class KbService {
       const existing = await db
         .select()
         .from(kbNodes)
-        .where(and(eq(kbNodes.kbId, kbId), parentId == null ? isNull(kbNodes.parentId) : eq(kbNodes.parentId, parentId), eq(kbNodes.name, seg)))
+        .where(and(
+          eq(kbNodes.kbId, kbId),
+          parentId == null ? isNull(kbNodes.parentId) : eq(kbNodes.parentId, parentId),
+          eq(kbNodes.name, seg),
+        ))
         .limit(1)
       if (existing[0]) {
         parentId = existing[0].id
         continue
       }
-      const created = await KbService.createFolder({ kbId, parentId, name: seg, ...(owner != null ? { owner } : {}) })
+      const created = await KbService.createFolder({
+        kbId,
+        parentId,
+        name: seg,
+        ...(owner != null ? { owner } : {}),
+      })
       parentId = created.id
     }
     return parentId
@@ -400,7 +444,9 @@ export class KbService {
       indexingStatus: d.indexingStatus,
     }))
     // 只更新 vdir 缓存，不动 updatedAt——文件夹结构性变更不算内容编辑，否则会冲掉"最近修改"排序
-    await Promise.all(next.map(d => db.update(kbDocuments).set({ vdir: d.vdir }).where(eq(kbDocuments.id, d.id))))
+    await Promise.all(next.map(d =>
+      db.update(kbDocuments).set({ vdir: d.vdir }).where(eq(kbDocuments.id, d.id)),
+    ))
     await Promise.all(
       next
         .filter(d => d.indexingStatus === 'completed')
@@ -451,6 +497,29 @@ export class KbService {
       updatedAt: ts,
       indexedAt: null,
     })
+    // 保证 tag name 在 kb_tags 表：缺失则自动建（无 color），与 patchMeta 保持一致
+    if (args.tags != null && args.tags.length) {
+      const existing = new Set(
+        (await db
+          .select({ name: kbTags.name })
+          .from(kbTags)
+          .where(and(
+            eq(kbTags.kbId, args.kbId),
+            ...(args.owner != null ? [eq(kbTags.owner, args.owner)] : []),
+          )))
+          .map(r => r.name),
+      )
+      for (const name of args.tags) {
+        if (existing.has(name))
+          continue
+        await KbService.createTag({
+          kbId: args.kbId,
+          name,
+          ...(args.owner != null ? { owner: args.owner } : {}),
+        }).catch(() => {})
+        existing.add(name)
+      }
+    }
     const row = await db.select().from(kbDocuments).where(eq(kbDocuments.id, id)).limit(1)
     return docFull(row[0]!)
   }
@@ -477,8 +546,13 @@ export class KbService {
       // 精确前缀：vdir = prefix 或 vdir LIKE 'prefix/%'，避免 notes 命中 notes2
       conditions.push(or(eq(kbDocuments.vdir, prefix), sql`${kbDocuments.vdir} LIKE ${`${prefix}/%`}`)!)
     }
-    if (args.parentNodeId !== undefined)
-      conditions.push(args.parentNodeId == null ? isNull(kbDocuments.parentNodeId) : eq(kbDocuments.parentNodeId, args.parentNodeId))
+    if (args.parentNodeId !== undefined) {
+      conditions.push(
+        args.parentNodeId == null
+          ? isNull(kbDocuments.parentNodeId)
+          : eq(kbDocuments.parentNodeId, args.parentNodeId),
+      )
+    }
 
     const rows = await db
       .select()
@@ -490,7 +564,11 @@ export class KbService {
 
   static async saveDraft(id: string, patch: KbDraftUpdate): Promise<KbDoc | null> {
     // 内容变才标脏（completed→draft）；改名不触发重 embed 但仍记 updated_at
-    const before = await db.select({ status: kbDocuments.indexingStatus }).from(kbDocuments).where(eq(kbDocuments.id, id)).limit(1)
+    const before = await db
+      .select({ status: kbDocuments.indexingStatus })
+      .from(kbDocuments)
+      .where(eq(kbDocuments.id, id))
+      .limit(1)
     if (!before[0])
       return null
     if (before[0].status === 'indexing')
@@ -501,9 +579,13 @@ export class KbService {
     const updated = await db
       .update(kbDocuments)
       .set({
-        ...(patch.content != null ? { content: patch.content, draftHash: hashContent(patch.content) } : {}),
+        ...(patch.content != null
+          ? { content: patch.content, draftHash: hashContent(patch.content) }
+          : {}),
         ...(patch.name != null ? { name: patch.name } : {}),
-        ...(dirtied ? { indexingStatus: 'draft' as const, error: null } : {}),
+        ...(dirtied
+          ? { indexingStatus: 'draft' as const, error: null }
+          : {}),
         updatedAt: now(),
       })
       .where(eq(kbDocuments.id, id))
@@ -544,34 +626,251 @@ export class KbService {
     if (patch.tags != null && row.indexingStatus === 'completed')
       await setPayloadByDocId(row.kbId, id, { tags: patch.tags })
 
+    // 加 tag 时保证 name 在 kb_tags 表：缺失则自动建（无 color），保证"文档标签属于标签管理的标签"
+    if (patch.tags != null && patch.tags.length) {
+      const existing = new Set(
+        (await db
+          .select({ name: kbTags.name })
+          .from(kbTags)
+          .where(and(
+            eq(kbTags.kbId, row.kbId),
+            ...(row.owner != null ? [eq(kbTags.owner, row.owner)] : []),
+          )))
+          .map(r => r.name),
+      )
+      const owner = row.owner
+      for (const name of patch.tags) {
+        if (existing.has(name))
+          continue
+        await KbService.createTag({
+          kbId: row.kbId,
+          name,
+          ...(owner != null ? { owner } : {}),
+        }).catch(() => {})
+        existing.add(name)
+      }
+    }
+
     return docFull(row)
   }
 
   static async removeDoc(id: string): Promise<boolean> {
     // 先取 chunk point ids，删 Qdrant；再删 PG 行（级联删 kb_chunks）。
-    const doc = await db.select({ kbId: kbDocuments.kbId }).from(kbDocuments).where(eq(kbDocuments.id, id)).limit(1)
+    const doc = await db
+      .select({ kbId: kbDocuments.kbId })
+      .from(kbDocuments)
+      .where(eq(kbDocuments.id, id))
+      .limit(1)
     if (!doc[0])
       return false
-    const chunks = await db.select({ id: kbChunks.id }).from(kbChunks).where(eq(kbChunks.docId, id))
+    const chunks = await db
+      .select({ id: kbChunks.id })
+      .from(kbChunks)
+      .where(eq(kbChunks.docId, id))
     if (chunks.length)
       await deleteByPointIds(doc[0].kbId, chunks.map(c => c.id))
-    const deleted = await db.delete(kbDocuments).where(eq(kbDocuments.id, id)).returning({ id: kbDocuments.id })
+    const deleted = await db
+      .delete(kbDocuments)
+      .where(eq(kbDocuments.id, id))
+      .returning({ id: kbDocuments.id })
     return deleted.length > 0
   }
 
-  static async listTags(kbId: string, owner?: string): Promise<string[]> {
-    const res = owner != null
-      ? await db.execute<{ tag: string }>(sql`
-          SELECT DISTINCT tag FROM (
-            SELECT UNNEST(tags) AS tag FROM kb_documents WHERE kb_id = ${kbId} AND owner = ${owner}
-          ) t WHERE tag IS NOT NULL ORDER BY tag
-        `)
-      : await db.execute<{ tag: string }>(sql`
-          SELECT DISTINCT tag FROM (
-            SELECT UNNEST(tags) AS tag FROM kb_documents WHERE kb_id = ${kbId}
-          ) t WHERE tag IS NOT NULL ORDER BY tag
-        `)
-    return (res.rows ?? []).map(r => r.tag)
+  static async listTags(kbId: string, owner?: string): Promise<KbTagRow[]> {
+    const rows = await db
+      .select()
+      .from(kbTags)
+      .where(and(eq(kbTags.kbId, kbId), ...(owner != null ? [eq(kbTags.owner, owner)] : [])))
+      .orderBy(kbTags.name)
+    return rows.map((r): KbTagRow => ({
+      id: r.id,
+      kbId: r.kbId,
+      name: r.name,
+      color: r.color,
+      owner: r.owner,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }))
+  }
+
+  /** 新建标签。同名（同 kb+owner）→ KbConflictError(409) */
+  static async createTag(args: {
+    kbId: string
+    name: string
+    color?: string
+    owner?: string
+  }): Promise<KbTagRow> {
+    const id = randomUUID()
+    const ts = now()
+    try {
+      await db.insert(kbTags).values({
+        id,
+        kbId: args.kbId,
+        name: args.name,
+        color: args.color ?? null,
+        owner: args.owner ?? null,
+        createdAt: ts,
+        updatedAt: ts,
+      })
+    }
+    catch (err) {
+      if (isUniqueViolation(err))
+        throw new KbConflictError('tag with the same name already exists')
+      throw err
+    }
+    const row = await db.select().from(kbTags).where(eq(kbTags.id, id)).limit(1)
+    const r = row[0]!
+    return {
+      id: r.id,
+      kbId: r.kbId,
+      name: r.name,
+      color: r.color,
+      owner: r.owner,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }
+  }
+
+  /**
+   * 重命名标签：刷所有引用旧 name 的文档 kb_documents.tags → 新 name + 已提交文档 Qdrant payload tags；
+   * 再改 kb_tags.name。同名冲突→409。返回受影响文档数。
+   */
+  static async renameTag(
+    tagId: string,
+    name: string,
+    owner: string,
+  ): Promise<{ affectedDocs: number } | null> {
+    const tag = (await db.select().from(kbTags).where(eq(kbTags.id, tagId)).limit(1))[0]
+    if (!tag || tag.owner !== owner)
+      return null
+    if (tag.name === name)
+      return { affectedDocs: 0 }
+
+    // 同 kb+owner 下同名（排除自己）→ 409
+    const dup = await db
+      .select({ id: kbTags.id })
+      .from(kbTags)
+      .where(and(
+        eq(kbTags.kbId, tag.kbId),
+        eq(kbTags.name, name),
+        not(eq(kbTags.id, tagId)),
+        ...(tag.owner != null
+          ? [eq(kbTags.owner, tag.owner)]
+          : [isNull(kbTags.owner)]),
+      ))
+      .limit(1)
+    if (dup[0])
+      throw new KbConflictError('tag with the same name already exists')
+
+    // 刷文档 tags 数组：old name → new name
+    const affected = await db.execute<{ id: string }>(sql`
+      UPDATE kb_documents
+      SET tags = ARRAY(SELECT DISTINCT CASE WHEN x = ${tag.name} THEN ${name} ELSE x END FROM unnest(tags) AS x),
+          updated_at = ${now()}
+      WHERE kb_id = ${tag.kbId} AND tags @> ARRAY[${tag.name}]::text[]
+      RETURNING id
+    `)
+    const affectedIds = (affected.rows ?? []).map(r => r.id)
+
+    // 已提交文档同步 Qdrant payload tags（已刷成新 name，查出当前 tags 再 setPayload）
+    if (affectedIds.length) {
+      const docs = await db.select({ id: kbDocuments.id })
+        .from(kbDocuments)
+        .where(and(
+          inArray(kbDocuments.id, affectedIds),
+          eq(kbDocuments.indexingStatus, 'completed'),
+        ))
+      for (const d of docs) {
+        const r = (await db
+          .select({ tags: kbDocuments.tags })
+          .from(kbDocuments)
+          .where(eq(kbDocuments.id, d.id))
+          .limit(1))[0]
+        await setPayloadByDocId(tag.kbId, d.id, { tags: r?.tags ?? [] })
+      }
+    }
+
+    await db.update(kbTags).set({ name, updatedAt: now() }).where(eq(kbTags.id, tagId))
+    return { affectedDocs: affectedIds.length }
+  }
+
+  /**
+   * 删除标签：从所有引用文档的 kb_documents.tags 移除该 name + 已提交文档 Qdrant payload 同步；
+   * 再删 kb_tags 行。**文档保留**（只去标签）。返回受影响文档数。
+   */
+  static async deleteTag(
+    tagId: string,
+    owner: string,
+    dryRun = false,
+  ): Promise<{ affectedDocs: number } | null> {
+    const tag = (await db.select().from(kbTags).where(eq(kbTags.id, tagId)).limit(1))[0]
+    if (!tag || tag.owner !== owner)
+      return null
+
+    // dryRun：只查影响数，不删
+    if (dryRun) {
+      const res = await db.execute<{ id: string }>(sql`
+        SELECT id FROM kb_documents WHERE kb_id = ${tag.kbId} AND tags @> ARRAY[${tag.name}]::text[]
+      `)
+      return { affectedDocs: (res.rows ?? []).length }
+    }
+
+    const affected = await db.execute<{ id: string }>(sql`
+      UPDATE kb_documents
+      SET tags = ARRAY(SELECT x FROM unnest(tags) AS x WHERE x <> ${tag.name}),
+          updated_at = ${now()}
+      WHERE kb_id = ${tag.kbId} AND tags @> ARRAY[${tag.name}]::text[]
+      RETURNING id
+    `)
+    const affectedIds = (affected.rows ?? []).map(r => r.id)
+
+    if (affectedIds.length) {
+      const docs = await db.select({ id: kbDocuments.id })
+        .from(kbDocuments)
+        .where(and(
+          inArray(kbDocuments.id, affectedIds),
+          eq(kbDocuments.indexingStatus, 'completed'),
+        ))
+      for (const d of docs) {
+        const r = (await db
+          .select({ tags: kbDocuments.tags })
+          .from(kbDocuments)
+          .where(eq(kbDocuments.id, d.id))
+          .limit(1))[0]
+        await setPayloadByDocId(tag.kbId, d.id, { tags: r?.tags ?? [] })
+      }
+    }
+
+    await db.delete(kbTags).where(eq(kbTags.id, tagId))
+    return { affectedDocs: affectedIds.length }
+  }
+
+  /** 改标签颜色（仅元数据，不触文档/Qdrant） */
+  static async updateTagColor(
+    tagId: string,
+    color: string | null,
+    owner: string,
+  ): Promise<KbTagRow | null> {
+    const tag = (await db.select().from(kbTags).where(eq(kbTags.id, tagId)).limit(1))[0]
+    if (!tag || tag.owner !== owner)
+      return null
+    const updated = await db
+      .update(kbTags)
+      .set({ color, updatedAt: now() })
+      .where(eq(kbTags.id, tagId))
+      .returning()
+    if (!updated[0])
+      return null
+    const r = updated[0]
+    return {
+      id: r.id,
+      kbId: r.kbId,
+      name: r.name,
+      color: r.color,
+      owner: r.owner,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }
   }
 
   // ---------- 提交（异步预处理，整文档重建） ----------
@@ -606,17 +905,42 @@ export class KbService {
   }
 
   static async commitBatch(ids: string[], opts: { skipEnrich: boolean }): Promise<void> {
-    for (const id of ids)
-      await KbService.commit(id, opts)
+    if (!ids.length)
+      return
+    // 并发提交：单篇失败不中断其他（commit 内部已置 indexingStatus=error），最后聚合抛错
+    const concurrency = Math.min(KB_COMMIT_CONCURRENCY, ids.length)
+    let cursor = 0
+    const failures: string[] = []
+    const worker = async (): Promise<void> => {
+      while (cursor < ids.length) {
+        const id = ids[cursor]!
+        cursor++
+        try {
+          await KbService.commit(id, opts)
+        }
+        catch {
+          failures.push(id)
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: concurrency }, () => worker()))
+    if (failures.length)
+      throw new Error(`commitBatch: ${failures.length}/${ids.length} failed: ${failures.join(', ')}`)
   }
 
-  private static async runCommit(doc: typeof kbDocuments.$inferSelect, skipEnrich: boolean): Promise<void> {
+  private static async runCommit(
+    doc: typeof kbDocuments.$inferSelect,
+    skipEnrich: boolean,
+  ): Promise<void> {
     const kbId = doc.kbId
     const id = doc.id
     const content = doc.content
 
     // 1. clean + chunk
-    const cleaned = cleanMarkdown(content, { sourceDocId: id, ...(doc.vdir ? { baseUrl: doc.vdir } : {}) })
+    const cleaned = cleanMarkdown(content, {
+      sourceDocId: id,
+      ...(doc.vdir ? { baseUrl: doc.vdir } : {}),
+    })
     const chunks: KbChunk[] = chunkMarkdown(cleaned, { sourceDocId: id })
     const pointIds = chunks.map(() => randomUUID())
 
@@ -641,7 +965,10 @@ export class KbService {
     }
 
     // 3. 删旧 chunk：Qdrant delete_by_point_ids + PG 行
-    const oldChunks = await db.select({ id: kbChunks.id }).from(kbChunks).where(eq(kbChunks.docId, id))
+    const oldChunks = await db
+      .select({ id: kbChunks.id })
+      .from(kbChunks)
+      .where(eq(kbChunks.docId, id))
     if (oldChunks.length)
       await deleteByPointIds(kbId, oldChunks.map(c => c.id))
     await db.delete(kbChunks).where(eq(kbChunks.docId, id))
@@ -710,7 +1037,13 @@ export class KbService {
       const existing = await db
         .select()
         .from(kbDocuments)
-        .where(and(eq(kbDocuments.kbId, args.kbId), eq(kbDocuments.name, name), args.parentNodeId == null ? isNull(kbDocuments.parentNodeId) : eq(kbDocuments.parentNodeId, args.parentNodeId)))
+        .where(and(
+          eq(kbDocuments.kbId, args.kbId),
+          eq(kbDocuments.name, name),
+          args.parentNodeId == null
+            ? isNull(kbDocuments.parentNodeId)
+            : eq(kbDocuments.parentNodeId, args.parentNodeId),
+        ))
         .limit(1)
 
       if (existing[0]) {
@@ -745,54 +1078,55 @@ export class KbService {
   }
 
   /**
-   * 从服务端本地目录导入草稿。相对 base 递归最多 {@link INGEST_PATH_MAX_DEPTH} 层子目录。
+   * 从 zip 压缩包导入草稿。按 zip 内相对路径还原目录树（挂根级），最多 {@link INGEST_PATH_MAX_DEPTH} 层子目录。
+   * 含 `..` 逃逸段的 entry 跳过（防 zip slip），不中断整批。
    */
-  static async ingestFromPath(args: {
+  static async ingestFromZip(args: {
     kbId: string
-    serverPath: string
-    base?: string
+    zip: Buffer
     owner?: string
     tags?: string[]
   }): Promise<KbIngestResultItem[]> {
-    const resolved = path.resolve(args.serverPath)
-    const base = args.base ? path.resolve(args.base) : resolved
+    const jszip = await JSZip.loadAsync(args.zip)
     const results: KbIngestResultItem[] = []
 
-    async function walk(dir: string, depth: number): Promise<void> {
-      const entries = await readdir(dir, { withFileTypes: true })
-      for (const entry of entries) {
-        const full = path.join(dir, entry.name)
-        if (entry.isDirectory()) {
-          if (depth < INGEST_PATH_MAX_DEPTH)
-            await walk(full, depth + 1)
-          continue
-        }
-        if (!entry.isFile())
-          continue
-        const ext = path.extname(entry.name).toLowerCase()
-        if (!SUPPORTED_EXTENSIONS.has(ext))
-          continue
+    const entries = Object.values(jszip.files)
+      .filter(f => !f.dir)
+      .filter(f => SUPPORTED_EXTENSIONS.has(path.extname(f.name).toLowerCase()))
+      .sort((a, b) => a.name.localeCompare(b.name))
 
-        const buffer = await readFile(full)
-        const rel = path.relative(base, full)
-        const segments = sanitizePathSegments(rel.split(path.sep))
-        const folderSegments = segments.slice(0, -1)
-        const parentNodeId = folderSegments.length
-          ? (await KbService.ensureNodePath({ kbId: args.kbId, segments: folderSegments, ...(args.owner != null ? { owner: args.owner } : {}) })) ?? null
-          : null
-
-        const items = await KbService.ingestFiles({
-          kbId: args.kbId,
-          files: [{ buffer, filename: entry.name }],
-          ...(parentNodeId != null ? { parentNodeId } : {}),
-          ...(args.owner != null ? { owner: args.owner } : {}),
-          ...(args.tags ? { tags: args.tags } : {}),
-        })
-        results.push(...items)
+    for (const entry of entries) {
+      // 防 zip slip：单 entry 含 `..` 逃逸段则跳过，不中断整批
+      let segments: string[]
+      try {
+        segments = sanitizePathSegments(entry.name.split('/'))
       }
-    }
+      catch {
+        continue
+      }
+      if (segments.length > INGEST_PATH_MAX_DEPTH + 1)
+        continue
 
-    await walk(resolved, 0)
+      const buffer = Buffer.from(await entry.async('uint8array'))
+      const folderSegments = segments.slice(0, -1)
+      const filename = segments[segments.length - 1]!
+      const parentNodeId = folderSegments.length
+        ? (await KbService.ensureNodePath({
+            kbId: args.kbId,
+            segments: folderSegments,
+            ...(args.owner != null ? { owner: args.owner } : {}),
+          })) ?? null
+        : null
+
+      const items = await KbService.ingestFiles({
+        kbId: args.kbId,
+        files: [{ buffer, filename }],
+        ...(parentNodeId != null ? { parentNodeId } : {}),
+        ...(args.owner != null ? { owner: args.owner } : {}),
+        ...(args.tags ? { tags: args.tags } : {}),
+      })
+      results.push(...items)
+    }
     return results
   }
 

@@ -35,6 +35,7 @@ export function useKbDocuments() {
     updateLocalContent: KbStore.updateLocalContent,
     updateLocalName: KbStore.updateLocalName,
     saveDraft: KbStore.saveDraft,
+    updateMeta: KbStore.updateMeta,
     commit: KbStore.commit,
     createBlank: KbStore.createBlank,
     remove: KbStore.remove,

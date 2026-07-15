@@ -17,13 +17,40 @@ export function InterruptCard({
 }) {
   switch (request.type) {
     case 'input':
-      return <InputCard message={request.message} placeholder={request.placeholder} onSubmit={value => onRespond({ value })} />
+      return (
+        <InputCard
+          message={request.message}
+          placeholder={request.placeholder}
+          onSubmit={value => onRespond({ value })}
+        />
+      )
     case 'select':
-      return <SelectCard message={request.message} options={request.options} multiple={false} onConfirm={v => onRespond({ value: v as string })} />
+      return (
+        <SelectCard
+          message={request.message}
+          options={request.options}
+          multiple={false}
+          onConfirm={v => onRespond({ value: v as string })}
+        />
+      )
     case 'multiSelect':
-      return <SelectCard message={request.message} options={request.options} multiple onConfirm={v => onRespond({ values: v as string[] })} />
+      return (
+        <SelectCard
+          message={request.message}
+          options={request.options}
+          multiple
+          onConfirm={v => onRespond({ values: v as string[] })}
+        />
+      )
     case 'modal':
-      return <ModalCard title={request.title} body={request.body} actions={request.actions} onSelect={action => onRespond({ action })} />
+      return (
+        <ModalCard
+          title={request.title}
+          body={request.body}
+          actions={request.actions}
+          onSelect={action => onRespond({ action })}
+        />
+      )
     case 'approval':
       return (
         <ApprovalCard

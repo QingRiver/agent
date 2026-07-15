@@ -3,7 +3,6 @@ import antfu from '@antfu/eslint-config'
 export default antfu({
   react: true,
   typescript: true,
-  formatters: true,
   vue: false,
   ignores: [
     '**/*.md',
@@ -17,6 +16,15 @@ export default antfu({
   rules: {
     'no-console': 'off',
     'ts/no-redeclare': 'off',
+    'style/max-len': ['error', {
+      code: 100,
+      tabWidth: 2,
+      ignoreUrls: true,
+      ignoreStrings: true,
+      ignoreTemplateLiterals: true,
+      ignoreRegExpLiterals: true,
+      ignoreComments: true,
+    }],
     'no-restricted-syntax': [
       'error',
       {

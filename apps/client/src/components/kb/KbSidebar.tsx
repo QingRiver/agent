@@ -1,9 +1,35 @@
 import type { KbTreeNode } from './kbTree'
 import { useKbDocuments } from '@hooks/useKbDocuments'
 import { isDocDirty } from '@stores/kb-store'
-import { ChevronDown, ChevronRight, FileText, Folder, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileText, Folder, Plus, RefreshCw, Search, Settings2, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { KbImportDialog } from './KbImportDialog'
+import { KbTagManager } from './KbTagManager'
 import { buildKbTree } from './kbTree'
+
+const LS_EXPANDED = 'kb.expandedFolders'
+
+function readLsExpanded(): string[] | null {
+  try {
+    const raw = localStorage.getItem(LS_EXPANDED)
+    if (!raw)
+      return null
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : null
+  }
+  catch {
+    return null
+  }
+}
+
+function writeLsExpanded(ids: string[]): void {
+  try {
+    localStorage.setItem(LS_EXPANDED, JSON.stringify(ids))
+  }
+  catch {
+    // ignore
+  }
+}
 
 function TreeNodes({
   nodes,
@@ -106,19 +132,23 @@ export function KbSidebar({
     () => new Set(nodes.filter(n => n.parentId == null).map(n => n.id)),
     [nodes],
   )
-  /** null = 使用默认（根文件夹展开） */
-  const [expandedOverride, setExpandedOverride] = useState<Set<string> | null>(null)
-  const expanded = expandedOverride ?? rootFolderIds
+  /** 展开/折叠持久化：localStorage 记用户展开的文件夹 id；首次（无记录）默认根展开 */
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const raw = readLsExpanded()
+    return raw ? new Set(raw) : new Set(rootFolderIds)
+  })
   const [pendingDelete, setPendingDelete] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [tagManagerOpen, setTagManagerOpen] = useState(false)
 
   function toggleFolder(id: string) {
-    setExpandedOverride((prev) => {
-      const base = prev ?? new Set(rootFolderIds)
-      const next = new Set(base)
+    setExpanded((prev) => {
+      const next = new Set(prev)
       if (next.has(id))
         next.delete(id)
       else
         next.add(id)
+      writeLsExpanded([...next])
       return next
     })
   }
@@ -141,6 +171,14 @@ export function KbSidebar({
         <span className="flex-1 px-2 text-xs font-medium uppercase tracking-wide text-slate-500">
           知识库
         </span>
+        <button
+          type="button"
+          title="引入文档"
+          onClick={() => setImportOpen(true)}
+          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+        >
+          <Plus className="size-3.5" />
+        </button>
         {onToggleRecall && (
           <button
             type="button"
@@ -195,24 +233,33 @@ export function KbSidebar({
       )}
 
       {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 border-b border-slate-800 p-2">
+        <div className="flex flex-wrap items-center gap-1 border-b border-slate-800 p-2">
           {tags.map((tag) => {
-            const on = selectedTags.includes(tag)
+            const on = selectedTags.includes(tag.name)
             return (
               <button
-                key={tag}
+                key={tag.id}
                 type="button"
-                onClick={() => toggleTag(tag)}
-                className={`rounded-full px-2 py-0.5 text-xs ${
-                  on
-                    ? 'bg-sky-600/30 text-sky-200 ring-1 ring-sky-500/50'
-                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                onClick={() => toggleTag(tag.name)}
+                className={`rounded-full px-2 py-0.5 text-xs ring-1 ring-inset ${
+                  on ? 'ring-2 ring-sky-400' : 'ring-slate-700'
                 }`}
+                style={tag.color
+                  ? { backgroundColor: `${tag.color}33`, color: tag.color, borderColor: tag.color }
+                  : undefined}
               >
-                {tag}
+                {tag.name}
               </button>
             )
           })}
+          <button
+            type="button"
+            title="管理标签"
+            onClick={() => setTagManagerOpen(true)}
+            className="ml-auto rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          >
+            <Settings2 className="size-3.5" />
+          </button>
         </div>
       )}
 
@@ -235,6 +282,8 @@ export function KbSidebar({
           onSelect={select}
         />
       </div>
+      <KbImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
+      <KbTagManager open={tagManagerOpen} onClose={() => setTagManagerOpen(false)} />
     </aside>
   )
 }

@@ -1,0 +1,24 @@
+{
+  "name": "@agent/markdown",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "tc": "pnpm -w run tsc-go --noEmit"
+  },
+  "dependencies": {
+    "highlight.js": "catalog:",
+    "katex": "catalog:",
+    "marked": "catalog:",
+    "marked-footnote": "catalog:",
+    "marked-gfm-heading-id": "catalog:",
+    "marked-highlight": "catalog:",
+    "marked-katex-extension": "catalog:"
+  },
+  "devDependencies": {
+    "vitest": "catalog:"
+  }
+}

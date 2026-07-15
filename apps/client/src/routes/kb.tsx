@@ -17,7 +17,12 @@ function KbPage() {
     <>
       <KbSync />
       <KbLayout
-        sidebar={<KbSidebar recallOpen={recallOpen} onToggleRecall={() => setRecallOpen(v => !v)} />}
+        sidebar={(
+          <KbSidebar
+            recallOpen={recallOpen}
+            onToggleRecall={() => setRecallOpen(v => !v)}
+          />
+        )}
         recall={recallOpen ? <KbRecallPanel onClose={() => setRecallOpen(false)} /> : null}
       >
         <KbEditor />

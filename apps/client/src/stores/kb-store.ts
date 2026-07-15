@@ -1,4 +1,4 @@
-import type { KbDoc, KbDocSummary, KbNodeRow } from '@apis/kb-api'
+import type { KbDoc, KbDocSummary, KbNodeRow, KbTagRow } from '@apis/kb-api'
 import { KB_DEFAULT_ID, KbApi } from '@apis/kb-api'
 import { atom, getDefaultStore } from 'jotai'
 
@@ -54,7 +54,7 @@ export class KbStore {
   static readonly userIdAtom = atom<string | undefined>(undefined)
   static readonly nodesAtom = atom<KbNodeRow[]>([])
   static readonly docsAtom = atom<KbDocSummary[]>([])
-  static readonly tagsAtom = atom<string[]>([])
+  static readonly tagsAtom = atom<KbTagRow[]>([])
   static readonly selectedTagsAtom = atom<string[]>(readSelectedTags())
   static readonly activeIdAtom = atom<string | null>(readLs(LS_ACTIVE))
   static readonly activeDocAtom = atom<KbDoc | null>(null)
@@ -213,7 +213,10 @@ export class KbStore {
       const updated = await KbApi.saveDraft(doc.id, { content: doc.content, name: doc.name })
       store.set(KbStore.activeDocAtom, updated)
       store.set(KbStore.localDirtyAtom, false)
-      store.set(KbStore.docsAtom, prev => prev.map(d => d.id === updated.id ? toSummary(updated) : d))
+      store.set(
+        KbStore.docsAtom,
+        prev => prev.map(d => d.id === updated.id ? toSummary(updated) : d),
+      )
     }
     catch (e) {
       store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
@@ -221,6 +224,53 @@ export class KbStore {
     }
     finally {
       store.set(KbStore.savingAtom, false)
+    }
+  }
+
+  /** 更新元数据（tags/parentNodeId/name/visibility/pinned）。加 tag 时后端自动建标签 */
+  static async updateMeta(
+    id: string,
+    patch: {
+      tags?: string[]
+      parentNodeId?: string | null
+      name?: string
+      visibility?: string
+      pinned?: boolean
+    },
+  ): Promise<KbDoc | null> {
+    const store = KbStore.store()
+    store.set(KbStore.errorAtom, null)
+    try {
+      const updated = await KbApi.updateMeta(id, patch)
+      if (store.get(KbStore.activeIdAtom) === id)
+        store.set(KbStore.activeDocAtom, updated)
+      store.set(
+        KbStore.docsAtom,
+        prev => prev.map(d => d.id === updated.id ? toSummary(updated) : d),
+      )
+      // tags 变了 → 标签列表可能新增（后端自动建），刷新 tags
+      if (patch.tags != null)
+        void KbStore.refreshTags()
+      return updated
+    }
+    catch (e) {
+      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
+      throw e
+    }
+  }
+
+  /** 仅刷新标签列表（add tag 后端自动建标签，左栏 chips 要同步） */
+  static async refreshTags(): Promise<void> {
+    const store = KbStore.store()
+    const userId = store.get(KbStore.userIdAtom)
+    if (!userId)
+      return
+    try {
+      const tags = await KbApi.listTags(KB_DEFAULT_ID)
+      store.set(KbStore.tagsAtom, tags)
+    }
+    catch {
+      // 标签刷新失败不阻断主流程
     }
   }
 
@@ -240,7 +290,10 @@ export class KbStore {
       const updated = await KbApi.commit(doc.id, true)
       store.set(KbStore.activeDocAtom, updated)
       store.set(KbStore.localDirtyAtom, false)
-      store.set(KbStore.docsAtom, prev => prev.map(d => d.id === updated.id ? toSummary(updated) : d))
+      store.set(
+        KbStore.docsAtom,
+        prev => prev.map(d => d.id === updated.id ? toSummary(updated) : d),
+      )
     }
     catch (e) {
       store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))

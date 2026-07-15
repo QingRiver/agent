@@ -10,7 +10,13 @@ import { memo } from 'react'
 /** UI 历史消息:与 UIMessage 同构,仅多 id 供 React key / Static 冻结 */
 export type HistoryMessage = UIMessage & { id: number }
 
-const AssistantMessageItem = memo(({ content, highlight }: { content: string, highlight: ReturnType<typeof useHighlight> }) => (
+const AssistantMessageItem = memo(({
+  content,
+  highlight,
+}: {
+  content: string
+  highlight: ReturnType<typeof useHighlight>
+}) => (
   <Box flexDirection="column">
     <Markdown highlight={highlight}>{content}</Markdown>
     <Text>{' '}</Text>
@@ -27,7 +33,13 @@ const ReasoningItem = memo(({ content }: { content: string }) => (
   </Box>
 ))
 
-function HistoryMessageItem({ msg, highlight }: { msg: HistoryMessage, highlight: ReturnType<typeof useHighlight> }) {
+function HistoryMessageItem({
+  msg,
+  highlight,
+}: {
+  msg: HistoryMessage
+  highlight: ReturnType<typeof useHighlight>
+}) {
   switch (msg.kind) {
     case 'user':
       return <UserMessage content={msg.content} />

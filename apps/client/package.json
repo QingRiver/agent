@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@agent/graph": "workspace:*",
+    "@agent/markdown": "workspace:*",
     "@agent/protocol": "workspace:*",
     "@codemirror/lang-markdown": "catalog:",
     "@codemirror/state": "catalog:",
@@ -26,10 +27,11 @@
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "diff-match-patch": "catalog:",
+    "highlight.js": "catalog:",
     "hono": "catalog:",
     "jotai": "catalog:",
+    "katex": "catalog:",
     "lucide-react": "catalog:",
-    "marked": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "tailwind-merge": "catalog:",
@@ -38,6 +40,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/router-plugin": "catalog:",
     "@types/diff-match-patch": "catalog:",
