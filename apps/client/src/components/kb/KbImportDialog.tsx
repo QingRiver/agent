@@ -91,16 +91,38 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
       if (tab === 'files') {
         if (!fileList?.length)
           throw new Error('请选择文件')
-        const items = await KbApi.ingestFiles(KB_DEFAULT_ID, [...fileList], {
-          ...(parent != null ? { parentNodeId: parent } : {}),
-          ...(tagArr ? { tags: tagArr } : {}),
-        })
-        setResults(items.map(i => ({
-          docId: i.docId,
-          name: i.name,
-          vdir: i.vdir,
-          skipped: i.skipped,
-        })))
+        const selected = [...fileList]
+        const zips = selected.filter(f => /\.zip$/i.test(f.name))
+        const others = selected.filter(f => !/\.zip$/i.test(f.name))
+        if (zips.length && others.length) {
+          throw new Error('请勿混选 zip 与普通文件：压缩包请单独切到「压缩包」页签')
+        }
+        if (zips.length > 1)
+          throw new Error('一次仅支持一个 zip 压缩包，请切到「压缩包」页签')
+        if (zips.length === 1) {
+          // 误在「上传」里选了 zip → 自动走目录还原路径
+          const items = await KbApi.ingestZip(KB_DEFAULT_ID, zips[0]!, {
+            ...(tagArr ? { tags: tagArr } : {}),
+          })
+          setResults(items.map(i => ({
+            docId: i.docId,
+            name: i.name,
+            vdir: i.vdir,
+            skipped: i.skipped,
+          })))
+        }
+        else {
+          const items = await KbApi.ingestFiles(KB_DEFAULT_ID, others, {
+            ...(parent != null ? { parentNodeId: parent } : {}),
+            ...(tagArr ? { tags: tagArr } : {}),
+          })
+          setResults(items.map(i => ({
+            docId: i.docId,
+            name: i.name,
+            vdir: i.vdir,
+            skipped: i.skipped,
+          })))
+        }
       }
       else if (tab === 'zip') {
         if (!zipFile)
@@ -230,10 +252,13 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
 
           {tab === 'files' && (
             <label className="block">
-              <span className="mb-1 block text-xs text-slate-400">选择文件（支持 .md/.docx/.pdf/.html/.txt）</span>
+              <span className="mb-1 block text-xs text-slate-400">
+                选择文件（.md/.docx/.pdf/.html/.txt；zip 请用「压缩包」页签）
+              </span>
               <input
                 type="file"
                 multiple
+                accept=".md,.markdown,.docx,.pdf,.html,.htm,.txt"
                 onChange={e => setFileList(e.target.files)}
                 className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-slate-800 file:px-3 file:py-1.5 file:text-slate-200 hover:file:bg-slate-700"
               />
@@ -242,7 +267,9 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
 
           {tab === 'zip' && (
             <label className="block">
-              <span className="mb-1 block text-xs text-slate-400">选择 zip 压缩包（按包内目录结构还原，最多递归 5 层；目标文件夹不生效）</span>
+              <span className="mb-1 block text-xs text-slate-400">
+                选择 zip（仅导入包内 .md/.markdown，按目录还原，最多 5 层；目标文件夹不生效）
+              </span>
               <input
                 type="file"
                 accept=".zip"

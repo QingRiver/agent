@@ -153,26 +153,27 @@ export class KbApi {
     files: File[],
     opts?: { parentNodeId?: string, tags?: string[] },
   ) {
-    const form = new FormData()
-    for (const f of files)
-      form.append('files', f)
-    form.append('kbId', kbId)
-    if (opts?.parentNodeId)
-      form.append('parentNodeId', opts.parentNodeId)
-    if (opts?.tags?.length)
-      form.append('tags', opts.tags.join(','))
-    const res = await api.kb.ingest.files.$post({ form })
+    // hono client 的 form 须为普通对象（会自行 new FormData）；传 FormData 实例时 Object.entries 为空
+    const res = await api.kb.ingest.files.$post({
+      form: {
+        files,
+        kbId,
+        ...(opts?.parentNodeId != null ? { parentNodeId: opts.parentNodeId } : {}),
+        ...(opts?.tags?.length ? { tags: opts.tags.join(',') } : {}),
+      },
+    })
     return (await successData(res)).items
   }
 
   /** zip 压缩包上传（multipart），按包内目录结构还原成文件夹树 */
   static async ingestZip(kbId: string, file: File, opts?: { tags?: string[] }) {
-    const form = new FormData()
-    form.append('file', file)
-    form.append('kbId', kbId)
-    if (opts?.tags?.length)
-      form.append('tags', opts.tags.join(','))
-    const res = await api.kb.ingest.zip.$post({ form })
+    const res = await api.kb.ingest.zip.$post({
+      form: {
+        file,
+        kbId,
+        ...(opts?.tags?.length ? { tags: opts.tags.join(',') } : {}),
+      },
+    })
     return (await successData(res)).items
   }
 

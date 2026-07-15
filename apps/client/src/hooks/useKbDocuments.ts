@@ -39,5 +39,10 @@ export function useKbDocuments() {
     commit: KbStore.commit,
     createBlank: KbStore.createBlank,
     remove: KbStore.remove,
+    createFolder: KbStore.createFolder,
+    renameFolder: KbStore.renameFolder,
+    moveFolder: KbStore.moveFolder,
+    removeFolder: KbStore.removeFolder,
+    moveDoc: KbStore.moveDoc,
   }
 }

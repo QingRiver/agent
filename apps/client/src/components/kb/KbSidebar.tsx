@@ -1,8 +1,7 @@
-import type { KbTreeNode } from './kbTree'
 import { useKbDocuments } from '@hooks/useKbDocuments'
-import { isDocDirty } from '@stores/kb-store'
-import { ChevronDown, ChevronRight, FileText, Folder, Plus, RefreshCw, Search, Settings2, Trash2 } from 'lucide-react'
+import { Plus, RefreshCw, Search, Settings2, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { KbFileTree } from './KbFileTree'
 import { KbImportDialog } from './KbImportDialog'
 import { KbTagManager } from './KbTagManager'
 import { buildKbTree } from './kbTree'
@@ -31,81 +30,6 @@ function writeLsExpanded(ids: string[]): void {
   }
 }
 
-function TreeNodes({
-  nodes,
-  depth,
-  expanded,
-  activeId,
-  onToggle,
-  onSelect,
-}: {
-  nodes: KbTreeNode[]
-  depth: number
-  expanded: Set<string>
-  activeId: string | null
-  onToggle: (id: string) => void
-  onSelect: (id: string) => void
-}) {
-  return (
-    <>
-      {nodes.map((node) => {
-        if (node.kind === 'folder') {
-          const open = expanded.has(node.id)
-          return (
-            <div key={`f-${node.id}`}>
-              <button
-                type="button"
-                onClick={() => onToggle(node.id)}
-                className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-sm text-slate-300 hover:bg-slate-800"
-                style={{ paddingLeft: 8 + depth * 12 }}
-              >
-                {open
-                  ? <ChevronDown className="size-3.5 shrink-0 text-slate-500" />
-                  : <ChevronRight className="size-3.5 shrink-0 text-slate-500" />}
-                <Folder className="size-3.5 shrink-0 text-slate-500" />
-                <span className="truncate">{node.name}</span>
-              </button>
-              {open && (
-                <TreeNodes
-                  nodes={node.children}
-                  depth={depth + 1}
-                  expanded={expanded}
-                  activeId={activeId}
-                  onToggle={onToggle}
-                  onSelect={onSelect}
-                />
-              )}
-            </div>
-          )
-        }
-
-        const dirty = isDocDirty(node.doc)
-        const selected = node.id === activeId
-        return (
-          <button
-            key={`d-${node.id}`}
-            type="button"
-            onClick={() => onSelect(node.id)}
-            className={`flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-800 ${
-              selected ? 'bg-slate-800 text-slate-100' : 'text-slate-300'
-            }`}
-            style={{ paddingLeft: 8 + depth * 12 }}
-          >
-            <FileText className="size-3.5 shrink-0 text-slate-500" />
-            <span className="min-w-0 flex-1 truncate">{node.name}</span>
-            {dirty && (
-              <span
-                className="size-1.5 shrink-0 rounded-full bg-amber-400"
-                title="有未提交改动"
-              />
-            )}
-          </button>
-        )
-      })}
-    </>
-  )
-}
-
 export function KbSidebar({
   recallOpen = false,
   onToggleRecall,
@@ -125,6 +49,11 @@ export function KbSidebar({
     select,
     toggleTag,
     remove,
+    createFolder,
+    renameFolder,
+    moveFolder,
+    removeFolder,
+    moveDoc,
   } = useKbDocuments()
 
   const tree = useMemo(() => buildKbTree(nodes, filteredDocs), [nodes, filteredDocs])
@@ -153,6 +82,17 @@ export function KbSidebar({
     })
   }
 
+  function ensureExpanded(id: string) {
+    setExpanded((prev) => {
+      if (prev.has(id))
+        return prev
+      const next = new Set(prev)
+      next.add(id)
+      writeLsExpanded([...next])
+      return next
+    })
+  }
+
   async function onDeleteConfirmed() {
     if (!activeId)
       return
@@ -163,6 +103,13 @@ export function KbSidebar({
     catch {
       // error 已写入 store
     }
+  }
+
+  async function onCreateFolder(parentId: string | null, name: string) {
+    const node = await createFolder(name, parentId)
+    if (parentId)
+      ensureExpanded(parentId)
+    ensureExpanded(node.id)
   }
 
   return (
@@ -263,25 +210,30 @@ export function KbSidebar({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {isLoading && (
-          <p className="px-2 py-4 text-sm text-slate-500">加载中…</p>
-        )}
-        {error != null && (
-          <p className="px-2 py-4 text-sm text-red-400">{error}</p>
-        )}
-        {!isLoading && tree.length === 0 && (
-          <p className="px-2 py-4 text-sm text-slate-500">暂无文档</p>
-        )}
-        <TreeNodes
-          nodes={tree}
-          depth={0}
-          expanded={expanded}
-          activeId={activeId}
-          onToggle={toggleFolder}
-          onSelect={select}
-        />
-      </div>
+      {isLoading && (
+        <p className="px-2 py-2 text-sm text-slate-500">加载中…</p>
+      )}
+      {error != null && (
+        <p className="px-2 py-2 text-sm text-red-400">{error}</p>
+      )}
+      {!isLoading && tree.length === 0 && (
+        <p className="px-2 py-2 text-sm text-slate-500">
+          暂无文档。可用顶部「引入」添加，或在下方新建文件夹。
+        </p>
+      )}
+      <KbFileTree
+        nodes={nodes}
+        tree={tree}
+        expanded={expanded}
+        activeId={activeId}
+        onToggle={toggleFolder}
+        onSelect={select}
+        onCreateFolder={onCreateFolder}
+        onRenameFolder={renameFolder}
+        onDeleteFolder={removeFolder}
+        onMoveFolder={moveFolder}
+        onMoveDoc={moveDoc}
+      />
       <KbImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
       <KbTagManager open={tagManagerOpen} onClose={() => setTagManagerOpen(false)} />
     </aside>

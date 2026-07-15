@@ -13,6 +13,11 @@ function requireApiKey(apiKey?: string): string {
   return key
 }
 
+/** 去掉孤立 surrogate，避免 slice 切坏 emoji 后上游 embeddings 直接 400 */
+export function sanitizeEmbedText(text: string): string {
+  return text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')
+}
+
 export async function embedTexts(
   texts: string[],
   options: EmbeddingClientOptions = {},
@@ -23,6 +28,7 @@ export async function embedTexts(
   const apiKey = requireApiKey(options.apiKey)
   const baseUrl = options.baseUrl ?? env.SILICONFLOW_BASE_URL
   const model = options.model ?? env.KB_EMBEDDING_MODEL
+  const input = texts.map(sanitizeEmbedText)
 
   const response = await fetch(`${baseUrl}/v1/embeddings`, {
     method: 'POST',
@@ -32,7 +38,7 @@ export async function embedTexts(
     },
     body: JSON.stringify({
       model,
-      input: texts,
+      input,
       encoding_format: 'float',
     }),
   })

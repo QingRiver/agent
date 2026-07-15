@@ -56,3 +56,41 @@ export function buildKbTree(nodes: KbNodeRow[], docs: KbDocSummary[]): KbTreeNod
 
   return build(null)
 }
+
+/** nodeId 是否在 ancestorId 子树内（含自身） */
+export function isUnderFolder(
+  nodes: KbNodeRow[],
+  ancestorId: string,
+  nodeId: string,
+): boolean {
+  if (ancestorId === nodeId)
+    return true
+  const byId = new Map(nodes.map(n => [n.id, n]))
+  let cur: string | null = nodeId
+  const guard = new Set<string>()
+  while (cur != null && !guard.has(cur)) {
+    if (cur === ancestorId)
+      return true
+    guard.add(cur)
+    cur = byId.get(cur)?.parentId ?? null
+  }
+  return false
+}
+
+/** 文件夹能否移到 targetParentId（含根 null）；禁止环与无变更 */
+export function canMoveFolderTo(
+  nodes: KbNodeRow[],
+  folderId: string,
+  targetParentId: string | null,
+): boolean {
+  const folder = nodes.find(n => n.id === folderId)
+  if (!folder)
+    return false
+  if (folder.parentId === targetParentId)
+    return false
+  if (targetParentId == null)
+    return true
+  if (targetParentId === folderId)
+    return false
+  return !isUnderFolder(nodes, folderId, targetParentId)
+}

@@ -21,6 +21,8 @@ import { db } from '../db/drizzle'
 import { kbChunks, kbDocuments, kbNodes, kbTags } from '../db/schema'
 
 const SUPPORTED_EXTENSIONS = new Set(['.md', '.markdown', '.docx', '.pdf', '.html', '.htm', '.txt'])
+/** zip 导入仅收 Markdown，避免把包内杂项/Office 丢给 markitdown */
+const ZIP_INGEST_EXTENSIONS = new Set(['.md', '.markdown'])
 /** ingestFromPath 相对起点最多下钻的子目录层数（根目录本身为第 0 层） */
 const INGEST_PATH_MAX_DEPTH = 5
 /** commitBatch 并发提交数（受上游 LLM/embedding 限流约束，保守取 5） */
@@ -123,6 +125,24 @@ function sanitizePathSegments(segments: string[]): string[] {
     clean.push(seg)
   }
   return clean
+}
+
+/** macOS / Windows 压缩包噪音：__MACOSX、AppleDouble(._*)、.DS_Store 等，不当文档导入 */
+function isJunkZipEntry(entryPath: string): boolean {
+  const parts = entryPath.split(/[/\\]/).filter(Boolean)
+  for (const part of parts) {
+    if (part === '__MACOSX' || part === '.DS_Store' || part === 'Thumbs.db')
+      return true
+    // AppleDouble 资源叉：._PP.md 等，正文含 \0，写入 PG UTF8 会炸
+    if (part.startsWith('._'))
+      return true
+  }
+  return false
+}
+
+/** PG text 不允许 NUL；清理 markitdown / 二进制伪文本 */
+function sanitizeTextContent(text: string): string {
+  return text.replaceAll('\0', '')
 }
 
 function nodeRow(row: typeof kbNodes.$inferSelect): KbNodeRow {
@@ -941,7 +961,7 @@ export class KbService {
       sourceDocId: id,
       ...(doc.vdir ? { baseUrl: doc.vdir } : {}),
     })
-    const chunks: KbChunk[] = chunkMarkdown(cleaned, { sourceDocId: id })
+    const chunks: KbChunk[] = await chunkMarkdown(cleaned, { sourceDocId: id })
     const pointIds = chunks.map(() => randomUUID())
 
     // 2. enrich（可选）
@@ -1028,7 +1048,23 @@ export class KbService {
   }): Promise<KbIngestResultItem[]> {
     const results: KbIngestResultItem[] = []
     for (const file of args.files) {
-      const markdown = await loadDocumentMarkdown(file.buffer, file.filename)
+      const ext = path.extname(file.filename).toLowerCase()
+      if (ext === '.zip') {
+        throw new Error(
+          `「${file.filename}」是 zip 压缩包，请改用「压缩包」引入（会按目录还原结构）；`
+          + `多文件上传不支持直接丢给 markitdown 解压`,
+        )
+      }
+      if (!SUPPORTED_EXTENSIONS.has(ext)) {
+        throw new Error(
+          `不支持的文件类型「${file.filename}」（扩展名 ${ext || '(无)'}）；`
+          + `支持 ${[...SUPPORTED_EXTENSIONS].join(' ')}`,
+        )
+      }
+
+      const markdown = sanitizeTextContent(
+        await loadDocumentMarkdown(file.buffer, file.filename),
+      )
       const cleaned = cleanMarkdown(markdown, { sourceDocId: 'pending', ...(args.parentNodeId ? {} : {}) })
       const draftHash = hashContent(cleaned)
       const name = path.parse(file.filename).name
@@ -1092,7 +1128,8 @@ export class KbService {
 
     const entries = Object.values(jszip.files)
       .filter(f => !f.dir)
-      .filter(f => SUPPORTED_EXTENSIONS.has(path.extname(f.name).toLowerCase()))
+      .filter(f => !isJunkZipEntry(f.name))
+      .filter(f => ZIP_INGEST_EXTENSIONS.has(path.extname(f.name).toLowerCase()))
       .sort((a, b) => a.name.localeCompare(b.name))
 
     for (const entry of entries) {
@@ -1106,26 +1143,38 @@ export class KbService {
       }
       if (segments.length > INGEST_PATH_MAX_DEPTH + 1)
         continue
+      // 规范化后仍可能留下噪音段名（如仅剩 ._foo.md）
+      if (isJunkZipEntry(segments.join('/')))
+        continue
 
-      const buffer = Buffer.from(await entry.async('uint8array'))
-      const folderSegments = segments.slice(0, -1)
-      const filename = segments[segments.length - 1]!
-      const parentNodeId = folderSegments.length
-        ? (await KbService.ensureNodePath({
-            kbId: args.kbId,
-            segments: folderSegments,
-            ...(args.owner != null ? { owner: args.owner } : {}),
-          })) ?? null
-        : null
+      try {
+        const buffer = Buffer.from(await entry.async('uint8array'))
+        const folderSegments = segments.slice(0, -1)
+        const filename = segments[segments.length - 1]!
+        const parentNodeId = folderSegments.length
+          ? (await KbService.ensureNodePath({
+              kbId: args.kbId,
+              segments: folderSegments,
+              ...(args.owner != null ? { owner: args.owner } : {}),
+            })) ?? null
+          : null
 
-      const items = await KbService.ingestFiles({
-        kbId: args.kbId,
-        files: [{ buffer, filename }],
-        ...(parentNodeId != null ? { parentNodeId } : {}),
-        ...(args.owner != null ? { owner: args.owner } : {}),
-        ...(args.tags ? { tags: args.tags } : {}),
-      })
-      results.push(...items)
+        const items = await KbService.ingestFiles({
+          kbId: args.kbId,
+          files: [{ buffer, filename }],
+          ...(parentNodeId != null ? { parentNodeId } : {}),
+          ...(args.owner != null ? { owner: args.owner } : {}),
+          ...(args.tags ? { tags: args.tags } : {}),
+        })
+        results.push(...items)
+      }
+      catch (err) {
+        // 单文件失败不中断整包（常见：个别坏文件 / 非文本）
+        console.warn(
+          `[kb] ingestFromZip skip ${entry.name}:`,
+          err instanceof Error ? err.message : err,
+        )
+      }
     }
     return results
   }

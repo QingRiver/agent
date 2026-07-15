@@ -230,15 +230,30 @@ describe('kb PG 逻辑', () => {
     expect(items.some(i => i.name === 'too-deep')).toBe(false)
   })
 
-  it('ingestFromZip 只导入支持扩展名的文件', async () => {
+  it('ingestFromZip 只导入 .md/.markdown', async () => {
     const zip = await makeZip({
       'readme.md': '# readme',
+      'notes.markdown': '# notes',
       'image.png': 'fake-png',
       'data.json': '{}',
       'sub/notes.txt': 'notes',
+      'doc.docx': 'fake-docx',
     })
     const items = await KbService.ingestFromZip({ kbId, zip, owner: TEST_USER.id })
     expect(items.map(i => i.name).sort()).toEqual(['notes', 'readme'])
+  })
+
+  it('ingestFromZip 忽略 __MACOSX / AppleDouble / .DS_Store', async () => {
+    const zip = await makeZip({
+      'wiki/good.md': '# good',
+      '__MACOSX/wiki/._PP.md': '\u0000ATTR garbage',
+      '__MACOSX/._wiki': '\u0000',
+      'wiki/.DS_Store': 'store',
+      'wiki/._hidden.md': '\u0000appledouble',
+    })
+    const items = await KbService.ingestFromZip({ kbId, zip, owner: TEST_USER.id })
+    expect(items.map(i => i.name)).toEqual(['good'])
+    expect(items[0]!.vdir).toBe('wiki/good')
   })
 
   it('saveDraft 把 error 复位 draft 并清 error', async () => {

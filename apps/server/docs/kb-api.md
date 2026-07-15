@@ -155,7 +155,7 @@
 zip 压缩包上传导入（`multipart/form-data`，按包内目录结构还原，**最多递归 5 层**子目录）。
 - 字段：`file`（File，zip）、`kbId`（必填）、`tags?`（逗号分隔字符串）
 - 解压遍历 entry，相对路径段 → `ensureNodePath` 建文件夹链（挂根级）→ 同 `ingest/files` 流程
-- 支持 `.md/.markdown/.docx/.pdf/.html/.htm/.txt`；自动忽略目录与 `__MACOSX`/`.DS_Store` 等
+- 支持 `.md/.markdown`（**仅 Markdown**）；自动忽略目录与 `__MACOSX`/`.DS_Store`/`._*` 等
 - zip slip 防护：含 `..` 逃逸段的 entry 跳过，不中断整批
 - 响应：`{ items: [...] }`
 

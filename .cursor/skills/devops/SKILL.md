@@ -22,6 +22,7 @@ Agent 执行启停、健康检查、E2E 时**必须**走此入口，不要直接
 | 健康检查 | `pnpm devops infra status kb` |
 | 停止知识库 infra | `pnpm devops infra down kb` |
 | E2E 账号 + kb 数据 + vitest | `pnpm devops e2e all` |
+| 清空某用户可见知识库（便于重导入） | `pnpm devops e2e clear-kb --email <addr>` |
 | kb agent SSE（需 server） | `pnpm devops e2e agent` |
 | hitl 图 vitest | `pnpm devops e2e hitl` |
 | hitl agent SSE（需 server） | `pnpm devops e2e hitl-agent` |
@@ -60,11 +61,18 @@ pnpm devops infra status all
 pnpm devops e2e all          # auth seed → kb seed → kb/hitl vitest（不含 agent SSE）
 pnpm devops e2e seed         # auth seed + kb seed
 pnpm devops e2e auth         # 写入 E2E 测试账号到 postgres（需 infra up postgres）
+pnpm devops e2e clear-kb --email you@example.com   # 清空该用户可见 KB（PG+Qdrant）
+pnpm devops e2e clear-kb --owner <userId>          # 同上，按 user id
+pnpm devops e2e clear-kb --all                     # 清空整库 env.KB_COLLECTION（重建 Qdrant collection）
+pnpm devops e2e clear-kb --email x --dry-run       # 只打印将删数量
 pnpm devops e2e kb           # apps/server kb.e2e（E2E=1，需 infra up kb + postgres）
 pnpm devops e2e hitl         # packages/graph hitlGraph vitest（不需 server）
 pnpm devops e2e agent        # kb CopilotKit SSE（需 pnpm dev + infra up kb + e2e seed）
 pnpm devops e2e hitl-agent   # hitl 4 步 interrupt + resume SSE（需 pnpm dev + e2e auth）
+pnpm devops e2e ui           # playwright UI（需 pnpm dev + e2e auth）
 ```
+
+> **clear-kb**：需 `infra up postgres` + qdrant；实现为 `apps/server/scripts/clear-kb.ts`，经 devops 转发。按 `--email`/`--owner` 只删该用户文档/文件夹/标签与对应向量；`--all` 删整库并重建 Qdrant collection。
 
 > **实现位置**：agent flow（`hitl-agent` / `agent`）的测试逻辑在 `packages/e2e/src/flows/`，经 `packages/e2e/src/runner.ts` 调度；devops 仅作调用入口（`pnpm exec tsx packages/e2e/src/runner.ts <flow>`）。新增 flow 改 `@agent/e2e`，不动 skill。
 

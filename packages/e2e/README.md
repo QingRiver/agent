@@ -31,6 +31,7 @@ src/
 - server 已启动：`pnpm dev`
 - E2E 账号已写入（server postgres）：`pnpm devops e2e auth`
 - 知识库 flow 另需：`pnpm devops infra up kb` + `pnpm devops e2e seed`
+- 清空某用户知识库后重导入：`pnpm devops e2e clear-kb --email <addr>`（需 postgres + qdrant）
 
 ## 运行
 
@@ -40,6 +41,7 @@ src/
 pnpm devops e2e hitl-agent
 pnpm devops e2e agent          # kb agent SSE
 pnpm devops e2e ui             # playwright 前端 UI（停 qdrant 验证错误条）
+pnpm devops e2e clear-kb --email you@example.com
 ```
 
 直接调 runner：

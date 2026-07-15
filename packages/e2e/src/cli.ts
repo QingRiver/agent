@@ -30,6 +30,8 @@ e2e — 端到端测试与种子数据
   agent            kb agent CopilotKit SSE（需 pnpm dev + e2e seed）
   hitl-agent       hitl agent SSE 全链路（需 pnpm dev + e2e auth）
   ui               playwright 前端 UI（需 pnpm dev + e2e auth，驱动真实浏览器）
+  clear-kb         清空知识库（需 postgres + qdrant）
+                   --email <addr> | --owner <id> | --all [--kb-id] [--dry-run]
 
 qlib — 行情数据（委托 scripts/qlib-*.ts）
   init             首次初始化
@@ -41,6 +43,7 @@ qlib — 行情数据（委托 scripts/qlib-*.ts）
   pnpm devops infra up kb
   pnpm devops infra status all
   pnpm devops e2e all
+  pnpm devops e2e clear-kb --email you@example.com
   pnpm devops qlib update
 `)
 }
@@ -52,6 +55,10 @@ const { values, positionals } = parseArgs({
     'date': { type: 'string' },
     'dry-run': { type: 'boolean', default: false },
     'help': { type: 'boolean', short: 'h', default: false },
+    'email': { type: 'string' },
+    'owner': { type: 'string' },
+    'all': { type: 'boolean', default: false },
+    'kb-id': { type: 'string' },
   },
 })
 
@@ -79,7 +86,24 @@ async function main(): Promise<void> {
     }
     case 'e2e': {
       const target = (sub ?? 'all') as Parameters<typeof runE2e>[0]
-      runE2e(target)
+      const opts: {
+        email?: string
+        owner?: string
+        all?: boolean
+        kbId?: string
+        dryRun?: boolean
+      } = {}
+      if (values.email != null)
+        opts.email = values.email
+      if (values.owner != null)
+        opts.owner = values.owner
+      if (values.all)
+        opts.all = true
+      if (values['kb-id'] != null)
+        opts.kbId = values['kb-id']
+      if (values['dry-run'])
+        opts.dryRun = true
+      runE2e(target, opts)
       break
     }
     case 'qlib': {

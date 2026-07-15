@@ -13,7 +13,7 @@ describe('cleaner', () => {
 })
 
 describe('chunker', () => {
-  it('splits markdown by headings and sliding window', () => {
+  it('按标题分段再用 RecursiveCharacterTextSplitter', async () => {
     const markdown = [
       '# 总则',
       '第一段内容。',
@@ -22,7 +22,7 @@ describe('chunker', () => {
       '工号 E12345 对应审批人。',
     ].join('\n')
 
-    const chunks = chunkMarkdown(markdown, {
+    const chunks = await chunkMarkdown(markdown, {
       sourceDocId: 'policy',
       maxChars: 40,
       overlapChars: 10,
@@ -38,5 +38,22 @@ describe('chunker', () => {
   it('hashContent is stable', () => {
     expect(hashContent('abc')).toBe(hashContent('abc'))
     expect(hashContent('abc')).not.toBe(hashContent('abd'))
+  })
+
+  it('长文本按软边界切开且不孤立 surrogate', async () => {
+    const emoji = '🧾'
+    const body = Array.from({ length: 40 }, (_, i) => `- [${emoji} 条目${i}](https://example.com/${i})`).join('\n')
+    const chunks = await chunkMarkdown(body, {
+      sourceDocId: 'emoji-doc',
+      maxChars: 80,
+      overlapChars: 10,
+    })
+    expect(chunks.length).toBeGreaterThan(1)
+    for (const c of chunks) {
+      expect(c.raw_text).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+      expect(c.raw_text).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/)
+      if (c.raw_text.includes(emoji[0]!))
+        expect(c.raw_text).toContain(emoji)
+    }
   })
 })

@@ -60,6 +60,9 @@ catalogs:
     '@langchain/openai':
       specifier: ^1.5.4
       version: 1.5.4
+    '@langchain/textsplitters':
+      specifier: ^1.0.1
+      version: 1.0.1
     '@modelcontextprotocol/sdk':
       specifier: ^1.29.0
       version: 1.29.0
@@ -642,9 +645,12 @@ importers:
       '@langchain/openai':
         specifier: 'catalog:'
         version: 1.5.4(@langchain/core@1.2.2(@opentelemetry/api@1.9.1)(openai@6.45.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0))(ws@8.21.0)
+      '@langchain/textsplitters':
+        specifier: 'catalog:'
+        version: 1.0.1(@langchain/core@1.2.2(@opentelemetry/api@1.9.1)(openai@6.45.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0))
       '@qdrant/js-client-rest':
         specifier: 'catalog:'
-        version: 1.18.0(typescript@7.0.1-rc)
+        version: 1.18.0(@typescript/typescript6@6.0.1)
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -2106,6 +2112,12 @@ packages:
 
   '@langchain/protocol@0.0.18':
     resolution: {integrity: sha512-XW1egQtPfsGI41w2AMZNFZrUIwFSQHTjVMZs0OaTpCAvht/QLoaPN8FQcsysMVypOhupG28J29yOorrc70otBQ==}
+
+  '@langchain/textsplitters@1.0.1':
+    resolution: {integrity: sha512-rheJlB01iVtrOUzttscutRgLybPH9qR79EyzBEbf1u97ljWyuxQfCwIWK+SjoQTM9O8M7GGLLRBSYE26Jmcoww==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@langchain/core': ^1.0.0
 
   '@lezer/common@1.5.2':
     resolution: {integrity: sha512-sxQE460fPZyU3sdc8lafxiPwJHBzZRy/udNFynGQky1SePYBdhkBl1kOagA9uT3pxR8K09bOrmTUqA9wb/PjSQ==}
@@ -8990,6 +9002,11 @@ snapshots:
 
   '@langchain/protocol@0.0.18': {}
 
+  '@langchain/textsplitters@1.0.1(@langchain/core@1.2.2(@opentelemetry/api@1.9.1)(openai@6.45.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0))':
+    dependencies:
+      '@langchain/core': 1.2.2(@opentelemetry/api@1.9.1)(openai@6.45.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0)
+      js-tiktoken: 1.0.21
+
   '@lezer/common@1.5.2': {}
 
   '@lezer/css@1.3.4':
@@ -9187,10 +9204,10 @@ snapshots:
 
   '@protobuf-ts/protoc@2.11.1': {}
 
-  '@qdrant/js-client-rest@1.18.0(typescript@7.0.1-rc)':
+  '@qdrant/js-client-rest@1.18.0(@typescript/typescript6@6.0.1)':
     dependencies:
       '@qdrant/openapi-typescript-fetch': 1.2.6
-      typescript: 7.0.1-rc
+      typescript: '@typescript/typescript6@6.0.1'
       undici: 6.27.0
 
   '@qdrant/openapi-typescript-fetch@1.2.6': {}

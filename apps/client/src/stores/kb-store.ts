@@ -327,4 +327,73 @@ export class KbStore {
       writeLs(LS_ACTIVE, null)
     }
   }
+
+  // ---------- 文件夹节点 ----------
+
+  static async createFolder(name: string, parentId?: string | null): Promise<KbNodeRow> {
+    const store = KbStore.store()
+    store.set(KbStore.errorAtom, null)
+    try {
+      const node = await KbApi.createNode(KB_DEFAULT_ID, { name, parentId })
+      store.set(KbStore.nodesAtom, prev => [...prev, node])
+      return node
+    }
+    catch (e) {
+      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
+      throw e
+    }
+  }
+
+  static async renameFolder(id: string, name: string): Promise<void> {
+    const store = KbStore.store()
+    store.set(KbStore.errorAtom, null)
+    try {
+      const node = await KbApi.renameNode(id, name)
+      store.set(KbStore.nodesAtom, prev => prev.map(n => n.id === id ? node : n))
+      // 子树 vdir 已变：刷新文档摘要
+      const docs = await KbApi.listDocs(KB_DEFAULT_ID)
+      store.set(KbStore.docsAtom, docs)
+    }
+    catch (e) {
+      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
+      throw e
+    }
+  }
+
+  static async moveFolder(id: string, parentId: string | null): Promise<void> {
+    const store = KbStore.store()
+    store.set(KbStore.errorAtom, null)
+    try {
+      const node = parentId == null
+        ? await KbApi.moveNodeToRoot(id)
+        : await KbApi.moveNode(id, parentId)
+      store.set(KbStore.nodesAtom, prev => prev.map(n => n.id === id ? node : n))
+      const docs = await KbApi.listDocs(KB_DEFAULT_ID)
+      store.set(KbStore.docsAtom, docs)
+    }
+    catch (e) {
+      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
+      throw e
+    }
+  }
+
+  /** 删文件夹：子文件夹 cascade；子文档 parent 变 null（根级） */
+  static async removeFolder(id: string): Promise<void> {
+    const store = KbStore.store()
+    store.set(KbStore.errorAtom, null)
+    try {
+      await KbApi.deleteNode(id)
+      // 整棵节点树与文档 parent/vdir 可能批量变化，直接全量刷新
+      await KbStore.refresh()
+    }
+    catch (e) {
+      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
+      throw e
+    }
+  }
+
+  /** 文档改挂载父级（跨文件夹 / 移根）；不做同级排序 */
+  static async moveDoc(id: string, parentNodeId: string | null): Promise<void> {
+    await KbStore.updateMeta(id, { parentNodeId })
+  }
 }

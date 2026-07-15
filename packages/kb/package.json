@@ -13,6 +13,7 @@
     "@agent/env": "workspace:*",
     "@langchain/core": "catalog:",
     "@langchain/openai": "catalog:",
+    "@langchain/textsplitters": "catalog:",
     "@qdrant/js-client-rest": "catalog:",
     "zod": "catalog:"
   },

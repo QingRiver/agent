@@ -1,5 +1,6 @@
 import type { KbChunk } from '../types'
 import { createHash } from 'node:crypto'
+import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 
 export interface ChunkerOptions {
   sourceDocId: string
@@ -10,6 +11,42 @@ export interface ChunkerOptions {
 interface Section {
   heading_path: string[]
   body: string
+}
+
+/** 按 Unicode 码点计长，避免 emoji 等被当成两个「字」 */
+function codePointLength(text: string): number {
+  return [...text].length
+}
+
+/**
+ * 优先在段落 / 中英文句读处切开；最后才落到字符级。
+ * keepSeparator 交给 splitter 默认（true）。
+ */
+function createSectionSplitter(
+  chunkSize: number,
+  chunkOverlap: number,
+): RecursiveCharacterTextSplitter {
+  return new RecursiveCharacterTextSplitter({
+    chunkSize,
+    chunkOverlap,
+    lengthFunction: codePointLength,
+    separators: [
+      '\n\n',
+      '\n',
+      '。',
+      '！',
+      '？',
+      '；',
+      '，',
+      '. ',
+      '! ',
+      '? ',
+      '; ',
+      ', ',
+      ' ',
+      '',
+    ],
+  })
 }
 
 function parseHeading(line: string): { level: number, title: string } | null {
@@ -27,26 +64,34 @@ function parseHeading(line: string): { level: number, title: string } | null {
   return title ? { level, title } : null
 }
 
-export function chunkMarkdown(
+/**
+ * 先按 Markdown 标题分段（保留 heading_path），段内用 RecursiveCharacterTextSplitter 切窗。
+ */
+export async function chunkMarkdown(
   markdown: string,
   options: ChunkerOptions,
-): KbChunk[] {
+): Promise<KbChunk[]> {
   const maxChars = options.maxChars ?? 800
   const overlapChars = options.overlapChars ?? 120
+  const splitter = createSectionSplitter(maxChars, overlapChars)
   const sections = splitByHeadings(markdown)
   const chunks: KbChunk[] = []
   let chunkIndex = 0
 
   for (const section of sections) {
-    const windows = slidingWindows(section.body, maxChars, overlapChars)
-    for (const window of windows) {
+    const parts = await splitter.splitText(section.body)
+    for (const text of parts) {
+      const trimmed = text.trim()
+      if (!trimmed)
+        continue
       chunkIndex += 1
+      const pageNumber = extractPageNumber(trimmed)
       chunks.push({
         chunk_id: `${options.sourceDocId}#${chunkIndex}`,
         source_doc_id: options.sourceDocId,
         heading_path: section.heading_path,
-        raw_text: window.text,
-        page_number: window.pageNumber,
+        raw_text: trimmed,
+        ...(pageNumber !== undefined ? { page_number: pageNumber } : {}),
       })
     }
   }
@@ -93,47 +138,6 @@ function splitByHeadings(markdown: string): Section[] {
     sections.push({ heading_path: [], body: markdown.trim() })
 
   return sections
-}
-
-interface WindowSlice {
-  text: string
-  pageNumber?: number
-}
-
-function toWindowSlice(text: string): WindowSlice {
-  const pageNumber = extractPageNumber(text)
-  if (pageNumber === undefined)
-    return { text }
-  return { text, pageNumber }
-}
-
-function slidingWindows(
-  text: string,
-  maxChars: number,
-  overlapChars: number,
-): WindowSlice[] {
-  const normalized = text.trim()
-  if (!normalized)
-    return []
-
-  if (normalized.length <= maxChars)
-    return [toWindowSlice(normalized)]
-
-  const slices: WindowSlice[] = []
-  let start = 0
-
-  while (start < normalized.length) {
-    const end = Math.min(start + maxChars, normalized.length)
-    const slice = normalized.slice(start, end).trim()
-    if (slice)
-      slices.push(toWindowSlice(slice))
-
-    if (end >= normalized.length)
-      break
-    start = Math.max(end - overlapChars, start + 1)
-  }
-
-  return slices
 }
 
 function extractPageNumber(text: string): number | undefined {

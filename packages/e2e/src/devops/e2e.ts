@@ -73,9 +73,41 @@ export function e2eAll(): void {
   console.log('\n[devops] 跳过 agent SSE（需另开终端 `pnpm dev` 后执行 `pnpm devops e2e agent` 或 `hitl-agent`）')
 }
 
-export type E2eTarget = 'all' | 'seed' | 'auth' | 'kb' | 'hitl' | 'agent' | 'hitl-agent' | 'ui'
+/** 清空知识库可见数据（按 email/owner，或 --all 整库） */
+export function e2eClearKb(opts: {
+  email?: string
+  owner?: string
+  all?: boolean
+  kbId?: string
+  dryRun?: boolean
+}): void {
+  console.log('[devops] e2e clear-kb')
+  const args = ['--filter', 'server', 'exec', 'tsx', 'scripts/clear-kb.ts']
+  if (opts.email)
+    args.push('--email', opts.email)
+  if (opts.owner)
+    args.push('--owner', opts.owner)
+  if (opts.all)
+    args.push('--all')
+  if (opts.kbId)
+    args.push('--kb-id', opts.kbId)
+  if (opts.dryRun)
+    args.push('--dry-run')
+  runInRepo('pnpm', args)
+}
 
-export function runE2e(target: E2eTarget): void {
+export type E2eTarget = 'all' | 'seed' | 'auth' | 'kb' | 'hitl' | 'agent' | 'hitl-agent' | 'ui' | 'clear-kb'
+
+export function runE2e(
+  target: E2eTarget,
+  opts?: {
+    email?: string
+    owner?: string
+    all?: boolean
+    kbId?: string
+    dryRun?: boolean
+  },
+): void {
   switch (target) {
     case 'all':
       e2eAll()
@@ -102,6 +134,27 @@ export function runE2e(target: E2eTarget): void {
     case 'ui':
       e2eUi()
       break
+    case 'clear-kb': {
+      const clearOpts: {
+        email?: string
+        owner?: string
+        all?: boolean
+        kbId?: string
+        dryRun?: boolean
+      } = {}
+      if (opts?.email != null)
+        clearOpts.email = opts.email
+      if (opts?.owner != null)
+        clearOpts.owner = opts.owner
+      if (opts?.all != null)
+        clearOpts.all = opts.all
+      if (opts?.kbId != null)
+        clearOpts.kbId = opts.kbId
+      if (opts?.dryRun != null)
+        clearOpts.dryRun = opts.dryRun
+      e2eClearKb(clearOpts)
+      break
+    }
     default:
       fail(`未知 e2e 目标: ${target}`)
   }
