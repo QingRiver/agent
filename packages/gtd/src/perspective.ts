@@ -1,33 +1,31 @@
+import type { FilterEvalContext } from './filter'
 import type {
   AvailabilityFilter,
   ComputedStatus,
-  FilterRule,
   GroupKey,
   GtdDocument,
   Perspective,
-  PerspectiveMatch,
   Project,
   SortKey,
   Task,
 } from './schema'
 import type { TaskTree } from './tree'
 import { computeStatus } from './availability'
+import { FILTER_FIELD, LEAF_OP, matchFilter, rawValue } from './filter'
 import { needsReview } from './review'
 import { buildTaskTree } from './tree'
 import {
   AVAILABILITY_FILTER,
   COMPUTED_STATUS,
   EXPLICIT_STATUS,
-  FILTER_FIELD,
-  FILTER_OP,
   GROUP_KEY,
-  PERSPECTIVE_MATCH,
   SORT_DIR,
   SORT_FIELD,
 } from './types'
 
 /**
  * 透视引擎（SPEC §5.5）。纯函数 renderPerspective 产出 RenderTree。
+ * 过滤求值核心逻辑（evalNode / rawValue）位于 ./filter（子模块，含完善单测）。
  */
 
 /** 渲染叶子项 */
@@ -50,149 +48,6 @@ export interface RenderContext {
   now: Date
   dueSoonIntervalMs: number
   statusCache: Map<string, ComputedStatus>
-}
-
-/** 取 task 在某 field 上的原始值（过滤/排序共用） */
-function rawValue(task: Task, field: string, doc: GtdDocument): unknown {
-  switch (field) {
-    case FILTER_FIELD.STATUS: return task.status
-    case FILTER_FIELD.PROJECT: return task.projectId
-    case FILTER_FIELD.FOLDER: {
-      const proj = doc.projects.find(p => p.id === task.projectId)
-      return proj?.folderId ?? null
-    }
-    case FILTER_FIELD.TAG: return task.tagIds
-    case FILTER_FIELD.DEFER_DATE: return task.deferDate
-    case FILTER_FIELD.DUE_DATE: return task.dueDate
-    case FILTER_FIELD.FLAGGED: return task.flagged
-    case FILTER_FIELD.ESTIMATE: return task.estimateMinutes
-    default: return null
-  }
-}
-
-function isEmptyValue(v: unknown): boolean {
-  return v == null || (Array.isArray(v) && v.length === 0)
-}
-
-function isDateField(field: string): boolean {
-  return field === FILTER_FIELD.DEFER_DATE || field === FILTER_FIELD.DUE_DATE
-}
-
-function isEstimateField(field: string): boolean {
-  return field === FILTER_FIELD.ESTIMATE
-}
-
-function isTagField(field: string): boolean {
-  return field === FILTER_FIELD.TAG
-}
-
-function evaluateEq(field: string, v: unknown, target: unknown): boolean {
-  if (isTagField(field))
-    return Array.isArray(v) && typeof target === 'string' && v.includes(target)
-  return v === target
-}
-
-function evaluateNe(field: string, v: unknown, target: unknown): boolean {
-  if (isTagField(field))
-    return !Array.isArray(v) || !v.includes(target as string)
-  return v !== target
-}
-
-function evaluateIn(_field: string, v: unknown, target: unknown): boolean {
-  if (!Array.isArray(target))
-    return false
-  if (Array.isArray(v))
-    return target.some(t => (v as unknown[]).includes(t))
-  return target.includes(v)
-}
-
-function evaluateBetween(field: string, v: unknown, target: unknown): boolean {
-  if (!Array.isArray(target) || target.length !== 2 || isEmptyValue(v))
-    return false
-  if (isEstimateField(field)) {
-    const n = v as number
-    const lo = target[0] as number
-    const hi = target[1] as number
-    return n >= lo && n <= hi
-  }
-  if (isDateField(field)) {
-    const ms = new Date(v as string).getTime()
-    return ms >= new Date(target[0] as string).getTime()
-      && ms <= new Date(target[1] as string).getTime()
-  }
-  return false
-}
-
-function evaluateBefore(field: string, v: unknown, target: unknown): boolean {
-  if (v == null || target == null)
-    return false
-  if (isEstimateField(field))
-    return (v as number) < (target as number)
-  if (isDateField(field))
-    return new Date(v as string).getTime() < new Date(target as string).getTime()
-  return false
-}
-
-function evaluateAfter(field: string, v: unknown, target: unknown): boolean {
-  if (v == null || target == null)
-    return false
-  if (isEstimateField(field))
-    return (v as number) > (target as number)
-  if (isDateField(field))
-    return new Date(v as string).getTime() > new Date(target as string).getTime()
-  return false
-}
-
-/** 求值单条过滤规则对 task 是否命中（FilterField × Op 求值表，SPEC §5.5.3） */
-export function evaluateFilter(
-  task: Task,
-  rule: FilterRule,
-  doc: GtdDocument,
-  _now: Date,
-  _dueSoonIntervalMs: number,
-): boolean {
-  const v = rawValue(task, rule.field, doc)
-  const target = rule.value
-  switch (rule.op) {
-    case FILTER_OP.EQ:
-      return evaluateEq(rule.field, v, target)
-    case FILTER_OP.NE:
-      return evaluateNe(rule.field, v, target)
-    case FILTER_OP.IN:
-      return evaluateIn(rule.field, v, target)
-    case FILTER_OP.BETWEEN:
-      return evaluateBetween(rule.field, v, target)
-    case FILTER_OP.BEFORE:
-      return evaluateBefore(rule.field, v, target)
-    case FILTER_OP.AFTER:
-      return evaluateAfter(rule.field, v, target)
-    case FILTER_OP.IS_NULL:
-      return isEmptyValue(v)
-    case FILTER_OP.IS_NOT_NULL:
-      return !isEmptyValue(v)
-    default: {
-      const _exhaustive: never = rule.op
-      void _exhaustive
-      return false
-    }
-  }
-}
-
-/** 按 matchMode(all=AND/any=OR) 聚合多条规则 */
-export function matchFilters(
-  task: Task,
-  rules: FilterRule[],
-  matchMode: PerspectiveMatch,
-  doc: GtdDocument,
-  now: Date,
-  dueSoonIntervalMs: number,
-): boolean {
-  if (rules.length === 0)
-    return true
-  const results = rules.map(r => evaluateFilter(task, r, doc, now, dueSoonIntervalMs))
-  return matchMode === PERSPECTIVE_MATCH.ALL
-    ? results.every(Boolean)
-    : results.some(Boolean)
 }
 
 function isActionable(computed: ComputedStatus): boolean {
@@ -274,7 +129,7 @@ export function applyAvailabilityFilter(
   }, ctx)
 }
 
-/** 内置透视 id 的额外过滤（SPEC §5.5.8 中无法仅用 filterRules 表达的部分） */
+/** 内置透视 id 的额外过滤（SPEC §5.5.8 中无法仅用 filter 表达的部分） */
 export function applyBuiltinFilter(
   tasks: Task[],
   perspective: Perspective,
@@ -428,11 +283,10 @@ export function renderPerspective(
     dueSoonIntervalMs,
     statusCache: new Map(),
   }
+  const evalCtx: FilterEvalContext = { doc }
 
   let tasks = applyBaseFilter(doc.tasks, perspective, ctx)
-  tasks = tasks.filter(t =>
-    matchFilters(t, perspective.filterRules, perspective.matchMode, doc, now, dueSoonIntervalMs),
-  )
+  tasks = tasks.filter(t => matchFilter(t, perspective.filter, evalCtx))
   tasks = applyBuiltinFilter(tasks, perspective, doc, now, dueSoonIntervalMs)
 
   const expandedIds = new Set(expandAncestors(tasks.map(t => t.id), tree))
@@ -449,8 +303,7 @@ function builtin(id: string, name: string, overrides: Partial<Perspective> = {})
     id,
     name,
     icon: null,
-    matchMode: PERSPECTIVE_MATCH.ALL,
-    filterRules: [],
+    filter: null,
     groupBy: [],
     sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
     availabilityFilter: AVAILABILITY_FILTER.AVAILABLE,
@@ -468,9 +321,7 @@ export function builtinPerspectives(): Perspective[] {
   return [
     builtin('inbox', '收件箱', {
       availabilityFilter: AVAILABILITY_FILTER.REMAINING,
-      filterRules: [
-        { field: FILTER_FIELD.PROJECT, op: FILTER_OP.IS_NULL, value: null },
-      ],
+      filter: { op: LEAF_OP.EMPTY, field: FILTER_FIELD.PROJECT },
       sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
     }),
     builtin('projects', '项目', {
@@ -486,7 +337,7 @@ export function builtinPerspectives(): Perspective[] {
       sortBy: [{ field: SORT_FIELD.DUE_DATE, dir: SORT_DIR.ASC }],
     }),
     builtin('flagged', '旗标', {
-      filterRules: [{ field: FILTER_FIELD.FLAGGED, op: FILTER_OP.EQ, value: true }],
+      filter: { op: LEAF_OP.IS, field: FILTER_FIELD.FLAGGED, value: true },
       sortBy: [
         { field: SORT_FIELD.DUE_DATE, dir: SORT_DIR.ASC },
         { field: SORT_FIELD.FLAGGED, dir: SORT_DIR.DESC },

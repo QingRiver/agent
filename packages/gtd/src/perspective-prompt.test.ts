@@ -6,13 +6,13 @@ import {
   PROMPT_NEGATIVE_FIXTURES,
   PROMPT_POSITIVE_FIXTURES,
 } from './__tests__/perspective-prompt-fixtures'
+import { LEAF_OP } from './filter'
 import { formatFilterMatrixMarkdown, validatePerspectiveInput } from './perspective-input'
 import {
   PERSPECTIVE_PROMPT_TEMPLATE,
   renderPerspectivePrompt,
   renderPerspectivePromptWithDefaults,
 } from './perspective-prompt'
-import { FILTER_FIELD, FILTER_OP } from './types'
 
 describe('perspective prompt fixtures', () => {
   for (const fx of PROMPT_POSITIVE_FIXTURES) {
@@ -55,7 +55,7 @@ describe('renderPerspectivePrompt', () => {
   it('矩阵包含 flagged 合法运算符', () => {
     const matrix = formatFilterMatrixMarkdown()
     expect(matrix).toContain('`flagged`')
-    expect(matrix).toContain(`${FILTER_OP.EQ}, ${FILTER_OP.NE}`)
-    expect(matrix).not.toContain(`${FILTER_FIELD.FLAGGED} | ${FILTER_OP.BETWEEN}`)
+    expect(matrix).toContain(`${LEAF_OP.IS}, ${LEAF_OP.IS_NOT}`)
+    expect(matrix).not.toContain(`flagged\` | ${LEAF_OP.WITHIN}`)
   })
 })

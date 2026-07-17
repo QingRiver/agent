@@ -364,8 +364,7 @@ export class DrizzleGtdRepository implements GtdRepository {
         set: {
           name: row.name,
           icon: row.icon,
-          matchMode: row.matchMode,
-          filterRules: row.filterRules,
+          filter: row.filter,
           groupBy: row.groupBy,
           sortBy: row.sortBy,
           availabilityFilter: row.availabilityFilter,

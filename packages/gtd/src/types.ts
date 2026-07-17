@@ -156,17 +156,7 @@ export const ATTACHMENT_KIND_TEXT = {
 } as const
 
 // ===== 透视规则匹配模式 =====
-export const PERSPECTIVE_MATCH = {
-  /** 全部满足（AND） */
-  ALL: 'all',
-  /** 任一满足（OR） */
-  ANY: 'any',
-} as const
-
-export const PERSPECTIVE_MATCH_TEXT = {
-  [PERSPECTIVE_MATCH.ALL]: '全部满足',
-  [PERSPECTIVE_MATCH.ANY]: '任一满足',
-} as const
+// 已迁至 ./filter/schema.ts 的 LOGIC_OP（and/or/not 可嵌套）
 
 // ===== 可用性过滤档 =====
 export const AVAILABILITY_FILTER = {
@@ -216,35 +206,7 @@ export const FILTER_FIELD_TEXT = {
 } as const
 
 // ===== 过滤运算符 =====
-export const FILTER_OP = {
-  /** 等于 */
-  EQ: 'eq',
-  /** 不等于 */
-  NE: 'ne',
-  /** 属于 */
-  IN: 'in',
-  /** 区间 */
-  BETWEEN: 'between',
-  /** 早于 */
-  BEFORE: 'before',
-  /** 晚于 */
-  AFTER: 'after',
-  /** 为空 */
-  IS_NULL: 'isNull',
-  /** 非空 */
-  IS_NOT_NULL: 'isNotNull',
-} as const
-
-export const FILTER_OP_TEXT = {
-  [FILTER_OP.EQ]: '等于',
-  [FILTER_OP.NE]: '不等于',
-  [FILTER_OP.IN]: '属于',
-  [FILTER_OP.BETWEEN]: '区间',
-  [FILTER_OP.BEFORE]: '早于',
-  [FILTER_OP.AFTER]: '晚于',
-  [FILTER_OP.IS_NULL]: '为空',
-  [FILTER_OP.IS_NOT_NULL]: '非空',
-} as const
+// 已迁至 ./filter/schema.ts 的 LEAF_OP / LOGIC_OP（可嵌套 DSL）
 
 // ===== 分组键 =====
 export const GROUP_KEY = {

@@ -2,20 +2,18 @@ import { describe, expect, it } from 'vitest'
 import {
   DUE_SOON_MS,
   makeDoc,
-  makeFilterRule,
   makePerspective,
   makeSortKey,
   makeTask,
   NOW,
 } from './__tests__/fixtures'
+import { FILTER_FIELD, LEAF_OP, LOGIC_OP } from './filter'
 import {
   applyAvailabilityFilter,
   applyBuiltinFilter,
   builtinPerspectives,
-  evaluateFilter,
   expandAncestors,
   groupBy,
-  matchFilters,
   renderPerspective,
   sortTasks,
 } from './perspective'
@@ -23,155 +21,9 @@ import { buildTaskTree } from './tree'
 import {
   AVAILABILITY_FILTER,
   EXPLICIT_STATUS,
-  FILTER_FIELD,
-  FILTER_OP,
   GROUP_KEY,
-  PERSPECTIVE_MATCH,
   SORT_FIELD,
 } from './types'
-
-describe('evaluateFilter', () => {
-  it('status eq 命中', () => {
-    const t = makeTask({ status: EXPLICIT_STATUS.ACTIVE })
-    const rule = makeFilterRule({
-      field: FILTER_FIELD.STATUS,
-      op: FILTER_OP.EQ,
-      value: EXPLICIT_STATUS.ACTIVE,
-    })
-    expect(evaluateFilter(t, rule, makeDoc({ tasks: [t] }), NOW, DUE_SOON_MS)).toBe(true)
-  })
-
-  it('tag in 命中', () => {
-    const t = makeTask({ tagIds: ['tag-1'] })
-    const rule = makeFilterRule({
-      field: FILTER_FIELD.TAG,
-      op: FILTER_OP.IN,
-      value: ['tag-1'],
-    })
-    expect(evaluateFilter(t, rule, makeDoc({ tasks: [t] }), NOW, DUE_SOON_MS)).toBe(true)
-  })
-
-  it('dueDate between 命中', () => {
-    const t = makeTask({ dueDate: new Date(NOW.getTime() + 3600000).toISOString() })
-    const rule = makeFilterRule({
-      field: FILTER_FIELD.DUE_DATE,
-      op: FILTER_OP.BETWEEN,
-      value: [NOW.toISOString(), new Date(NOW.getTime() + 86400000).toISOString()],
-    })
-    expect(evaluateFilter(t, rule, makeDoc({ tasks: [t] }), NOW, DUE_SOON_MS)).toBe(true)
-  })
-
-  it('flagged eq true 命中', () => {
-    const t = makeTask({ flagged: true })
-    const rule = makeFilterRule({
-      field: FILTER_FIELD.FLAGGED,
-      op: FILTER_OP.EQ,
-      value: true,
-    })
-    expect(evaluateFilter(t, rule, makeDoc({ tasks: [t] }), NOW, DUE_SOON_MS)).toBe(true)
-  })
-
-  it('status scalar in 命中', () => {
-    const t = makeTask({ status: EXPLICIT_STATUS.ACTIVE })
-    const rule = makeFilterRule({
-      field: FILTER_FIELD.STATUS,
-      op: FILTER_OP.IN,
-      value: [EXPLICIT_STATUS.ACTIVE, EXPLICIT_STATUS.COMPLETED],
-    })
-    expect(evaluateFilter(t, rule, makeDoc({ tasks: [t] }), NOW, DUE_SOON_MS)).toBe(true)
-  })
-
-  it('tag eq 按包含语义命中', () => {
-    const t = makeTask({ tagIds: ['tag-1', 'tag-2'] })
-    const rule = makeFilterRule({
-      field: FILTER_FIELD.TAG,
-      op: FILTER_OP.EQ,
-      value: 'tag-2',
-    })
-    expect(evaluateFilter(t, rule, makeDoc({ tasks: [t] }), NOW, DUE_SOON_MS)).toBe(true)
-  })
-
-  it('tag ne 未包含时命中', () => {
-    const t = makeTask({ tagIds: ['tag-1'] })
-    const rule = makeFilterRule({
-      field: FILTER_FIELD.TAG,
-      op: FILTER_OP.NE,
-      value: 'tag-2',
-    })
-    expect(evaluateFilter(t, rule, makeDoc({ tasks: [t] }), NOW, DUE_SOON_MS)).toBe(true)
-  })
-
-  it('estimate before 不走日期解析', () => {
-    const t = makeTask({ estimateMinutes: 30 })
-    const rule = makeFilterRule({
-      field: FILTER_FIELD.ESTIMATE,
-      op: FILTER_OP.BEFORE,
-      value: 60,
-    })
-    expect(evaluateFilter(t, rule, makeDoc({ tasks: [t] }), NOW, DUE_SOON_MS)).toBe(true)
-  })
-
-  it('estimate between 数值区间', () => {
-    const t = makeTask({ estimateMinutes: 45 })
-    const rule = makeFilterRule({
-      field: FILTER_FIELD.ESTIMATE,
-      op: FILTER_OP.BETWEEN,
-      value: [30, 60],
-    })
-    expect(evaluateFilter(t, rule, makeDoc({ tasks: [t] }), NOW, DUE_SOON_MS)).toBe(true)
-  })
-
-  it('tag isNull 空数组视为无标签', () => {
-    const t = makeTask({ tagIds: [] })
-    const rule = makeFilterRule({
-      field: FILTER_FIELD.TAG,
-      op: FILTER_OP.IS_NULL,
-      value: null,
-    })
-    expect(evaluateFilter(t, rule, makeDoc({ tasks: [t] }), NOW, DUE_SOON_MS)).toBe(true)
-  })
-})
-
-describe('matchFilters', () => {
-  const flaggedRule = makeFilterRule({
-    field: FILTER_FIELD.FLAGGED,
-    op: FILTER_OP.EQ,
-    value: true,
-  })
-  const completedRule = makeFilterRule({
-    field: FILTER_FIELD.STATUS,
-    op: FILTER_OP.EQ,
-    value: EXPLICIT_STATUS.COMPLETED,
-  })
-
-  it('all: 全部满足才命中', () => {
-    const t = makeTask({ flagged: true, status: EXPLICIT_STATUS.ACTIVE })
-    const doc = makeDoc({ tasks: [t] })
-    const matched = matchFilters(
-      t,
-      [flaggedRule, completedRule],
-      PERSPECTIVE_MATCH.ALL,
-      doc,
-      NOW,
-      DUE_SOON_MS,
-    )
-    expect(matched).toBe(false)
-  })
-
-  it('any: 任一满足即命中', () => {
-    const t = makeTask({ flagged: true, status: EXPLICIT_STATUS.ACTIVE })
-    const doc = makeDoc({ tasks: [t] })
-    const matched = matchFilters(
-      t,
-      [flaggedRule, completedRule],
-      PERSPECTIVE_MATCH.ANY,
-      doc,
-      NOW,
-      DUE_SOON_MS,
-    )
-    expect(matched).toBe(true)
-  })
-})
 
 describe('applyAvailabilityFilter', () => {
   it('due_soon 在 available 档保留', () => {
@@ -207,26 +59,14 @@ describe('applyAvailabilityFilter', () => {
   it('remaining: 所有 active', () => {
     const t = makeTask({ id: 'a', status: EXPLICIT_STATUS.ACTIVE })
     const tree = buildTaskTree([t])
-    const out = applyAvailabilityFilter(
-      [t],
-      AVAILABILITY_FILTER.REMAINING,
-      tree,
-      NOW,
-      DUE_SOON_MS,
-    )
+    const out = applyAvailabilityFilter([t], AVAILABILITY_FILTER.REMAINING, tree, NOW, DUE_SOON_MS)
     expect(out).toHaveLength(1)
   })
 
   it('all: 全部', () => {
     const t = makeTask({ id: 'a', status: EXPLICIT_STATUS.COMPLETED })
     const tree = buildTaskTree([t])
-    const out = applyAvailabilityFilter(
-      [t],
-      AVAILABILITY_FILTER.ALL,
-      tree,
-      NOW,
-      DUE_SOON_MS,
-    )
+    const out = applyAvailabilityFilter([t], AVAILABILITY_FILTER.ALL, tree, NOW, DUE_SOON_MS)
     expect(out).toHaveLength(1)
   })
 })
@@ -289,6 +129,29 @@ describe('renderPerspective', () => {
     const item = groups[0]?.children[0]
     expect(item && 'computed' in item && item.computed).toBe('overdue')
   })
+
+  it('dSL 嵌套过滤：flagged AND dueDate within 命中', () => {
+    const earlier = new Date(NOW.getTime() - 86400000).toISOString()
+    const later = new Date(NOW.getTime() + 86400000).toISOString()
+    const hit = makeTask({ id: 'hit', flagged: true, dueDate: NOW.toISOString() })
+    const miss = makeTask({ id: 'miss', flagged: true, dueDate: null })
+    const doc = makeDoc({ tasks: [hit, miss] })
+    const p = makePerspective({
+      availabilityFilter: AVAILABILITY_FILTER.ALL,
+      showCompleted: true,
+      showDropped: true,
+      filter: {
+        op: LOGIC_OP.AND,
+        children: [
+          { op: LEAF_OP.IS, field: FILTER_FIELD.FLAGGED, value: true },
+          { op: LEAF_OP.WITHIN, field: FILTER_FIELD.DUE_DATE, value: [earlier, later] },
+        ],
+      },
+    })
+    const groups = renderPerspective(doc, p, NOW, DUE_SOON_MS)
+    const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null).filter(Boolean)
+    expect(ids).toEqual(['hit'])
+  })
 })
 
 describe('applyBuiltinFilter', () => {
@@ -305,5 +168,15 @@ describe('applyBuiltinFilter', () => {
 describe('builtinPerspectives', () => {
   it('返回 8 个内置透视', () => {
     expect(builtinPerspectives()).toHaveLength(8)
+  })
+
+  it('flagged 内置透视使用 DSL is 节点', () => {
+    const flagged = builtinPerspectives().find(x => x.id === 'flagged')!
+    expect(flagged.filter).toEqual({ op: LEAF_OP.IS, field: FILTER_FIELD.FLAGGED, value: true })
+  })
+
+  it('inbox 内置透视使用 DSL empty 节点', () => {
+    const inbox = builtinPerspectives().find(x => x.id === 'inbox')!
+    expect(inbox.filter).toEqual({ op: LEAF_OP.EMPTY, field: FILTER_FIELD.PROJECT })
   })
 })

@@ -322,18 +322,11 @@
           "primaryKey": false,
           "notNull": false
         },
-        "match_mode": {
-          "name": "match_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "filter_rules": {
-          "name": "filter_rules",
+        "filter": {
+          "name": "filter",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
+          "notNull": false
         },
         "group_by": {
           "name": "group_by",

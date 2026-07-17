@@ -193,14 +193,13 @@ export function taskToRow(task: Task, userId: string, repeatRule: RepeatRule | n
   }
 }
 
-// ---------- Perspective（filter_rules/sort_by jsonb；group_by text[]） ----------
+// ---------- Perspective（filter/sort_by jsonb；group_by text[]） ----------
 export function rowToPerspective(row: PerspectiveRow): Perspective {
   return PerspectiveSchema.parse({
     id: row.id,
     name: row.name,
     icon: row.icon,
-    matchMode: row.matchMode,
-    filterRules: row.filterRules as Perspective['filterRules'],
+    filter: row.filter as Perspective['filter'],
     groupBy: row.groupBy ?? [],
     sortBy: row.sortBy as Perspective['sortBy'],
     availabilityFilter: row.availabilityFilter,
@@ -218,8 +217,7 @@ export function perspectiveToRow(p: Perspective, userId: string): PerspectiveIns
     userId,
     name: p.name,
     icon: p.icon,
-    matchMode: p.matchMode,
-    filterRules: p.filterRules,
+    filter: p.filter,
     groupBy: p.groupBy,
     sortBy: p.sortBy,
     availabilityFilter: p.availabilityFilter,

@@ -1,4 +1,5 @@
 export * from './availability'
+export * from './filter'
 export * from './invariant'
 export * from './order'
 export * from './perspective'

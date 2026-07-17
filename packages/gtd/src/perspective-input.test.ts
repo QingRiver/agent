@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { FILTER_FIELD_OPS, LEAF_OP, LOGIC_OP } from './filter'
 import {
   allowedOpsForField,
-  FILTER_FIELD_OPS,
   PERSPECTIVE_INPUT_ERROR_CODE,
   PerspectiveInputSchema,
   PerspectiveQuerySchema,
@@ -12,7 +12,6 @@ import {
 } from './perspective-input'
 import {
   FILTER_FIELD,
-  FILTER_OP,
   SORT_DIR,
   SORT_FIELD,
 } from './types'
@@ -41,8 +40,8 @@ describe('fILTER_FIELD_OPS matrix', () => {
   })
 
   it('与导出常量一致', () => {
-    expect(FILTER_FIELD_OPS.status).toContain(FILTER_OP.IN)
-    expect(FILTER_FIELD_OPS.flagged).toEqual([FILTER_OP.EQ, FILTER_OP.NE])
+    expect(FILTER_FIELD_OPS.status).toContain(LEAF_OP.IS)
+    expect(FILTER_FIELD_OPS.flagged).toEqual([LEAF_OP.IS, LEAF_OP.IS_NOT])
   })
 })
 
@@ -100,50 +99,44 @@ describe('resolveEntityRef', () => {
   })
 })
 
+function baseInput(filter: unknown) {
+  return {
+    availabilityFilter: 'all',
+    showCompleted: false,
+    showDropped: false,
+    flaggedOnly: null,
+    filter,
+    groupBy: [],
+    sortBy: [],
+  }
+}
+
 describe('validatePerspectiveInput', () => {
   it('query 接受相对日期', () => {
-    const result = validatePerspectiveInput({
-      matchMode: 'all',
-      availabilityFilter: 'available',
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      filterRules: [{
-        field: FILTER_FIELD.DUE_DATE,
-        op: FILTER_OP.BEFORE,
-        value: { type: 'relative', value: 'tomorrow' },
-      }],
-      groupBy: [],
-      sortBy: [],
-    }, baseContext, { mode: 'query' })
+    const result = validatePerspectiveInput(baseInput({
+      op: LEAF_OP.BEFORE,
+      field: FILTER_FIELD.DUE_DATE,
+      value: { type: 'relative', value: 'tomorrow' },
+    }), baseContext, { mode: 'query' })
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.value.filterRules[0]?.value).toMatch(/^\d{4}-/)
+      expect((result.value.filter as { value: unknown }).value).toMatch(/^\d{4}-/)
     }
   })
 
   it('persist 拒绝相对日期', () => {
     const result = validatePerspectiveInput({
       name: '测试',
-      matchMode: 'all',
-      availabilityFilter: 'available',
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      filterRules: [{
+      ...baseInput({
+        op: LEAF_OP.BEFORE,
         field: FILTER_FIELD.DUE_DATE,
-        op: FILTER_OP.EQ,
         value: { type: 'relative', value: 'today' },
-      }],
-      groupBy: [],
-      sortBy: [],
+      }),
     }, baseContext, { mode: 'persist' })
     expect(result.ok).toBe(false)
     if (!result.ok) {
-      const hasDateTokenError = result.errors.some(
-        e => e.code === PERSPECTIVE_INPUT_ERROR_CODE.INVALID_DATE_TOKEN,
-      )
-      expect(hasDateTokenError).toBe(true)
+      const code = PERSPECTIVE_INPUT_ERROR_CODE.INVALID_DATE_TOKEN
+      expect(result.errors.some(e => e.code === code)).toBe(true)
     }
   })
 
@@ -151,35 +144,21 @@ describe('validatePerspectiveInput', () => {
     const iso = '2026-07-20T00:00:00.000Z'
     const result = validatePerspectiveInput({
       name: '截止',
-      matchMode: 'all',
-      availabilityFilter: 'all',
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      filterRules: [{
+      ...baseInput({
+        op: LEAF_OP.BEFORE,
         field: FILTER_FIELD.DUE_DATE,
-        op: FILTER_OP.EQ,
         value: { type: 'absolute', value: iso },
-      }],
-      groupBy: [],
-      sortBy: [],
+      }),
     }, baseContext, { mode: 'persist' })
     expect(result.ok).toBe(true)
     if (result.ok)
-      expect(result.value.filterRules[0]?.value).toBe(iso)
+      expect((result.value.filter as { value: unknown }).value).toBe(iso)
   })
 
   it('eMPTY_NAME', () => {
     const result = validatePerspectiveInput({
       name: '   ',
-      matchMode: 'all',
-      availabilityFilter: 'all',
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      filterRules: [],
-      groupBy: [],
-      sortBy: [],
+      ...baseInput(null),
     }, baseContext, { mode: 'persist' })
     expect(result.ok).toBe(false)
     if (!result.ok)
@@ -187,39 +166,25 @@ describe('validatePerspectiveInput', () => {
   })
 
   it('iNVALID_FIELD_OP', () => {
-    const result = validatePerspectiveInput({
-      matchMode: 'all',
-      availabilityFilter: 'all',
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      filterRules: [{ field: FILTER_FIELD.FLAGGED, op: FILTER_OP.BETWEEN, value: [1, 2] }],
-      groupBy: [],
-      sortBy: [],
-    }, baseContext, { mode: 'query' })
+    const result = validatePerspectiveInput(baseInput({
+      op: LEAF_OP.WITHIN,
+      field: FILTER_FIELD.FLAGGED,
+      value: [1, 2],
+    }), baseContext, { mode: 'query' })
     expect(result.ok).toBe(false)
     if (!result.ok)
       expect(result.errors[0]?.code).toBe(PERSPECTIVE_INPUT_ERROR_CODE.INVALID_FIELD_OP)
   })
 
-  it('iNVALID_DATE_RANGE between 倒置', () => {
-    const result = validatePerspectiveInput({
-      matchMode: 'all',
-      availabilityFilter: 'all',
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      filterRules: [{
-        field: FILTER_FIELD.DUE_DATE,
-        op: FILTER_OP.BETWEEN,
-        value: [
-          { type: 'absolute', value: '2026-07-20T00:00:00.000Z' },
-          { type: 'absolute', value: '2026-07-10T00:00:00.000Z' },
-        ],
-      }],
-      groupBy: [],
-      sortBy: [],
-    }, baseContext, { mode: 'query' })
+  it('iNVALID_DATE_RANGE within 倒置', () => {
+    const result = validatePerspectiveInput(baseInput({
+      op: LEAF_OP.WITHIN,
+      field: FILTER_FIELD.DUE_DATE,
+      value: [
+        { type: 'absolute', value: '2026-07-20T00:00:00.000Z' },
+        { type: 'absolute', value: '2026-07-10T00:00:00.000Z' },
+      ],
+    }), baseContext, { mode: 'query' })
     expect(result.ok).toBe(false)
     if (!result.ok)
       expect(result.errors[0]?.code).toBe(PERSPECTIVE_INPUT_ERROR_CODE.INVALID_DATE_RANGE)
@@ -227,13 +192,7 @@ describe('validatePerspectiveInput', () => {
 
   it('dUPLICATE_SORT_KEY', () => {
     const result = validatePerspectiveInput({
-      matchMode: 'all',
-      availabilityFilter: 'all',
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      filterRules: [],
-      groupBy: [],
+      ...baseInput(null),
       sortBy: [
         { field: SORT_FIELD.DUE_DATE, dir: SORT_DIR.ASC },
         { field: SORT_FIELD.DUE_DATE, dir: SORT_DIR.DESC },
@@ -247,86 +206,56 @@ describe('validatePerspectiveInput', () => {
   it('bUILTIN_ID_RESERVED', () => {
     const result = validatePerspectiveInput({
       name: '改 Inbox',
-      matchMode: 'all',
-      availabilityFilter: 'all',
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      filterRules: [],
-      groupBy: [],
-      sortBy: [],
+      ...baseInput(null),
     }, baseContext, { mode: 'persist', perspectiveId: 'inbox' })
     expect(result.ok).toBe(false)
     if (!result.ok)
       expect(result.errors[0]?.code).toBe(PERSPECTIVE_INPUT_ERROR_CODE.BUILTIN_ID_RESERVED)
   })
 
-  it('实体引用解析为 id', () => {
+  it('实体引用解析为 id（嵌套 some）', () => {
     const result = validatePerspectiveInput({
       name: '装修',
-      matchMode: 'all',
-      availabilityFilter: 'remaining',
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      filterRules: [{
+      ...baseInput({
+        op: LEAF_OP.SOME,
         field: FILTER_FIELD.PROJECT,
-        op: FILTER_OP.EQ,
-        value: { name: '装修' },
-      }],
-      groupBy: [],
-      sortBy: [],
+        value: [{ name: '装修' }],
+      }),
     }, baseContext, { mode: 'persist' })
     expect(result.ok).toBe(true)
     if (result.ok)
-      expect(result.value.filterRules[0]?.value).toBe('p1')
+      expect((result.value.filter as { value: unknown }).value).toEqual(['p1'])
   })
 
   it('estimate 规则保留 number', () => {
-    const result = validatePerspectiveInput({
-      matchMode: 'all',
-      availabilityFilter: 'all',
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      filterRules: [{
-        field: FILTER_FIELD.ESTIMATE,
-        op: FILTER_OP.BEFORE,
-        value: 60,
-      }],
-      groupBy: [],
-      sortBy: [],
-    }, baseContext, { mode: 'query' })
+    const result = validatePerspectiveInput(baseInput({
+      op: LEAF_OP.BEFORE,
+      field: FILTER_FIELD.ESTIMATE,
+      value: 60,
+    }), baseContext, { mode: 'query' })
     expect(result.ok).toBe(true)
     if (result.ok)
-      expect(result.value.filterRules[0]?.value).toBe(60)
+      expect((result.value.filter as { value: unknown }).value).toBe(60)
+  })
+
+  it('嵌套 and/or 树通过校验', () => {
+    const result = validatePerspectiveInput(baseInput({
+      op: LOGIC_OP.OR,
+      children: [
+        { op: LEAF_OP.IS, field: FILTER_FIELD.FLAGGED, value: true },
+        { op: LOGIC_OP.NOT, child: { op: LEAF_OP.EMPTY, field: FILTER_FIELD.TAG } },
+      ],
+    }), baseContext, { mode: 'query' })
+    expect(result.ok).toBe(true)
   })
 })
 
 describe('zod input schemas', () => {
   it('perspectiveQuerySchema 不要求 name', () => {
-    expect(PerspectiveQuerySchema.safeParse({
-      matchMode: 'all',
-      availabilityFilter: 'all',
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      filterRules: [],
-      groupBy: [],
-      sortBy: [],
-    }).success).toBe(true)
+    expect(PerspectiveQuerySchema.safeParse(baseInput(null)).success).toBe(true)
   })
 
   it('perspectiveInputSchema 要求 name', () => {
-    expect(PerspectiveInputSchema.safeParse({
-      matchMode: 'all',
-      availabilityFilter: 'all',
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      filterRules: [],
-      groupBy: [],
-      sortBy: [],
-    }).success).toBe(false)
+    expect(PerspectiveInputSchema.safeParse(baseInput(null)).success).toBe(false)
   })
 })

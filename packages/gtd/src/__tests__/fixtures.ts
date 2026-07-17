@@ -1,5 +1,4 @@
 import type {
-  FilterRule,
   Folder,
   GtdDocument,
   Perspective,
@@ -16,7 +15,6 @@ import {
   EXPLICIT_STATUS,
   FOLDER_STATUS,
   GROUP_TYPE,
-  PERSPECTIVE_MATCH,
   REPEAT_ANCHOR,
   REPEAT_CYCLE,
   REVIEW_INTERVAL,
@@ -124,10 +122,6 @@ export function makeRepeatRule(overrides: Partial<RepeatRule> = {}): RepeatRule 
   }
 }
 
-export function makeFilterRule(overrides: Partial<FilterRule> = {}): FilterRule {
-  return { field: 'status', op: 'eq', value: EXPLICIT_STATUS.ACTIVE, ...overrides }
-}
-
 export function makeSortKey(overrides: Partial<SortKey> = {}): SortKey {
   return { field: 'order', dir: 'asc', ...overrides }
 }
@@ -137,8 +131,7 @@ export function makePerspective(overrides: Partial<Perspective> = {}): Perspecti
     id: randomUUID(),
     name: 'perspective',
     icon: null,
-    matchMode: PERSPECTIVE_MATCH.ALL,
-    filterRules: [],
+    filter: null,
     groupBy: [],
     sortBy: [],
     availabilityFilter: AVAILABILITY_FILTER.AVAILABLE,

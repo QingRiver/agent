@@ -117,15 +117,15 @@ export const gtdTaskTags = pgTable('gtd_task_tags', {
 }))
 
 /**
- * 透视（自定义视图）。filter_rules/sort_by 用 jsonb（结构化、可演进），group_by 用 text[]（固定枚举数组）。
+ * 透视（自定义视图）。filter/sort_by 用 jsonb（结构化、可演进），group_by 用 text[]（固定枚举数组）。
+ * filter 为可嵌套 JSON DSL 树（与/或/非 + 字段操作符）；null=无过滤。
  */
 export const gtdPerspectives = pgTable('gtd_perspectives', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(),
   name: text('name').notNull(),
   icon: text('icon'),
-  matchMode: text('match_mode').notNull(),
-  filterRules: jsonb('filter_rules').notNull().default([]),
+  filter: jsonb('filter'),
   groupBy: text('group_by').array().notNull().default([]),
   sortBy: jsonb('sort_by').notNull().default([]),
   availabilityFilter: text('availability_filter').notNull().default('available'),
