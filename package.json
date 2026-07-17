@@ -21,7 +21,7 @@
     "tsc-go": "tsx scripts/tsc-go.ts",
     "lint": "pnpm exec eslint apps packages",
     "format": "pnpm exec eslint apps packages --fix",
-    "test": "vitest run",
+    "test": "pnpm devops infra up test && vitest run",
     "test:watch": "vitest",
     "devops": "tsx packages/e2e/src/cli.ts"
   },

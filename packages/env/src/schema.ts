@@ -19,6 +19,9 @@ export const ServerEnvSchema = LlmEnvSchema.extend({
   // PostgreSQL（infra/postgres/）：better-auth + drizzle + langgraph checkpoint 共用
   DATABASE_URL: z.url('DATABASE_URL 须为合法 postgres 连接串'),
   POSTGRES_PORT: z.coerce.number().int().positive().default(5432),
+  // Redis（infra/redis/）：gtd 缓存（派生状态/透视/文档快照）+ 分布式锁
+  REDIS_URL: z.url('REDIS_URL 须为合法 redis 连接串').default('redis://localhost:6379'),
+  REDIS_PORT: z.coerce.number().int().positive().default(6379),
   TUSHARE_TOKEN: z.string().min(1).optional(),
   QDRANT_URL: z.url().default('http://localhost:6333'),
   SILICONFLOW_API_KEY: z.string().min(1).optional(),

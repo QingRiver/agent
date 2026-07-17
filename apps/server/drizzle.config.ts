@@ -6,7 +6,7 @@ import { defineConfig } from 'drizzle-kit'
  * push/studio 时若未设 DATABASE_URL 则用 infra/postgres 默认本地连接串兜底。
  */
 export default defineConfig({
-  schema: './src/db/schema.ts',
+  schema: './src/db/schema',
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {

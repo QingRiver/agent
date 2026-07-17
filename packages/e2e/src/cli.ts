@@ -17,9 +17,9 @@ function printHelp(): void {
   console.log(`用法: pnpm devops <command> [subcommand] [options]
 
 infra — Docker 基础设施
-  up [postgres|qdrant|markitdown|qlib|kb|all] [--build]   启动（kb = qdrant + markitdown）
-  down [postgres|qdrant|markitdown|qlib|kb|all]            停止
-  status [postgres|qdrant|markitdown|qlib|kb|all]          容器 + 健康检查
+  up [postgres|qdrant|markitdown|qlib|kb|test|all] [--build]   启动（kb = qdrant + markitdown；test = postgres+kb+redis）
+  down [postgres|qdrant|markitdown|qlib|kb|test|all]            停止
+  status [postgres|qdrant|markitdown|qlib|kb|test|all]          容器 + 健康检查
 
 e2e — 端到端测试与种子数据
   all              auth seed + kb seed + kb/hitl vitest（不含 agent SSE）

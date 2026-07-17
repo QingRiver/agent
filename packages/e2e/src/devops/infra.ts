@@ -18,7 +18,7 @@ interface ServiceDef {
   buildOnUp?: boolean
 }
 
-const SERVICES: Record<Exclude<InfraTarget, 'kb' | 'all'>, ServiceDef> = {
+const SERVICES: Record<Exclude<InfraTarget, 'kb' | 'test' | 'all'>, ServiceDef> = {
   postgres: {
     name: 'postgres',
     composeDir: INFRA.postgres,
@@ -45,14 +45,22 @@ const SERVICES: Record<Exclude<InfraTarget, 'kb' | 'all'>, ServiceDef> = {
     healthUrl: 'http://localhost:8000/health',
     buildOnUp: true,
   },
+  redis: {
+    name: 'redis',
+    composeDir: INFRA.redis,
+    container: 'redis',
+    healthExec: ['redis-cli', 'ping'],
+  },
 }
 
-/** kb = qdrant + markitdown；all = 全部。 */
-function resolveTargets(target: InfraTarget): Array<Exclude<InfraTarget, 'kb' | 'all'>> {
+/** kb = qdrant + markitdown；test = 测试所需（postgres+kb+redis，不含 qlib）；all = 全部。 */
+function resolveTargets(target: InfraTarget): Array<Exclude<InfraTarget, 'kb' | 'test' | 'all'>> {
   if (target === 'kb')
     return ['qdrant', 'markitdown']
+  if (target === 'test')
+    return ['postgres', 'qdrant', 'markitdown', 'redis']
   if (target === 'all')
-    return ['postgres', 'qdrant', 'markitdown', 'qlib']
+    return ['postgres', 'qdrant', 'markitdown', 'qlib', 'redis']
   return [target]
 }
 

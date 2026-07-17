@@ -79,7 +79,7 @@ export function TextEditor() {
                 ? (
                     <div
                       ref={thinkingRef}
-                      className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-slate-400"
+                      className="max-h-48 overflow-y-auto whitespace-pre-wrap wrap-break-word font-mono text-xs leading-relaxed text-slate-400"
                     >
                       {thinking}
                       <span className="text-slate-600">▌</span>
@@ -115,7 +115,7 @@ export function TextEditor() {
                   >
                     {s.newText && s.originalText ? '改' : s.newText ? '加' : '删'}
                   </span>
-                  <span className="line-clamp-1 break-words text-sm text-slate-200" title={s.summary}>
+                  <span className="line-clamp-1 wrap-break-word text-sm text-slate-200" title={s.summary}>
                     {s.summary || (polishing ? '生成修改说明中…' : '修订建议')}
                   </span>
                 </div>
@@ -199,7 +199,7 @@ export function TextEditor() {
                 >
                   {activeSuggestion.newText && activeSuggestion.originalText ? '改' : activeSuggestion.newText ? '加' : '删'}
                 </span>
-                <span className="break-words text-sm text-slate-200">
+                <span className="wrap-break-word text-sm text-slate-200">
                   {activeSuggestion.summary || '修订建议'}
                 </span>
               </div>

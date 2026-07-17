@@ -18,9 +18,10 @@ export const INFRA = {
   qdrant: join(REPO_ROOT, 'infra/qdrant'),
   markitdown: join(REPO_ROOT, 'infra/markitdown'),
   qlib: join(REPO_ROOT, 'infra/qlib'),
+  redis: join(REPO_ROOT, 'infra/redis'),
 } as const
 
-export type InfraTarget = keyof typeof INFRA | 'kb' | 'all'
+export type InfraTarget = keyof typeof INFRA | 'kb' | 'test' | 'all'
 
 /** @agent/e2e flow runner（flow 实现在 packages/e2e/src/flows/） */
 export const E2E_RUNNER_TS = join(REPO_ROOT, 'packages/e2e/src/runner.ts')

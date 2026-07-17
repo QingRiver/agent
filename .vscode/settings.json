@@ -3,8 +3,6 @@
   "editor.fontLigatures": true,
   "editor.fontFamily": "Fira Code,Microsoft Yahei UI, monospace",
   "terminal.integrated.fontFamily": "Menlo, Monaco, 'Courier New', monospace",
-  "typescript.tsdk": "node_modules/typescript-go/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
   "editor.defaultFormatter": "dbaeumer.vscode-eslint",
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {

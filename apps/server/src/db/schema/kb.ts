@@ -1,19 +1,6 @@
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { bigint, boolean, index, integer, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
 
-export const conversationThreads = pgTable('conversation_threads', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  agentId: text('agent_id').notNull(),
-  title: text('title').notNull(),
-  pinned: boolean('pinned').notNull().default(false),
-  seq: integer('seq').notNull(),
-  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
-  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
-}, table => [
-  index('idx_conv_user_list').on(table.userId, table.pinned, table.updatedAt),
-])
-
 /**
  * 虚拟路径树的文件夹节点。文档（kb_documents）通过 parent_node_id 挂在节点下，
  * vdir 由父链 walk 派生并缓存到 kb_documents.vdir。文件夹身份（id）与名字/位置解耦，

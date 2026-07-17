@@ -35,6 +35,12 @@ function RootLayout() {
               >
                 知识库
               </Link>
+              <Link
+                to="/gtd"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
+              >
+                GTD
+              </Link>
               <div className="ml-auto">
                 <UserAvatarMenu />
               </div>

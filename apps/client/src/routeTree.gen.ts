@@ -13,6 +13,7 @@ import { Route as TextEditorRouteImport } from './routes/text-editor'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as KbRouteImport } from './routes/kb'
+import { Route as GtdRouteImport } from './routes/gtd'
 import { Route as IndexRouteImport } from './routes/index'
 
 const TextEditorRoute = TextEditorRouteImport.update({
@@ -35,6 +36,11 @@ const KbRoute = KbRouteImport.update({
   path: '/kb',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GtdRoute = GtdRouteImport.update({
+  id: '/gtd',
+  path: '/gtd',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -43,6 +49,7 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/gtd': typeof GtdRoute
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/gtd': typeof GtdRoute
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/gtd': typeof GtdRoute
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
@@ -65,14 +74,22 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/kb' | '/login' | '/register' | '/text-editor'
+  fullPaths: '/' | '/gtd' | '/kb' | '/login' | '/register' | '/text-editor'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/kb' | '/login' | '/register' | '/text-editor'
-  id: '__root__' | '/' | '/kb' | '/login' | '/register' | '/text-editor'
+  to: '/' | '/gtd' | '/kb' | '/login' | '/register' | '/text-editor'
+  id:
+    | '__root__'
+    | '/'
+    | '/gtd'
+    | '/kb'
+    | '/login'
+    | '/register'
+    | '/text-editor'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  GtdRoute: typeof GtdRoute
   KbRoute: typeof KbRoute
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
@@ -109,6 +126,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof KbRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/gtd': {
+      id: '/gtd'
+      path: '/gtd'
+      fullPath: '/gtd'
+      preLoaderRoute: typeof GtdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -121,6 +145,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  GtdRoute: GtdRoute,
   KbRoute: KbRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
