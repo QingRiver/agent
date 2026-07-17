@@ -4,6 +4,8 @@ services:
     container_name: redis
     ports:
       - "${REDIS_PORT:-6379}:6379"
+    env_file:
+      - ../../.env
     volumes:
       - ./redis_data:/data
     healthcheck:

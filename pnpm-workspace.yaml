@@ -96,5 +96,9 @@ catalog:
 overrides:
   '@langchain/langgraph-checkpoint': 'catalog:'
   rxjs: 'catalog:'
+  # Node 26 内置 undici@8；@qdrant/js-client-rest@1.18.0 仍用 undici@6 造 Agent
+  # 再塞给 global fetch → UND_ERR_INVALID_ARG。升到 7.28 可同时兼容 Node 22/24/26
+  # （8.x 在 Node 24 会挂）。上游修复：qdrant-js#146；发版后可去掉本 override。
+  undici: 7.28.0
 
 shellEmulator: true
