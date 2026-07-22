@@ -2,23 +2,32 @@ import { GtdStore } from '@stores/gtd-store'
 import { useAtomValue } from 'jotai'
 
 export function useGtd() {
-  const doc = useAtomValue(GtdStore.docAtom)
+  const rowStore = useAtomValue(GtdStore.rowStoreAtom)
+  const rows = useAtomValue(GtdStore.rowsAtom)
   const selection = useAtomValue(GtdStore.selectionAtom)
   const selectedTaskId = useAtomValue(GtdStore.selectedTaskIdAtom)
   const selectedProjectId = useAtomValue(GtdStore.selectedProjectIdAtom)
   const isLoading = useAtomValue(GtdStore.isLoadingAtom)
   const saving = useAtomValue(GtdStore.savingAtom)
+  const syncStatus = useAtomValue(GtdStore.syncStatusAtom)
+  const syncLocked = useAtomValue(GtdStore.syncLockedAtom)
   const error = useAtomValue(GtdStore.errorAtom)
 
   return {
-    doc,
+    rowStore,
+    rows,
     selection,
     selectedTaskId,
     selectedProjectId,
     isLoading,
     saving,
+    syncStatus,
+    syncLocked,
     error,
     load: GtdStore.load,
+    recoverFromReject: GtdStore.recoverFromReject,
+    exportDocument: GtdStore.exportDocument,
+    importDocument: GtdStore.importDocument,
     setSelection: GtdStore.setSelection,
     selectTask: GtdStore.selectTask,
     selectProjectForInspector: GtdStore.selectProjectForInspector,
@@ -37,6 +46,7 @@ export function useGtd() {
     toggleFlag: GtdStore.toggleFlag,
     patchTask: GtdStore.patchTask,
     setTaskRepeat: GtdStore.setTaskRepeat,
+    setTaskTags: GtdStore.setTaskTags,
     addPerspective: GtdStore.addPerspective,
     patchPerspective: GtdStore.patchPerspective,
     removePerspective: GtdStore.removePerspective,
@@ -52,6 +62,7 @@ export function useGtd() {
     removeTag: GtdStore.removeTag,
     reorderTag: GtdStore.reorderTag,
     addFolder: GtdStore.addFolder,
+    removeFolder: GtdStore.removeFolder,
     reorderFolder: GtdStore.reorderFolder,
   }
 }

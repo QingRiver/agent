@@ -241,9 +241,10 @@ export function rowToAttachment(row: AttachmentRow): Attachment {
   })
 }
 
-export function attachmentToRow(a: Attachment): AttachmentInsert {
+export function attachmentToRow(a: Attachment, userId: string): AttachmentInsert {
   return {
     id: a.id,
+    userId,
     taskId: a.taskId,
     kind: a.kind,
     url: a.url,

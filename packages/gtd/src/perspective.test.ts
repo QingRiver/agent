@@ -1,15 +1,11 @@
+import type { RenderContext } from './perspective'
+import type { EntityRow, EntityRowOf } from './sync-schema'
 import { describe, expect, it } from 'vitest'
-import {
-  DUE_SOON_MS,
-  makeDoc,
-  makePerspective,
-  makeSortKey,
-  makeTask,
-  NOW,
-} from './__tests__/fixtures'
+import { DUE_SOON_MS, makePerspective, makeSortKey, NOW } from './__tests__/fixtures'
+import { makeTaskRow, makeTaskTagRow } from './__tests__/sync-fixtures'
 import { FILTER_FIELD, LEAF_OP, LOGIC_OP } from './filter'
 import {
-  applyAvailabilityFilter,
+  applyBaseFilter,
   applyBuiltinFilter,
   builtinPerspectives,
   expandAncestors,
@@ -17,6 +13,7 @@ import {
   renderPerspective,
   sortTasks,
 } from './perspective'
+import { RowStore } from './rows'
 import { buildTaskTree } from './tree'
 import {
   AVAILABILITY_FILTER,
@@ -25,106 +22,88 @@ import {
   SORT_FIELD,
 } from './types'
 
-describe('applyAvailabilityFilter', () => {
+function makeCtx(rows: EntityRow[]): RenderContext {
+  const tasks = rows.filter((r): r is EntityRowOf<'task'> => r.entity === 'task')
+  return {
+    rowStore: new RowStore(rows),
+    tree: buildTaskTree(tasks),
+    now: NOW,
+    dueSoonIntervalMs: DUE_SOON_MS,
+    statusCache: new Map(),
+  }
+}
+
+const availPersp = { availabilityFilter: AVAILABILITY_FILTER.AVAILABLE, showCompleted: false, showDropped: false, flaggedOnly: null }
+
+describe('applyBaseFilter', () => {
   it('due_soon 在 available 档保留', () => {
-    const dueSoon = makeTask({
-      id: 'a',
-      dueDate: new Date(NOW.getTime() + DUE_SOON_MS / 2).toISOString(),
-    })
-    const tree = buildTaskTree([dueSoon])
-    const out = applyAvailabilityFilter(
-      [dueSoon],
-      AVAILABILITY_FILTER.AVAILABLE,
-      tree,
-      NOW,
-      DUE_SOON_MS,
-    )
-    expect(out.map(t => t.id)).toEqual(['a'])
+    const t = makeTaskRow('a', { dueDate: new Date(NOW.getTime() + DUE_SOON_MS / 2).toISOString() })
+    const out = applyBaseFilter([t], availPersp, makeCtx([t]))
+    expect(out.map(r => r.id)).toEqual(['a'])
   })
 
   it('blocked 在 available 档排除', () => {
-    const avail = makeTask({ id: 'a' })
-    const blocked = makeTask({ id: 'b', deferDate: new Date(NOW.getTime() + 60000).toISOString() })
-    const tree = buildTaskTree([avail, blocked])
-    const out = applyAvailabilityFilter(
-      [avail, blocked],
-      AVAILABILITY_FILTER.AVAILABLE,
-      tree,
-      NOW,
-      DUE_SOON_MS,
-    )
-    expect(out.map(t => t.id)).toEqual(['a'])
+    const avail = makeTaskRow('a')
+    const blocked = makeTaskRow('b', { deferDate: new Date(NOW.getTime() + 60000).toISOString() })
+    const out = applyBaseFilter([avail, blocked], availPersp, makeCtx([avail, blocked]))
+    expect(out.map(r => r.id)).toEqual(['a'])
   })
 
   it('remaining: 所有 active', () => {
-    const t = makeTask({ id: 'a', status: EXPLICIT_STATUS.ACTIVE })
-    const tree = buildTaskTree([t])
-    const out = applyAvailabilityFilter([t], AVAILABILITY_FILTER.REMAINING, tree, NOW, DUE_SOON_MS)
+    const t = makeTaskRow('a', { status: EXPLICIT_STATUS.ACTIVE })
+    const out = applyBaseFilter([t], { ...availPersp, availabilityFilter: AVAILABILITY_FILTER.REMAINING }, makeCtx([t]))
     expect(out).toHaveLength(1)
   })
 
   it('all: 全部', () => {
-    const t = makeTask({ id: 'a', status: EXPLICIT_STATUS.COMPLETED })
-    const tree = buildTaskTree([t])
-    const out = applyAvailabilityFilter([t], AVAILABILITY_FILTER.ALL, tree, NOW, DUE_SOON_MS)
+    const t = makeTaskRow('a', { status: EXPLICIT_STATUS.COMPLETED })
+    const out = applyBaseFilter([t], { ...availPersp, availabilityFilter: AVAILABILITY_FILTER.ALL, showCompleted: true }, makeCtx([t]))
     expect(out).toHaveLength(1)
   })
 })
 
 describe('expandAncestors', () => {
   it('补齐祖先链', () => {
-    const root = makeTask({ id: 'r', groupType: 'parallel' })
-    const child = makeTask({ id: 'c', parentId: 'r' })
+    const root = makeTaskRow('r', { groupType: 'parallel' })
+    const child = makeTaskRow('c', { parentId: 'r' })
     const tree = buildTaskTree([root, child])
     expect(expandAncestors(['c'], tree).sort()).toEqual(['c', 'r'])
   })
 })
 
 describe('groupBy', () => {
-  const renderCtx = (tasks: ReturnType<typeof makeTask>[]) => ({
-    doc: makeDoc({ tasks }),
-    tree: buildTaskTree(tasks),
-    now: NOW,
-    dueSoonIntervalMs: DUE_SOON_MS,
-    statusCache: new Map(),
-  })
-
   it('按 project 分组', () => {
-    const t1 = makeTask({ id: 'a', projectId: 'p1' })
-    const t2 = makeTask({ id: 'b', projectId: 'p2' })
-    const ctx = renderCtx([t1, t2])
-    const groups = groupBy([t1, t2], [GROUP_KEY.PROJECT], ctx.doc, ctx)
+    const t1 = makeTaskRow('a', { projectId: 'p1' })
+    const t2 = makeTaskRow('b', { projectId: 'p2' })
+    const ctx = makeCtx([t1, t2])
+    const groups = groupBy([t1, t2], [GROUP_KEY.PROJECT], ctx.rowStore, ctx)
     expect(groups).toHaveLength(2)
   })
 
   it('tag 多归属：一 task 进多组', () => {
-    const t = makeTask({ id: 'a', tagIds: ['t1', 't2'] })
-    const ctx = renderCtx([t])
-    const groups = groupBy([t], [GROUP_KEY.TAG], ctx.doc, ctx)
+    const t = makeTaskRow('a')
+    const ctx = makeCtx([t, makeTaskTagRow('a', 'g1'), makeTaskTagRow('a', 'g2')])
+    const groups = groupBy([t], [GROUP_KEY.TAG], ctx.rowStore, ctx)
     expect(groups).toHaveLength(2)
   })
 })
 
 describe('sortTasks', () => {
   it('dueDate 升序，null 末尾', () => {
-    const t1 = makeTask({ id: 'a', dueDate: null })
-    const t2 = makeTask({ id: 'b', dueDate: new Date('2026-07-20T00:00:00Z').toISOString() })
-    const t3 = makeTask({ id: 'c', dueDate: new Date('2026-07-10T00:00:00Z').toISOString() })
+    const t1 = makeTaskRow('a', { dueDate: null })
+    const t2 = makeTaskRow('b', { dueDate: new Date('2026-07-20T00:00:00Z').toISOString() })
+    const t3 = makeTaskRow('c', { dueDate: new Date('2026-07-10T00:00:00Z').toISOString() })
     const sortBy = [makeSortKey({ field: SORT_FIELD.DUE_DATE, dir: 'asc' })]
-    const out = sortTasks([t1, t2, t3], sortBy, makeDoc({ tasks: [t1, t2, t3] }))
-    expect(out.map(t => t.id)).toEqual(['c', 'b', 'a'])
+    const out = sortTasks([t1, t2, t3], sortBy, new RowStore([t1, t2, t3]))
+    expect(out.map(r => r.id)).toEqual(['c', 'b', 'a'])
   })
 })
 
 describe('renderPerspective', () => {
   it('端到端产出 RenderGroup[] 且 computed 非硬编码', () => {
-    const t = makeTask({
-      id: 'a',
-      dueDate: new Date(NOW.getTime() - 60000).toISOString(),
-    })
-    const doc = makeDoc({ tasks: [t] })
+    const t = makeTaskRow('a', { dueDate: new Date(NOW.getTime() - 60000).toISOString() })
     const p = makePerspective()
-    const groups = renderPerspective(doc, p, NOW, DUE_SOON_MS)
+    const groups = renderPerspective(new RowStore([t]), p, NOW, DUE_SOON_MS)
     expect(groups).toBeInstanceOf(Array)
     const item = groups[0]?.children[0]
     expect(item && 'computed' in item && item.computed).toBe('overdue')
@@ -133,9 +112,8 @@ describe('renderPerspective', () => {
   it('dSL 嵌套过滤：flagged AND dueDate within 命中', () => {
     const earlier = new Date(NOW.getTime() - 86400000).toISOString()
     const later = new Date(NOW.getTime() + 86400000).toISOString()
-    const hit = makeTask({ id: 'hit', flagged: true, dueDate: NOW.toISOString() })
-    const miss = makeTask({ id: 'miss', flagged: true, dueDate: null })
-    const doc = makeDoc({ tasks: [hit, miss] })
+    const hit = makeTaskRow('hit', { flagged: true, dueDate: NOW.toISOString() })
+    const miss = makeTaskRow('miss', { flagged: true, dueDate: null })
     const p = makePerspective({
       availabilityFilter: AVAILABILITY_FILTER.ALL,
       showCompleted: true,
@@ -148,7 +126,7 @@ describe('renderPerspective', () => {
         ],
       },
     })
-    const groups = renderPerspective(doc, p, NOW, DUE_SOON_MS)
+    const groups = renderPerspective(new RowStore([hit, miss]), p, NOW, DUE_SOON_MS)
     const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null).filter(Boolean)
     expect(ids).toEqual(['hit'])
   })
@@ -156,12 +134,11 @@ describe('renderPerspective', () => {
 
 describe('applyBuiltinFilter', () => {
   it('inbox 仅顶层无 project', () => {
-    const inbox = makeTask({ id: 'inbox' })
-    const other = makeTask({ id: 'p', projectId: 'p1' })
-    const doc = makeDoc({ tasks: [inbox, other] })
+    const inbox = makeTaskRow('inbox')
+    const other = makeTaskRow('p', { projectId: 'p1' })
     const p = builtinPerspectives().find(x => x.id === 'inbox')!
-    const out = applyBuiltinFilter([inbox, other], p, doc, NOW, DUE_SOON_MS)
-    expect(out.map(t => t.id)).toEqual(['inbox'])
+    const out = applyBuiltinFilter([inbox, other], p, new RowStore([inbox, other]), NOW, DUE_SOON_MS)
+    expect(out.map(r => r.id)).toEqual(['inbox'])
   })
 })
 

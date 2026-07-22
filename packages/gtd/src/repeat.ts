@@ -2,7 +2,7 @@ import type { GtdDocument, RepeatCycle, RepeatRule, Task } from './schema'
 import { EXPLICIT_STATUS, REPEAT_ANCHOR, REPEAT_CYCLE } from './types'
 
 /**
- * 重复任务克隆（SPEC §5.3）。
+ * 重复任务克隆。
  */
 
 const DAY = 86400000
@@ -51,7 +51,7 @@ function alignToNextDayOfWeek(date: Date, daysOfWeek: number[]): Date {
 /** 纯日期推算：按 rule.cycle/interval/anchor 与 task 旧日期算下一实例的 deferDate/dueDate */
 export function computeNextDates(
   rule: RepeatRule,
-  task: Task,
+  task: Pick<Task, 'dueDate' | 'deferDate'>,
   now: Date,
 ): { deferDate: string | null, dueDate: string | null } {
   const base

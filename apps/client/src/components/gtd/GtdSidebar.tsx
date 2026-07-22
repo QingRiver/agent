@@ -25,6 +25,7 @@ import { cn } from '@lib/utils'
 import {
   CalendarDays,
   CheckCircle2,
+  Download,
   Flag,
   Folder,
   GripVertical,
@@ -35,8 +36,9 @@ import {
   Sparkles,
   Tag,
   Telescope,
+  Upload,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 const PERSPECTIVE_ICONS: Record<string, typeof Inbox> = {
   inbox: Inbox,
@@ -144,7 +146,7 @@ function FolderNodes({
                 sortableId={`folder:${node.folder.id}`}
                 active={selection.kind === 'folder' && selection.id === node.folder.id}
                 icon={Folder}
-                label={node.folder.name}
+                label={node.folder.data.name}
                 indent={depth}
                 onClick={() => onSelect({ kind: 'folder', id: node.folder.id })}
               />
@@ -202,7 +204,7 @@ function TagNodes({
               sortableId={`tag:${node.tag.id}`}
               active={selection.kind === 'tag' && selection.id === node.tag.id}
               icon={Tag}
-              label={node.tag.name}
+              label={node.tag.data.name}
               indent={depth}
               onClick={() => onSelect({ kind: 'tag', id: node.tag.id })}
             />
@@ -221,7 +223,7 @@ function TagNodes({
 
 export function GtdSidebar() {
   const {
-    doc,
+    rowStore,
     selection,
     setSelection,
     addProject,
@@ -233,33 +235,83 @@ export function GtdSidebar() {
     reorderProject,
     reorderTag,
     reorderFolder,
-    saving,
+    syncStatus,
     error,
+    exportDocument,
+    importDocument,
   } = useGtd()
   const [projectName, setProjectName] = useState('')
   const [tagName, setTagName] = useState('')
   const [folderName, setFolderName] = useState('')
   const [perspectiveEditorId, setPerspectiveEditorId] = useState<string | 'new' | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
   const perspectives = useMemo(() => builtinPerspectives(), [])
-  const folderTree = useMemo(() => buildFolderTree(doc.folders), [doc.folders])
-  const tagTree = useMemo(() => buildTagTree(doc.tags), [doc.tags])
+  const projects = useMemo(
+    () => rowStore.liveProjects().map(p => ({
+      id: p.id,
+      name: p.data.name,
+      folderId: p.data.folderId,
+      status: p.data.status,
+      order: p.data.order,
+    })),
+    [rowStore],
+  )
+  const tags = useMemo(
+    () => rowStore.liveTags().map(t => ({
+      id: t.id,
+      name: t.data.name,
+      parentId: t.data.parentId,
+      order: t.data.order,
+    })),
+    [rowStore],
+  )
+  const folders = useMemo(
+    () => rowStore.liveFolders().map(f => ({
+      id: f.id,
+      name: f.data.name,
+      parentId: f.data.parentId,
+      order: f.data.order,
+    })),
+    [rowStore],
+  )
+  const folderTree = useMemo(() => buildFolderTree(rowStore.liveFolders()), [rowStore])
+  const tagTree = useMemo(() => buildTagTree(rowStore.liveTags()), [rowStore])
   const rootProjects = useMemo(
-    () => doc.projects
+    () => projects
       .filter(p => p.folderId == null && p.status !== EXPLICIT_STATUS.DELETED)
       .sort((a, b) => a.order - b.order),
-    [doc.projects],
+    [projects],
   )
   const activeProjects = useMemo(
-    () => doc.projects
+    () => projects
       .filter(p => p.status !== EXPLICIT_STATUS.DELETED)
       .sort((a, b) => a.order - b.order),
-    [doc.projects],
+    [projects],
   )
+  const customPerspectives = useMemo(
+    () => rowStore.livePerspectives().map(p => ({ id: p.id, name: p.data.name })),
+    [rowStore],
+  )
+
+  const syncLabel = syncStatus === 'syncing'
+    ? '同步中…'
+    : syncStatus === 'offline'
+      ? '离线'
+      : syncStatus === 'error'
+        ? '同步错误'
+        : null
+
+  const editingPerspective = useMemo(() => {
+    if (!perspectiveEditorId || perspectiveEditorId === 'new')
+      return undefined
+    const r = rowStore.livePerspectives().find(p => p.id === perspectiveEditorId)
+    return r ? { id: r.id, ...r.data } : undefined
+  }, [perspectiveEditorId, rowStore])
 
   return (
     <DndContext
@@ -272,10 +324,10 @@ export function GtdSidebar() {
         if (!id || !overId || kind !== overKind)
           return
         const source = kind === 'project'
-          ? doc.projects
+          ? projects
           : kind === 'tag'
-            ? doc.tags
-            : doc.folders
+            ? tags
+            : folders
         const entity = source.find(item => item.id === id)
         const overEntity = source.find(item => item.id === overId)
         if (!entity || !overEntity)
@@ -311,8 +363,50 @@ export function GtdSidebar() {
       <aside className="flex w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-950/80">
         <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
           <span className="text-xs font-medium uppercase tracking-wide text-slate-500">GTD</span>
-          {saving && <span className="text-[10px] text-slate-500">保存中…</span>}
+          <div className="flex items-center gap-2">
+            {syncLabel && <span className="text-[10px] text-slate-500">{syncLabel}</span>}
+            <button
+              type="button"
+              className="text-slate-500 hover:text-slate-300"
+              title="导出 JSON"
+              onClick={() => {
+                const json = exportDocument()
+                const blob = new Blob([json], { type: 'application/json' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `gtd-export-${new Date().toISOString().slice(0, 10)}.json`
+                a.click()
+                URL.revokeObjectURL(url)
+              }}
+            >
+              <Download className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              className="text-slate-500 hover:text-slate-300"
+              title="导入 JSON（仅新建，不覆盖）"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="size-3.5" />
+            </button>
+          </div>
         </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (!file)
+              return
+            void file.text().then((text) => {
+              importDocument(text)
+            })
+            e.target.value = ''
+          }}
+        />
 
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
           <div className="mb-3 space-y-0.5">
@@ -342,7 +436,7 @@ export function GtdSidebar() {
             </button>
           </div>
           <div className="mb-3 space-y-0.5">
-            {doc.perspectives.map(perspective => (
+            {customPerspectives.map(perspective => (
               <div key={perspective.id} className="group flex items-center gap-1">
                 <div className="min-w-0 flex-1">
                   <NavItem
@@ -370,7 +464,7 @@ export function GtdSidebar() {
                 </button>
               </div>
             ))}
-            {doc.perspectives.length === 0 && (
+            {customPerspectives.length === 0 && (
               <p className="px-2 py-1 text-xs text-slate-700">暂无自定义透视</p>
             )}
           </div>
@@ -508,10 +602,8 @@ export function GtdSidebar() {
       </aside>
       {perspectiveEditorId && (
         <GtdPerspectiveEditor
-          doc={doc}
-          perspective={perspectiveEditorId === 'new'
-            ? undefined
-            : doc.perspectives.find(p => p.id === perspectiveEditorId)}
+          store={rowStore}
+          perspective={editingPerspective}
           error={error}
           onClose={() => setPerspectiveEditorId(null)}
           onSave={(input: PerspectiveInput) => {

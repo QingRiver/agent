@@ -36,6 +36,13 @@
       "when": 1784192827563,
       "tag": "0004_gtd_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784525588465,
+      "tag": "0005_loose_natasha_romanoff",
+      "breakpoints": true
     }
   ]
 }

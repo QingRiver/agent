@@ -1,9 +1,10 @@
 import type {
   EntityRef,
   FilterNode,
-  GtdDocument,
   Perspective,
   PerspectiveInput,
+  RowStore,
+
   TemporalValue,
 } from '@agent/gtd'
 import {
@@ -129,12 +130,12 @@ function initialInput(perspective?: Perspective): PerspectiveInput {
   }
 }
 
-function entitiesForField(doc: GtdDocument, field: string) {
+function entitiesForField(store: RowStore, field: string): Array<{ id: string, name: string }> {
   if (field === FILTER_FIELD.PROJECT)
-    return doc.projects
+    return store.liveProjects().map(r => ({ id: r.id, name: r.data.name }))
   if (field === FILTER_FIELD.FOLDER)
-    return doc.folders
-  return doc.tags
+    return store.liveFolders().map(r => ({ id: r.id, name: r.data.name }))
+  return store.liveTags().map(r => ({ id: r.id, name: r.data.name }))
 }
 
 // ---------- 节点视觉系统：语义色编码 ----------
@@ -180,13 +181,13 @@ const OP_DOT: Record<OpCategory, string> = {
 }
 
 export function GtdPerspectiveEditor({
-  doc,
+  store,
   perspective,
   error,
   onSave,
   onClose,
 }: {
-  doc: GtdDocument
+  store: RowStore
   perspective?: Perspective
   error?: string | null
   onSave: (input: PerspectiveInput) => void
@@ -282,7 +283,7 @@ export function GtdPerspectiveEditor({
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">过滤规则</h3>
             </div>
-            <FilterTreeEditor doc={doc} node={input.filter} onChange={setFilter} />
+            <FilterTreeEditor store={store} node={input.filter} onChange={setFilter} />
           </section>
 
           <label className="space-y-1 text-xs text-slate-500">
@@ -313,11 +314,11 @@ export function GtdPerspectiveEditor({
 // ---------- 树编辑器 ----------
 
 function FilterTreeEditor({
-  doc,
+  store,
   node,
   onChange,
 }: {
-  doc: GtdDocument
+  store: RowStore
   node: FilterNode | null
   onChange: (node: FilterNode | null) => void
 }) {
@@ -344,7 +345,7 @@ function FilterTreeEditor({
   }
   return (
     <NodeEditor
-      doc={doc}
+      store={store}
       node={node}
       onChange={onChange}
       onRemove={() => onChange(null)}
@@ -355,14 +356,14 @@ function FilterTreeEditor({
 }
 
 function NodeEditor({
-  doc,
+  store,
   node,
   onChange,
   onRemove,
   depth,
   path,
 }: {
-  doc: GtdDocument
+  store: RowStore
   node: FilterNode
   onChange: (node: FilterNode) => void
   onRemove: () => void
@@ -432,7 +433,7 @@ function NodeEditor({
             return (
               <NodeEditor
                 key={childPath}
-                doc={doc}
+                store={store}
                 node={child}
                 onChange={c => updateChild(i, c)}
                 onRemove={() => removeChild(i)}
@@ -461,7 +462,7 @@ function NodeEditor({
         </div>
         <div className={cn('border-l-2 pl-3', LOGIC_STYLE.destructive.rail)}>
           <NodeEditor
-            doc={doc}
+            store={store}
             node={node.child}
             onChange={child => onChange({ op: LOGIC_OP.NOT, child })}
             onRemove={onRemove}
@@ -476,7 +477,7 @@ function NodeEditor({
   // 叶子
   return (
     <LeafEditor
-      doc={doc}
+      store={store}
       node={node as Extract<FilterNode, { field: string }>}
       onChange={onChange}
       onRemove={onRemove}
@@ -485,12 +486,12 @@ function NodeEditor({
 }
 
 function LeafEditor({
-  doc,
+  store,
   node,
   onChange,
   onRemove,
 }: {
-  doc: GtdDocument
+  store: RowStore
   node: Extract<FilterNode, { field: string }>
   onChange: (node: FilterNode) => void
   onRemove: () => void
@@ -552,19 +553,19 @@ function LeafEditor({
           <Trash2 className="size-4" />
         </Button>
       </div>
-      <LeafValue doc={doc} field={field} op={op} value={node.value} onChange={changeValue} />
+      <LeafValue store={store} field={field} op={op} value={node.value} onChange={changeValue} />
     </div>
   )
 }
 
 function LeafValue({
-  doc,
+  store,
   field,
   op,
   value,
   onChange,
 }: {
-  doc: GtdDocument
+  store: RowStore
   field: string
   op: string
   value: unknown
@@ -657,7 +658,7 @@ function LeafValue({
   return (
     <Select value={current} onChange={e => onChange([{ id: e.target.value }])}>
       <option value="">选择…</option>
-      {entitiesForField(doc, field).map(entity => (
+      {entitiesForField(store, field).map(entity => (
         <option key={entity.id} value={entity.id}>{entity.name}</option>
       ))}
     </Select>

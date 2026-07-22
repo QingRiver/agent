@@ -10,7 +10,7 @@ import { useState } from 'react'
 
 export function GtdInspector() {
   const {
-    doc,
+    rowStore,
     selectedTaskId,
     selectedProjectId,
     selection,
@@ -26,6 +26,7 @@ export function GtdInspector() {
     outdentTask,
     setTaskGroupType,
     setTaskRepeat,
+    setTaskTags,
     patchProject,
     holdProject,
     resumeProject,
@@ -35,22 +36,21 @@ export function GtdInspector() {
   } = useGtd()
   const [childName, setChildName] = useState('')
 
-  const task = selectedTaskId ? doc.tasks.find(t => t.id === selectedTaskId) : null
+  const task = selectedTaskId ? rowStore.findLive('task', selectedTaskId) : null
   const projectId = selectedProjectId
     ?? (selection.kind === 'project' ? selection.id : null)
-    ?? task?.projectId
+    ?? task?.data.projectId
     ?? null
   const project = projectId && !task
-    ? doc.projects.find(p => p.id === projectId)
-    : (selectedProjectId ? doc.projects.find(p => p.id === selectedProjectId) : null)
-  const taskChildren = task ? doc.tasks.filter(t => t.parentId === task.id) : []
-  const repeatRule = task?.repeatRuleId
-    ? doc.repeatRules.find(rule => rule.id === task.repeatRuleId) ?? null
-    : null
+    ? rowStore.findLive('project', projectId)
+    : (selectedProjectId ? rowStore.findLive('project', selectedProjectId) : null)
+  const taskChildren = task ? rowStore.liveTasks().filter(t => t.data.parentId === task.id) : []
+  const repeatRule = task?.data.repeatRule ?? null
 
   if (task) {
-    const done = task.status === EXPLICIT_STATUS.COMPLETED
-    const dropped = task.status === EXPLICIT_STATUS.CANCELLED
+    const done = task.data.status === EXPLICIT_STATUS.COMPLETED
+    const dropped = task.data.status === EXPLICIT_STATUS.CANCELLED
+    const tagIds = rowStore.tagIdsOf(task.id)
 
     return (
       <aside className="flex w-72 shrink-0 flex-col border-l border-slate-800 bg-slate-950/60">
@@ -61,15 +61,15 @@ export function GtdInspector() {
           <div className="space-y-1">
             <Label className="text-xs text-slate-500">名称</Label>
             <Input
-              value={task.name}
-              onChange={e => patchTask(task.id, { name: e.target.value || task.name })}
+              value={task.data.name}
+              onChange={e => patchTask(task.id, { name: e.target.value || task.data.name })}
               className="border-slate-700 bg-slate-900/50"
             />
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-slate-500">备注</Label>
             <textarea
-              value={task.note ?? ''}
+              value={task.data.note ?? ''}
               onChange={e => patchTask(task.id, { note: e.target.value || null })}
               rows={4}
               className="w-full rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200"
@@ -78,39 +78,39 @@ export function GtdInspector() {
           <div className="space-y-1">
             <Label className="text-xs text-slate-500">项目</Label>
             <Select
-              value={task.projectId ?? ''}
+              value={task.data.projectId ?? ''}
               onChange={e => patchTask(task.id, { projectId: e.target.value || null })}
             >
               <option value="">收件箱</option>
-              {doc.projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+              {rowStore.liveProjects().map(p => (
+                <option key={p.id} value={p.id}>{p.data.name}</option>
               ))}
             </Select>
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-slate-500">标签</Label>
             <div className="flex flex-wrap gap-1">
-              {doc.tags.map((tag) => {
-                const on = task.tagIds.includes(tag.id)
+              {rowStore.liveTags().map((tag) => {
+                const on = tagIds.includes(tag.id)
                 return (
                   <button
                     key={tag.id}
                     type="button"
                     onClick={() => {
-                      const tagIds = on
-                        ? task.tagIds.filter(id => id !== tag.id)
-                        : [...task.tagIds, tag.id]
-                      patchTask(task.id, { tagIds })
+                      const next = on
+                        ? tagIds.filter(id => id !== tag.id)
+                        : [...tagIds, tag.id]
+                      setTaskTags(task.id, next)
                     }}
                     className={`min-h-8 rounded-md px-2 py-1 text-xs ${
                       on ? 'bg-slate-700 text-slate-100' : 'bg-slate-900 text-slate-500'
                     }`}
                   >
-                    {tag.name}
+                    {tag.data.name}
                   </button>
                 )
               })}
-              {doc.tags.length === 0 && (
+              {rowStore.liveTags().length === 0 && (
                 <span className="text-xs text-slate-600">暂无标签</span>
               )}
             </div>
@@ -118,12 +118,12 @@ export function GtdInspector() {
           <div className="grid grid-cols-1 gap-2">
             <GtdDateTimeField
               label="推迟"
-              value={task.deferDate}
+              value={task.data.deferDate}
               onChange={iso => patchTask(task.id, { deferDate: iso })}
             />
             <GtdDateTimeField
               label="截止"
-              value={task.dueDate}
+              value={task.data.dueDate}
               onChange={iso => patchTask(task.id, { dueDate: iso })}
             />
           </div>
@@ -137,9 +137,9 @@ export function GtdInspector() {
               </div>
               <div className="w-40 shrink-0">
                 <Select
-                  value={task.groupType ?? ''}
+                  value={task.data.groupType ?? ''}
                   onChange={e =>
-                    setTaskGroupType(task.id, (e.target.value || null) as typeof task.groupType)}
+                    setTaskGroupType(task.id, (e.target.value || null) as typeof task.data.groupType)}
                 >
                   <option value="" disabled={taskChildren.length > 0}>普通任务</option>
                   <option value={GROUP_TYPE.PARALLEL}>并行任务组</option>
@@ -153,7 +153,7 @@ export function GtdInspector() {
                 type="button"
                 variant="outline"
                 className="h-9 flex-1"
-                disabled={!task.projectId}
+                disabled={!task.data.projectId}
                 onClick={() => indentTask(task.id)}
               >
                 缩进
@@ -162,7 +162,7 @@ export function GtdInspector() {
                 type="button"
                 variant="outline"
                 className="h-9 flex-1"
-                disabled={!task.parentId}
+                disabled={!task.data.parentId}
                 onClick={() => outdentTask(task.id)}
               >
                 出缩进
@@ -171,8 +171,8 @@ export function GtdInspector() {
             <div className="flex gap-2">
               <Input
                 value={childName}
-                disabled={!task.projectId}
-                placeholder={task.projectId ? '添加子任务…' : '先将任务移入项目'}
+                disabled={!task.data.projectId}
+                placeholder={task.data.projectId ? '添加子任务…' : '先将任务移入项目'}
                 onChange={e => setChildName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && childName.trim()) {
@@ -184,7 +184,7 @@ export function GtdInspector() {
               <Button
                 type="button"
                 className="h-9 shrink-0"
-                disabled={!task.projectId || !childName.trim()}
+                disabled={!task.data.projectId || !childName.trim()}
                 onClick={() => {
                   addChildTask(task.id, childName)
                   setChildName('')
@@ -197,13 +197,13 @@ export function GtdInspector() {
           <GtdRepeatEditor
             key={`${task.id}:${repeatRule?.id ?? 'none'}`}
             rule={repeatRule}
-            hasDueDate={task.dueDate != null}
-            hasDeferDate={task.deferDate != null}
+            hasDueDate={task.data.dueDate != null}
+            hasDeferDate={task.data.deferDate != null}
             onSave={input => setTaskRepeat(task.id, input)}
           />
           <div className="flex flex-wrap gap-2 pt-2">
             <Button type="button" className="h-9" variant="outline" onClick={() => toggleFlag(task.id)}>
-              {task.flagged ? '取消旗标' : '旗标'}
+              {task.data.flagged ? '取消旗标' : '旗标'}
             </Button>
             {done
               ? (
@@ -237,7 +237,7 @@ export function GtdInspector() {
   }
 
   if (project) {
-    const onHold = project.status === EXPLICIT_STATUS.ON_HOLD
+    const onHold = project.data.status === EXPLICIT_STATUS.ON_HOLD
     return (
       <aside className="flex w-72 shrink-0 flex-col border-l border-slate-800 bg-slate-950/60">
         <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
@@ -256,15 +256,15 @@ export function GtdInspector() {
           <div className="space-y-1">
             <Label className="text-xs text-slate-500">名称</Label>
             <Input
-              value={project.name}
-              onChange={e => patchProject(project.id, { name: e.target.value || project.name })}
+              value={project.data.name}
+              onChange={e => patchProject(project.id, { name: e.target.value || project.data.name })}
               className="border-slate-700 bg-slate-900/50"
             />
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-slate-500">备注</Label>
             <textarea
-              value={project.note ?? ''}
+              value={project.data.note ?? ''}
               onChange={e => patchProject(project.id, { note: e.target.value || null })}
               rows={4}
               className="w-full rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200"
@@ -273,9 +273,9 @@ export function GtdInspector() {
           <div className="space-y-1">
             <Label className="text-xs text-slate-500">类型</Label>
             <Select
-              value={project.type}
+              value={project.data.type}
               onChange={e =>
-                patchProject(project.id, { type: e.target.value as typeof project.type })}
+                patchProject(project.id, { type: e.target.value as typeof project.data.type })}
             >
               <option value="sequential">顺序</option>
               <option value="parallel">并行</option>
@@ -285,12 +285,12 @@ export function GtdInspector() {
           <div className="space-y-1">
             <Label className="text-xs text-slate-500">文件夹</Label>
             <Select
-              value={project.folderId ?? ''}
+              value={project.data.folderId ?? ''}
               onChange={e => patchProject(project.id, { folderId: e.target.value || null })}
             >
               <option value="">无</option>
-              {doc.folders.map(f => (
-                <option key={f.id} value={f.id}>{f.name}</option>
+              {rowStore.liveFolders().map(f => (
+                <option key={f.id} value={f.id}>{f.data.name}</option>
               ))}
             </Select>
           </div>

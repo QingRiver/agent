@@ -4,7 +4,6 @@ import { EXPLICIT_STATUS } from './types'
 
 /**
  * 状态机转换（纯函数，返回新 doc，不改原 doc）。
- * 详见 SPEC §5.1。
  */
 
 function findTask(doc: GtdDocument, taskId: string): Task {

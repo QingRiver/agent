@@ -1,10 +1,5 @@
-import type { RenderGroup, RenderItem } from '@agent/gtd'
-import {
-  EXPLICIT_STATUS,
-  GROUP_TYPE,
-  renderPerspective,
-  SORT_FIELD,
-} from '@agent/gtd'
+import type { EntityRowOf, RenderGroup, RenderItem } from '@agent/gtd'
+import { EXPLICIT_STATUS, GROUP_TYPE, renderPerspective, SORT_FIELD } from '@agent/gtd'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import {
@@ -28,6 +23,10 @@ import { GtdTaskRow } from './GtdTaskRow'
 
 function isGroup(node: RenderGroup | RenderItem): node is RenderGroup {
   return 'children' in node
+}
+
+function taskShape(r: EntityRowOf<'task'>) {
+  return { id: r.id, ...r.data }
 }
 
 function RenderNodes({
@@ -90,7 +89,7 @@ function RenderNodes({
 
 export function GtdTaskList() {
   const {
-    doc,
+    rowStore,
     selection,
     isLoading,
     addInboxTask,
@@ -105,23 +104,24 @@ export function GtdTaskList() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  const perspective = useMemo(() => resolvePerspective(doc, selection), [doc, selection])
+  const perspective = useMemo(() => resolvePerspective(rowStore, selection), [rowStore, selection])
   const selectedProject = selection.kind === 'project'
-    ? doc.projects.find(p => p.id === selection.id) ?? null
+    ? rowStore.findLive('project', selection.id) ?? null
     : null
   const title = useMemo(() => {
     if (selection.kind === 'perspective')
       return perspective.name
     if (selection.kind === 'project')
-      return selectedProject?.name ?? '项目'
+      return selectedProject?.data.name ?? '项目'
     if (selection.kind === 'tag')
-      return doc.tags.find(t => t.id === selection.id)?.name ?? '标签'
-    return doc.folders.find(f => f.id === selection.id)?.name ?? '文件夹'
-  }, [doc, selection, perspective.name, selectedProject?.name])
+      return rowStore.findLive('tag', selection.id)?.data.name ?? '标签'
+    return rowStore.findLive('folder', selection.id)?.data.name ?? '文件夹'
+  }, [rowStore, selection, perspective.name, selectedProject?.data.name])
+  const liveTasks = useMemo(() => rowStore.liveTasks(), [rowStore])
 
   const tree = useMemo(() => {
-    return renderPerspective(doc, perspective, new Date(), GtdStore.dueSoonMs)
-  }, [doc, perspective])
+    return renderPerspective(rowStore, perspective, new Date(), GtdStore.dueSoonMs)
+  }, [rowStore, perspective])
   const visibleTaskIds = useMemo(() => {
     const ids: string[] = []
     const visit = (nodes: Array<RenderGroup | RenderItem>) => {
@@ -136,23 +136,25 @@ export function GtdTaskList() {
     return ids
   }, [tree])
   const parentTaskIds = useMemo(
-    () => new Set(doc.tasks.flatMap(task => task.parentId ? [task.parentId] : [])),
-    [doc.tasks],
+    () => new Set(liveTasks.flatMap(task => task.data.parentId ? [task.data.parentId] : [])),
+    [liveTasks],
   )
   const hiddenTaskIds = useMemo(() => {
     const hidden = new Set<string>()
-    for (const task of doc.tasks) {
-      let parentId = task.parentId
+    const byId = new Map(liveTasks.map(t => [t.id, t]))
+    for (const task of liveTasks) {
+      let parentId = task.data.parentId
       while (parentId) {
         if (collapsed.has(parentId)) {
           hidden.add(task.id)
           break
         }
-        parentId = doc.tasks.find(item => item.id === parentId)?.parentId ?? null
+        parentId = byId.get(parentId)?.data.parentId ?? null
       }
     }
     return hidden
-  }, [collapsed, doc.tasks])
+  }, [collapsed, liveTasks])
+  const activeCount = liveTasks.filter(t => t.data.status === EXPLICIT_STATUS.ACTIVE).length
 
   const canQuickAdd
     = (selection.kind === 'perspective' && selection.id === 'inbox')
@@ -175,8 +177,6 @@ export function GtdTaskList() {
     setDraft('')
   }
 
-  const activeCount = doc.tasks.filter(t => t.status === EXPLICIT_STATUS.ACTIVE).length
-
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
@@ -198,7 +198,7 @@ export function GtdTaskList() {
                 type="button"
                 className={cn(
                   'h-8 rounded-md px-3 text-xs text-slate-400 transition-colors',
-                  selectedProject.type === type && 'bg-slate-700 text-slate-100',
+                  selectedProject.data.type === type && 'bg-slate-700 text-slate-100',
                 )}
                 onClick={() => patchProject(selectedProject.id, { type })}
               >
@@ -230,22 +230,23 @@ export function GtdTaskList() {
       <DndContext
         sensors={sensors}
         onDragEnd={({ active, over }) => {
-          if (!canManualReorder || !over || active.id === over.id)
+          if (!over || active.id === over.id)
             return
-          const task = doc.tasks.find(t => t.id === String(active.id))
-          const overTask = doc.tasks.find(t => t.id === String(over.id))
+          const task = rowStore.findLive('task', String(active.id))
+          const overTask = rowStore.findLive('task', String(over.id))
           if (
             !task
             || !overTask
-            || task.projectId !== overTask.projectId
-            || task.parentId !== overTask.parentId
+            || task.data.projectId !== overTask.data.projectId
+            || task.data.parentId !== overTask.data.parentId
           ) {
             return
           }
-          const siblings = [...doc.tasks]
+          const siblings = liveTasks
             .filter(t =>
-              t.projectId === task.projectId && t.parentId === task.parentId,
+              t.data.projectId === task.data.projectId && t.data.parentId === task.data.parentId,
             )
+            .map(taskShape)
             .sort((a, b) => a.order - b.order)
           const oldIndex = siblings.findIndex(t => t.id === task.id)
           const newIndex = siblings.findIndex(t => t.id === overTask.id)

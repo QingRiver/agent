@@ -56,7 +56,7 @@ export function GtdTaskRow({
   onToggleCollapsed?: () => void
 }) {
   const {
-    doc,
+    rowStore,
     selectedTaskId,
     selectTask,
     completeTask,
@@ -72,13 +72,13 @@ export function GtdTaskRow({
     isDragging,
   } = useSortable({ id: taskId, disabled: !sortable })
 
-  const task = doc.tasks.find(t => t.id === taskId)
-  if (!task || task.status === EXPLICIT_STATUS.DELETED)
+  const task = rowStore.findLive('task', taskId)
+  if (!task || task.data.status === EXPLICIT_STATUS.DELETED)
     return null
 
-  const done = task.status === EXPLICIT_STATUS.COMPLETED
+  const done = task.data.status === EXPLICIT_STATUS.COMPLETED
   const selected = selectedTaskId === taskId
-  const dueLabel = formatDue(task.dueDate)
+  const dueLabel = formatDue(task.data.dueDate)
 
   return (
     <div
@@ -143,11 +143,11 @@ export function GtdTaskRow({
         className="size-4"
         aria-label={done ? '标记未完成' : '标记完成'}
       />
-      <span className={cn('size-1.5 shrink-0 rounded-full', statusDotClass(computed, task.status))} />
+      <span className={cn('size-1.5 shrink-0 rounded-full', statusDotClass(computed, task.data.status))} />
       <span className={cn('min-w-0 flex-1 truncate', done && 'text-slate-500 line-through')}>
-        {task.name}
+        {task.data.name}
       </span>
-      {task.repeatRuleId && (
+      {task.data.repeatRuleId && (
         <Repeat2 className="size-3.5 shrink-0 text-slate-500" aria-label="重复任务" />
       )}
       {dueLabel && (
@@ -165,14 +165,14 @@ export function GtdTaskRow({
         size="sm"
         className={cn(
           'h-8 w-8 shrink-0 p-0',
-          task.flagged ? 'text-amber-400' : 'text-slate-600 opacity-0 group-hover:opacity-100',
+          task.data.flagged ? 'text-amber-400' : 'text-slate-600 opacity-0 group-hover:opacity-100',
         )}
         onClick={(e) => {
           e.stopPropagation()
           toggleFlag(taskId)
         }}
       >
-        <Flag className="size-3.5" fill={task.flagged ? 'currentColor' : 'none'} />
+        <Flag className="size-3.5" fill={task.data.flagged ? 'currentColor' : 'none'} />
       </Button>
     </div>
   )

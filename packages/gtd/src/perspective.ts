@@ -1,14 +1,13 @@
 import type { FilterEvalContext } from './filter'
+import type { RowStore } from './rows'
 import type {
-  AvailabilityFilter,
   ComputedStatus,
   GroupKey,
-  GtdDocument,
   Perspective,
   Project,
   SortKey,
-  Task,
 } from './schema'
+import type { EntityRowOf } from './sync-schema'
 import type { TaskTree } from './tree'
 import { computeStatus } from './availability'
 import { FILTER_FIELD, LEAF_OP, matchFilter, rawValue } from './filter'
@@ -22,11 +21,6 @@ import {
   SORT_DIR,
   SORT_FIELD,
 } from './types'
-
-/**
- * 透视引擎（SPEC §5.5）。纯函数 renderPerspective 产出 RenderTree。
- * 过滤求值核心逻辑（evalNode / rawValue）位于 ./filter（子模块，含完善单测）。
- */
 
 /** 渲染叶子项 */
 export interface RenderItem {
@@ -43,7 +37,7 @@ export interface RenderGroup {
 }
 
 export interface RenderContext {
-  doc: GtdDocument
+  rowStore: RowStore
   tree: TaskTree
   now: Date
   dueSoonIntervalMs: number
@@ -66,97 +60,79 @@ function taskDepth(tree: TaskTree, taskId: string): number {
   return depth
 }
 
-function taskComputed(task: Task, ctx: RenderContext): ComputedStatus {
+function taskComputed(task: EntityRowOf<'task'>, ctx: RenderContext): ComputedStatus {
   return computeStatus(
     task,
     ctx.now,
     ctx.tree,
     ctx.dueSoonIntervalMs,
-    ctx.doc.projects,
+    ctx.rowStore.liveProjects(),
     ctx.statusCache,
   )
 }
 
-/** Step1 基础过滤：availabilityFilter + showCompleted/showDropped + flaggedOnly */
+/** Step1 基础过滤 */
 export function applyBaseFilter(
-  tasks: Task[],
+  tasks: EntityRowOf<'task'>[],
   perspective: Pick<Perspective, 'availabilityFilter' | 'showCompleted' | 'showDropped' | 'flaggedOnly'>,
   ctx: RenderContext,
-): Task[] {
+): EntityRowOf<'task'>[] {
   return tasks.filter((t) => {
-    if (!perspective.showCompleted && t.status === EXPLICIT_STATUS.COMPLETED)
+    if (!perspective.showCompleted && t.data.status === EXPLICIT_STATUS.COMPLETED) {
       return false
+    }
     if (
       !perspective.showDropped
-      && (t.status === EXPLICIT_STATUS.CANCELLED || t.status === EXPLICIT_STATUS.DELETED)
+      && (t.data.status === EXPLICIT_STATUS.CANCELLED || t.data.status === EXPLICIT_STATUS.DELETED)
     ) {
       return false
     }
-    if (perspective.flaggedOnly === true && !t.flagged)
+    if (perspective.flaggedOnly === true && !t.data.flagged) {
       return false
+    }
 
-    if (perspective.availabilityFilter === AVAILABILITY_FILTER.ALL)
+    if (perspective.availabilityFilter === AVAILABILITY_FILTER.ALL) {
       return true
-    if (perspective.availabilityFilter === AVAILABILITY_FILTER.REMAINING)
-      return t.status === EXPLICIT_STATUS.ACTIVE
+    }
+    if (perspective.availabilityFilter === AVAILABILITY_FILTER.REMAINING) {
+      return t.data.status === EXPLICIT_STATUS.ACTIVE
+    }
 
     const computed = taskComputed(t, ctx)
     return isActionable(computed)
   })
 }
 
-/** @deprecated 使用 applyBaseFilter；保留兼容单测 */
-export function applyAvailabilityFilter(
-  tasks: Task[],
-  filter: AvailabilityFilter,
-  tree: TaskTree,
-  now: Date,
-  dueSoonIntervalMs: number,
-  projects: Project[] = [],
-): Task[] {
-  const ctx: RenderContext = {
-    doc: { version: '1', meta: { createdAt: now.toISOString(), updatedAt: now.toISOString(), schemaVersion: '1' }, folders: [], projects, tags: [], tasks, perspectives: [], repeatRules: [], attachments: [] },
-    tree,
-    now,
-    dueSoonIntervalMs,
-    statusCache: new Map(),
-  }
-  return applyBaseFilter(tasks, {
-    availabilityFilter: filter,
-    showCompleted: filter === AVAILABILITY_FILTER.ALL,
-    showDropped: filter === AVAILABILITY_FILTER.ALL,
-    flaggedOnly: null,
-  }, ctx)
-}
-
-/** 内置透视 id 的额外过滤（SPEC §5.5.8 中无法仅用 filter 表达的部分） */
+/** 内置透视额外过滤 */
 export function applyBuiltinFilter(
-  tasks: Task[],
+  tasks: EntityRowOf<'task'>[],
   perspective: Perspective,
-  doc: GtdDocument,
+  rowStore: RowStore,
   now: Date,
   dueSoonIntervalMs: number,
-): Task[] {
+): EntityRowOf<'task'>[] {
   switch (perspective.id) {
     case 'inbox':
-      return tasks.filter(t => t.projectId === null && t.parentId === null)
+      return tasks.filter(t => t.data.projectId === null && t.data.parentId === null)
     case 'review':
       return tasks.filter((t) => {
-        if (!t.projectId)
+        if (!t.data.projectId) {
           return false
-        const project = doc.projects.find(p => p.id === t.projectId)
-        return project ? needsReview(project, now) : false
+        }
+        const project = rowStore.findLive('project', t.data.projectId)
+        return project ? needsReview(project.data as unknown as Project, now) : false
       })
     case 'completed':
-      return tasks.filter(t => t.status === EXPLICIT_STATUS.COMPLETED)
+      return tasks.filter(t => t.data.status === EXPLICIT_STATUS.COMPLETED)
     case 'predicted':
-      return tasks.filter(t => t.dueDate != null)
+      return tasks.filter(t => t.data.dueDate != null)
     case 'forecast': {
       const horizon = new Date(now.getTime() + dueSoonIntervalMs * 7)
       return tasks.filter((t) => {
-        if (!t.dueDate)
+        if (!t.data.dueDate) {
           return false
-        const due = new Date(t.dueDate).getTime()
+        }
+        const due = new Date(t.data.dueDate).getTime()
         return due >= now.getTime() && due <= horizon.getTime()
       })
     }
@@ -165,7 +141,7 @@ export function applyBuiltinFilter(
   }
 }
 
-/** Step3 父级展开：补齐命中 task 的祖先链 id */
+/** Step3 父级展开 */
 export function expandAncestors(taskIds: string[], tree: TaskTree): string[] {
   const result = new Set<string>(taskIds)
   for (const id of taskIds) {
@@ -179,24 +155,27 @@ export function expandAncestors(taskIds: string[], tree: TaskTree): string[] {
 }
 
 /** 单 task 在某 groupKey 下的归属值列表（tag 多归属 → 多值） */
-function groupValues(task: Task, key: GroupKey, doc: GtdDocument): string[] {
+function groupValues(task: EntityRowOf<'task'>, key: GroupKey, rowStore: RowStore): string[] {
   switch (key) {
-    case GROUP_KEY.PROJECT: return [task.projectId ?? '']
+    case GROUP_KEY.PROJECT: return [task.data.projectId ?? '']
     case GROUP_KEY.FOLDER: {
-      const proj = doc.projects.find(p => p.id === task.projectId)
-      return [proj?.folderId ?? '']
+      const proj = rowStore.findLive('project', task.data.projectId ?? '')
+      return [proj?.data.folderId ?? '']
     }
-    case GROUP_KEY.TAG: return task.tagIds.length ? task.tagIds : ['']
-    case GROUP_KEY.DEFER_DATE: return [task.deferDate ?? '']
-    case GROUP_KEY.DUE_DATE: return [task.dueDate ?? '']
-    case GROUP_KEY.FLAGGED: return [String(task.flagged)]
-    case GROUP_KEY.STATUS: return [task.status]
+    case GROUP_KEY.TAG: {
+      const tagIds = rowStore.tagIdsOf(task.id)
+      return tagIds.length ? tagIds : ['']
+    }
+    case GROUP_KEY.DEFER_DATE: return [task.data.deferDate ?? '']
+    case GROUP_KEY.DUE_DATE: return [task.data.dueDate ?? '']
+    case GROUP_KEY.FLAGGED: return [String(task.data.flagged)]
+    case GROUP_KEY.STATUS: return [task.data.status]
     case GROUP_KEY.NONE: return ['']
     default: return ['']
   }
 }
 
-function toRenderItem(task: Task, ctx: RenderContext): RenderItem {
+function toRenderItem(task: EntityRowOf<'task'>, ctx: RenderContext): RenderItem {
   return {
     taskId: task.id,
     computed: taskComputed(task, ctx),
@@ -204,20 +183,21 @@ function toRenderItem(task: Task, ctx: RenderContext): RenderItem {
   }
 }
 
-/** Step4 分组：按多级 groupBy 聚合（tag 多归属一 task 进多组） */
+/** Step4 分组 */
 export function groupBy(
-  tasks: Task[],
+  tasks: EntityRowOf<'task'>[],
   keys: GroupKey[],
-  doc: GtdDocument,
+  rowStore: RowStore,
   ctx: RenderContext,
 ): RenderGroup[] {
-  if (keys.length === 0)
+  if (keys.length === 0) {
     return [{ key: '', label: '', children: tasks.map(t => toRenderItem(t, ctx)) }]
+  }
   const first = keys[0]!
   const rest = keys.slice(1)
-  const buckets = new Map<string, Task[]>()
+  const buckets = new Map<string, EntityRowOf<'task'>[]>()
   for (const t of tasks) {
-    for (const gv of groupValues(t, first, doc)) {
+    for (const gv of groupValues(t, first, rowStore)) {
       const arr = buckets.get(gv) ?? []
       arr.push(t)
       buckets.set(gv, arr)
@@ -226,76 +206,82 @@ export function groupBy(
   return [...buckets.entries()].map(([key, ts]) => ({
     key,
     label: key,
-    children: rest.length ? groupBy(ts, rest, doc, ctx) : ts.map(t => toRenderItem(t, ctx)),
+    children: rest.length ? groupBy(ts, rest, rowStore, ctx) : ts.map(t => toRenderItem(t, ctx)),
   }))
 }
 
-function compareField(a: Task, b: Task, field: string, doc: GtdDocument): number {
-  const va = rawValue(a, field, doc)
-  const vb = rawValue(b, field, doc)
-  if (va == null && vb == null)
+function compareField(a: EntityRowOf<'task'>, b: EntityRowOf<'task'>, field: string, rowStore: RowStore): number {
+  const va = rawValue(a, field, rowStore)
+  const vb = rawValue(b, field, rowStore)
+  if (va == null && vb == null) {
     return 0
-  if (va == null)
+  }
+  if (va == null) {
     return 1
-  if (vb == null)
+  }
+  if (vb == null) {
     return -1
-  if (field === FILTER_FIELD.DUE_DATE || field === FILTER_FIELD.DEFER_DATE)
+  }
+  if (field === FILTER_FIELD.DUE_DATE || field === FILTER_FIELD.DEFER_DATE) {
     return new Date(va as string).getTime() - new Date(vb as string).getTime()
-  if (field === SORT_FIELD.ADDED_AT)
-    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  if (field === FILTER_FIELD.FLAGGED || field === SORT_FIELD.FLAGGED)
+  }
+  if (field === SORT_FIELD.ADDED_AT) {
+    return new Date(a.data.createdAt).getTime() - new Date(b.data.createdAt).getTime()
+  }
+  if (field === FILTER_FIELD.FLAGGED || field === SORT_FIELD.FLAGGED) {
     return (va as boolean ? 1 : 0) - (vb as boolean ? 1 : 0)
-  if (field === FILTER_FIELD.ESTIMATE || field === SORT_FIELD.ESTIMATE)
+  }
+  if (field === FILTER_FIELD.ESTIMATE || field === SORT_FIELD.ESTIMATE) {
     return (va as number) - (vb as number)
-  if (field === SORT_FIELD.NAME)
-    return String(a.name).localeCompare(String(b.name))
-  if (field === SORT_FIELD.ORDER)
-    return a.order - b.order
+  }
+  if (field === SORT_FIELD.NAME) {
+    return String(a.data.name).localeCompare(String(b.data.name))
+  }
+  if (field === SORT_FIELD.ORDER) {
+    return a.data.order - b.data.order
+  }
   return 0
 }
 
-/** Step5 排序：组内多级 sortBy（null 末尾，dir 升降序） */
-export function sortTasks(tasks: Task[], sortBy: SortKey[], doc: GtdDocument): Task[] {
+/** Step5 排序 */
+export function sortTasks(tasks: EntityRowOf<'task'>[], sortBy: SortKey[], rowStore: RowStore): EntityRowOf<'task'>[] {
   const sorted = [...tasks]
   sorted.sort((a, b) => {
     for (const key of sortBy) {
-      const cmp = compareField(a, b, key.field, doc)
-      if (cmp !== 0)
+      const cmp = compareField(a, b, key.field, rowStore)
+      if (cmp !== 0) {
         return key.dir === SORT_DIR.ASC ? cmp : -cmp
+      }
     }
     return 0
   })
   return sorted
 }
 
-/** 完整渲染管线：6 步产出顶层 RenderGroup[]（SPEC §5.5.1） */
+/** 完整渲染管线：6 步产出顶层 RenderGroup[] */
 export function renderPerspective(
-  doc: GtdDocument,
+  rowStore: RowStore,
   perspective: Perspective,
   now: Date,
   dueSoonIntervalMs: number,
 ): RenderGroup[] {
-  const tree = buildTaskTree(doc.tasks)
-  const ctx: RenderContext = {
-    doc,
-    tree,
-    now,
-    dueSoonIntervalMs,
-    statusCache: new Map(),
+  const tasks = rowStore.liveTasks()
+  const tree = buildTaskTree(tasks)
+  const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map() }
+  const evalCtx: FilterEvalContext = { rowStore }
+
+  let filtered = applyBaseFilter(tasks, perspective, ctx)
+  filtered = filtered.filter(t => matchFilter(t, perspective.filter, evalCtx))
+  filtered = applyBuiltinFilter(filtered, perspective, rowStore, now, dueSoonIntervalMs)
+
+  const expandedIds = new Set(expandAncestors(filtered.map(t => t.id), tree))
+  let result = tasks.filter(t => expandedIds.has(t.id))
+
+  if (perspective.sortBy.length > 0) {
+    result = sortTasks(result, perspective.sortBy, rowStore)
   }
-  const evalCtx: FilterEvalContext = { doc }
 
-  let tasks = applyBaseFilter(doc.tasks, perspective, ctx)
-  tasks = tasks.filter(t => matchFilter(t, perspective.filter, evalCtx))
-  tasks = applyBuiltinFilter(tasks, perspective, doc, now, dueSoonIntervalMs)
-
-  const expandedIds = new Set(expandAncestors(tasks.map(t => t.id), tree))
-  tasks = doc.tasks.filter(t => expandedIds.has(t.id))
-
-  if (perspective.sortBy.length > 0)
-    tasks = sortTasks(tasks, perspective.sortBy, doc)
-
-  return groupBy(tasks, perspective.groupBy, doc, ctx)
+  return groupBy(result, perspective.groupBy, rowStore, ctx)
 }
 
 function builtin(id: string, name: string, overrides: Partial<Perspective> = {}): Perspective {
@@ -316,7 +302,7 @@ function builtin(id: string, name: string, overrides: Partial<Perspective> = {})
   }
 }
 
-/** 8 个内置透视：收件箱/项目/标签/预测/旗标/回顾/已完成/预计 */
+/** 8 个内置透视 */
 export function builtinPerspectives(): Perspective[] {
   return [
     builtin('inbox', '收件箱', {

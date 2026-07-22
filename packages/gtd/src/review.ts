@@ -2,7 +2,7 @@ import type { GtdDocument, Project, ReviewConfig } from './schema'
 import { REVIEW_INTERVAL } from './types'
 
 /**
- * 回顾机制（SPEC §5.4）。Project 级。
+ * 回顾机制（Project 级）。
  */
 
 const DAY = 86400000

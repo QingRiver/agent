@@ -2,7 +2,7 @@ import type { GtdDocument } from './schema'
 import { GtdDocumentSchema } from './schema'
 
 /**
- * 导入 / 导出（SPEC §6）。整体 JSON 序列化，zod 校验。
+ * 导入 / 导出。整体 JSON 序列化，zod 校验。
  */
 
 /** 导出：GtdDocument → JSON 字符串（经 GtdDocumentSchema 校验） */

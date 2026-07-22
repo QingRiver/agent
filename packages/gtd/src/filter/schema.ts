@@ -11,7 +11,7 @@ export { FILTER_FIELD }
 const FilterFieldSchema = z.enum(FILTER_FIELD)
 
 /**
- * 可嵌套 JSON DSL 的 schema 与类型定义（SPEC §5.5 重构）。
+ * 可嵌套 JSON DSL 的 schema 与类型定义。
  *
  * 设计要点：
  * - 节点用 `op` 判别：逻辑节点（and/or/not）与叶子节点（LeafOp）取值不相交。

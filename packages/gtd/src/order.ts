@@ -1,5 +1,5 @@
 /**
- * Fractional order helpers for sibling reordering (tech-01).
+ * Fractional order helpers for sibling reordering.
  */
 
 /** Minimum gap between neighbors before a sibling reindex is required. */

@@ -186,7 +186,7 @@ export class DrizzleGtdRepository implements GtdRepository {
           ),
         )
       }
-      const ttRows = doc.tasks.flatMap(t => t.tagIds.map(tagId => ({ taskId: t.id, tagId })))
+      const ttRows = doc.tasks.flatMap(t => t.tagIds.map(tagId => ({ taskId: t.id, tagId, userId })))
       if (ttRows.length)
         await tx.insert(gtdTaskTags).values(ttRows)
       if (doc.perspectives.length) {
@@ -194,7 +194,7 @@ export class DrizzleGtdRepository implements GtdRepository {
           .values(doc.perspectives.map(p => perspectiveToRow(p, userId)))
       }
       if (doc.attachments.length)
-        await tx.insert(gtdAttachments).values(doc.attachments.map(attachmentToRow))
+        await tx.insert(gtdAttachments).values(doc.attachments.map(a => attachmentToRow(a, userId)))
     })
   }
 
@@ -244,7 +244,7 @@ export class DrizzleGtdRepository implements GtdRepository {
       await tx.delete(gtdTaskTags).where(eq(gtdTaskTags.taskId, task.id))
       if (task.tagIds.length) {
         await tx.insert(gtdTaskTags).values(
-          task.tagIds.map(tagId => ({ taskId: task.id, tagId })),
+          task.tagIds.map(tagId => ({ taskId: task.id, tagId, userId })),
         )
       }
 

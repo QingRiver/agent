@@ -1,8 +1,8 @@
-import type { Folder, Tag, Task } from './schema'
+import type { EntityRowOf } from './sync-schema'
 
 /** Task 树节点（action group 自引用） */
 export interface TaskNode {
-  task: Task
+  task: EntityRowOf<'task'>
   parent: TaskNode | null
   children: TaskNode[]
 }
@@ -14,7 +14,7 @@ export interface TaskTree {
 }
 
 export interface FolderNode {
-  folder: Folder
+  folder: EntityRowOf<'folder'>
   parent: FolderNode | null
   children: FolderNode[]
 }
@@ -25,7 +25,7 @@ export interface FolderTree {
 }
 
 export interface TagNode {
-  tag: Tag
+  tag: EntityRowOf<'tag'>
   parent: TagNode | null
   children: TagNode[]
 }
@@ -38,15 +38,16 @@ export interface TagTree {
 const byOrder = (a: { order: number }, b: { order: number }) => a.order - b.order
 
 /** 由扁平 tasks 按 parentId 构建树（根为 parentId 为 null 或悬空的顶层 action） */
-export function buildTaskTree(tasks: Task[]): TaskTree {
+export function buildTaskTree(tasks: EntityRowOf<'task'>[]): TaskTree {
   const byId = new Map<string, TaskNode>()
   for (const task of tasks)
     byId.set(task.id, { task, parent: null, children: [] })
   const roots: TaskNode[] = []
   for (const task of tasks) {
     const node = byId.get(task.id)!
-    if (task.parentId && byId.has(task.parentId)) {
-      const parent = byId.get(task.parentId)!
+    const parentId = task.data.parentId
+    if (parentId && byId.has(parentId)) {
+      const parent = byId.get(parentId)!
       node.parent = parent
       parent.children.push(node)
     }
@@ -54,7 +55,7 @@ export function buildTaskTree(tasks: Task[]): TaskTree {
       roots.push(node)
     }
   }
-  const sortNode = (a: TaskNode, b: TaskNode) => byOrder(a.task, b.task)
+  const sortNode = (a: TaskNode, b: TaskNode) => byOrder(a.task.data, b.task.data)
   roots.sort(sortNode)
   for (const node of byId.values())
     node.children.sort(sortNode)
@@ -62,15 +63,16 @@ export function buildTaskTree(tasks: Task[]): TaskTree {
 }
 
 /** 由扁平 folders 按 parentId 构建 Folder 树 */
-export function buildFolderTree(folders: Folder[]): FolderTree {
+export function buildFolderTree(folders: EntityRowOf<'folder'>[]): FolderTree {
   const byId = new Map<string, FolderNode>()
   for (const folder of folders)
     byId.set(folder.id, { folder, parent: null, children: [] })
   const roots: FolderNode[] = []
   for (const folder of folders) {
     const node = byId.get(folder.id)!
-    if (folder.parentId && byId.has(folder.parentId)) {
-      const parent = byId.get(folder.parentId)!
+    const parentId = folder.data.parentId
+    if (parentId && byId.has(parentId)) {
+      const parent = byId.get(parentId)!
       node.parent = parent
       parent.children.push(node)
     }
@@ -78,7 +80,7 @@ export function buildFolderTree(folders: Folder[]): FolderTree {
       roots.push(node)
     }
   }
-  const sortNode = (a: FolderNode, b: FolderNode) => byOrder(a.folder, b.folder)
+  const sortNode = (a: FolderNode, b: FolderNode) => byOrder(a.folder.data, b.folder.data)
   roots.sort(sortNode)
   for (const node of byId.values())
     node.children.sort(sortNode)
@@ -86,15 +88,16 @@ export function buildFolderTree(folders: Folder[]): FolderTree {
 }
 
 /** 由扁平 tags 按 parentId 构建 Tag 树 */
-export function buildTagTree(tags: Tag[]): TagTree {
+export function buildTagTree(tags: EntityRowOf<'tag'>[]): TagTree {
   const byId = new Map<string, TagNode>()
   for (const tag of tags)
     byId.set(tag.id, { tag, parent: null, children: [] })
   const roots: TagNode[] = []
   for (const tag of tags) {
     const node = byId.get(tag.id)!
-    if (tag.parentId && byId.has(tag.parentId)) {
-      const parent = byId.get(tag.parentId)!
+    const parentId = tag.data.parentId
+    if (parentId && byId.has(parentId)) {
+      const parent = byId.get(parentId)!
       node.parent = parent
       parent.children.push(node)
     }
@@ -102,7 +105,7 @@ export function buildTagTree(tags: Tag[]): TagTree {
       roots.push(node)
     }
   }
-  const sortNode = (a: TagNode, b: TagNode) => byOrder(a.tag, b.tag)
+  const sortNode = (a: TagNode, b: TagNode) => byOrder(a.tag.data, b.tag.data)
   roots.sort(sortNode)
   for (const node of byId.values())
     node.children.sort(sortNode)
@@ -110,8 +113,8 @@ export function buildTagTree(tags: Tag[]): TagTree {
 }
 
 /** 返回 taskId 的全部祖先 Task（从父到根） */
-export function ancestors(tree: TaskTree, taskId: string): Task[] {
-  const result: Task[] = []
+export function ancestors(tree: TaskTree, taskId: string): EntityRowOf<'task'>[] {
+  const result: EntityRowOf<'task'>[] = []
   let node = tree.byId.get(taskId)?.parent ?? null
   while (node) {
     result.push(node.task)
@@ -121,7 +124,7 @@ export function ancestors(tree: TaskTree, taskId: string): Task[] {
 }
 
 /** 返回 taskId 的直接子 Task（已按 order 排序） */
-export function children(tree: TaskTree, taskId: string): Task[] {
+export function children(tree: TaskTree, taskId: string): EntityRowOf<'task'>[] {
   return (tree.byId.get(taskId)?.children ?? []).map(n => n.task)
 }
 
@@ -129,8 +132,8 @@ export function children(tree: TaskTree, taskId: string): Task[] {
 export function nearestAncestor(
   tree: TaskTree,
   taskId: string,
-  predicate: (task: Task) => boolean,
-): Task | null {
+  predicate: (task: EntityRowOf<'task'>) => boolean,
+): EntityRowOf<'task'> | null {
   let node = tree.byId.get(taskId)?.parent ?? null
   while (node) {
     if (predicate(node.task))
@@ -141,8 +144,8 @@ export function nearestAncestor(
 }
 
 /** 返回某 project 下的顶层 action（parentId 为 null 且归属该 project），按 order 排序 */
-export function rootTasksOfProject(tasks: Task[], projectId: string): Task[] {
+export function rootTasksOfProject(tasks: EntityRowOf<'task'>[], projectId: string): EntityRowOf<'task'>[] {
   return tasks
-    .filter(t => t.projectId === projectId && t.parentId === null)
-    .sort(byOrder)
+    .filter(t => t.data.projectId === projectId && t.data.parentId === null)
+    .sort((a, b) => byOrder(a.data, b.data))
 }
