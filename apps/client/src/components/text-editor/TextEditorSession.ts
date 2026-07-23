@@ -1,14 +1,33 @@
 import type { Hunk, WriterChangeSummary } from '@agent/protocol'
 import type { ViewUpdate } from '@codemirror/view'
 import type { AgentErrorInfo } from '@components/copilot/AgentErrorBanner'
+import type { InlineEditState } from './inline-edit-field'
 import type { Suggestion } from './types'
 import { computeHunks, hunkKey, WRITER_CHANGE_SUMMARIES_EVENT } from '@agent/protocol'
 import { Conversation } from '@apis/conversation-api'
 import { markdown } from '@codemirror/lang-markdown'
-import { EditorState, RangeSet, StateEffect, StateField } from '@codemirror/state'
-import { EditorView, gutter, GutterMarker } from '@codemirror/view'
+import { EditorState, Prec } from '@codemirror/state'
+import { EditorView, keymap } from '@codemirror/view'
 import { yCollab } from 'y-codemirror.next'
 import * as Y from 'yjs'
+import {
+  buildInlineUserMessage,
+  clearInlineEditEffect,
+  inlineEditChangeFilter,
+  inlineEditDecorations,
+  inlineEditField,
+  sanitizeInlineOutput,
+  setEditingInstructionEffect,
+  setInlineAiTextEffect,
+  startInlineEditEffect,
+} from './inline-edit-field'
+import {
+  removeSuggestionEffect,
+  setSuggestionsEffect,
+  suggestionGhostChangeFilter,
+  suggestionGhostDecorations,
+  suggestionsField,
+} from './suggestion-field'
 
 const INITIAL_TEXT = `低空经济是2026年非常火热的行业，主要靠无人机。
 
@@ -21,15 +40,26 @@ const INITIAL_TEXT = `低空经济是2026年非常火热的行业，主要靠无
 export interface WriterAgent {
   isRunning: boolean
   threadId?: string | null
+  state?: Record<string, unknown> | null
+  setState?: (state: Record<string, unknown>) => void
   setMessages: (messages: unknown[]) => void
   runAgent: (
     input: Record<string, never>,
     options: {
-      onEvent: (ctx: {
+      onEvent?: (ctx: {
         event: { type: string, delta?: string, name?: string, value?: unknown }
+      }) => void
+      onCustomEvent?: (ctx: {
+        event: { type?: string, name?: string, value?: unknown }
       }) => void
     },
   ) => Promise<unknown>
+}
+
+export interface SelectionRange {
+  from: number
+  to: number
+  text: string
 }
 
 export interface TextEditorSessionOptions {
@@ -37,129 +67,22 @@ export interface TextEditorSessionOptions {
   getAgent: () => WriterAgent | undefined
   onSuggestionsChange: (suggestions: Suggestion[]) => void
   onPolishingChange: (polishing: boolean) => void
-  /** AI 思考流（reasoning_content）变化时回调,供 UI 流式展示 */
-  onThinkingChange: (thinking: string) => void
-  /** agent 出错时回调（RUN_ERROR 事件或本地异常兜底），供 UI 展示可展开错误条 */
   onAgentError?: (error: AgentErrorInfo) => void
+  onSelectionAction?: (action: 'edit' | 'chat', range: SelectionRange) => void
+  onInlineEditChange?: (edit: InlineEditState | null) => void
 }
 
-/** gutter 圆点 marker,携带该行所有建议的 summary */
-class MrDot extends GutterMarker {
-  readonly items: { sid: string, summary: string }[]
-
-  constructor(items: { sid: string, summary: string }[]) {
-    super()
-    this.items = items
-  }
-
-  toDOM() {
-    const el = document.createElement('div')
-    el.className = 'ai-mr-dot'
-    el.title = this.items.map(i => i.summary).join('\n')
-    return el
-  }
-}
-
-class MrSpacer extends GutterMarker {
-  toDOM() {
-    const el = document.createElement('div')
-    el.className = 'ai-mr-spacer'
-    return el
-  }
-}
-
-const mrSpacer = new MrSpacer()
-
-/** 建议主键:用 hunkKey,流式中身份稳定 → React 卡片原地更新而非 remount */
 function sugSid(h: Hunk): string {
   return hunkKey(h.from, h.originalText)
 }
 
-/** 面板相关签名(忽略 from/to 位置变化,只在内容/stale 变化时才推 React) */
 function sugSignature(sugs: Suggestion[]): string {
   return sugs.map(s => `${s.sid}|${s.stale ? 1 : 0}|${s.summary}|${s.newText.length}`).join('::')
 }
 
-const setSuggestionsEffect = StateEffect.define<Suggestion[]>()
-const removeSuggestionEffect = StateEffect.define<string>()
-
-/**
- * 建议状态:CM StateField 持有 Suggestion[](纯位置,不进 Yjs)。
- * - docChanged → tr.changes.mapPos 追位置 + sliceDoc 比对判 stale(CM 原生位置映射,无需 RelativePosition)
- * - setSuggestionsEffect → 整体替换(AI 润色产出)
- * - removeSuggestionEffect → 接受/拒绝单条
- */
-const suggestionsField = StateField.define<Suggestion[]>({
-  create: () => [],
-  update(sugs, tr) {
-    // setSuggestionsEffect:整体替换(AI 润色产出,位置已对齐当前 doc),直接返回
-    for (const e of tr.effects) {
-      if (e.is(setSuggestionsEffect))
-        return e.value
-      if (e.is(removeSuggestionEffect))
-        sugs = sugs.filter(s => s.sid !== e.value)
-    }
-    if (!tr.docChanged)
-      return sugs
-    // docChanged(用户编辑 / 接受建议的 changes)→ mapPos 追位置 + sliceDoc 判 stale。
-    // 注意:accept 同一 tr 里既有 changes 又有 removeSuggestionEffect,先删后映射,其余建议位置随接受处自动平移。
-    return sugs.map((s) => {
-      const from = tr.changes.mapPos(s.from, -1)
-      const to = tr.changes.mapPos(s.to, 1)
-      // 纯插入(originalText='')无区间文本可比,仅靠锚点位置;其余比对区间文本是否被改动
-      const stale = s.originalText ? tr.state.sliceDoc(from, to) !== s.originalText : false
-      return { ...s, from, to, stale }
-    })
-  },
-})
-
-/** gutter markers:从 suggestionsField 派生,CM 在自身 update 周期重建(无需手动 dispatch) */
-const gutterField = StateField.define<RangeSet<MrDot>>({
-  create: state => buildGutterSet(state),
-  update: (val, tr) => {
-    const sugChanged = tr.effects.some(
-      e => e.is(setSuggestionsEffect) || e.is(removeSuggestionEffect),
-    )
-    return tr.docChanged || sugChanged ? buildGutterSet(tr.state) : val
-  },
-})
-
-function buildGutterSet(state: EditorState): RangeSet<MrDot> {
-  const doc = state.doc
-  const docLen = doc.length
-  const lineItems = new Map<number, { sid: string, summary: string }[]>()
-  for (const s of state.field(suggestionsField)) {
-    if (s.stale || s.from < 0)
-      continue
-    const from = Math.min(s.from, docLen)
-    const to = Math.min(s.to, docLen)
-    if (to < from)
-      continue
-    const startLine = doc.lineAt(Math.min(from, Math.max(0, docLen))).number
-    const endLine = doc.lineAt(
-      to > from
-        ? Math.min(to - 1, Math.max(0, docLen - 1))
-        : Math.min(from, Math.max(0, docLen)),
-    ).number
-    for (let n = startLine; n <= endLine; n++) {
-      const arr = lineItems.get(n) ?? []
-      arr.push({ sid: s.sid, summary: s.summary })
-      lineItems.set(n, arr)
-    }
-  }
-  const ranges = [...lineItems.entries()].map(([line, items]) =>
-    new MrDot(items).range(doc.line(line).from),
-  )
-  ranges.sort((a, b) => a.from - b.from)
-  return RangeSet.of(ranges, true)
-}
-
 /**
  * Yjs + CodeMirror 编辑器会话。
- *
- * 正文用 Yjs(yText)+ yCollab 同步(保留协同/undo 能力);修订建议(Suggestion)是纯 CM
- * StateField,位置靠 tr.changes.mapPos 追踪——不进 Yjs、不用 RelativePosition、不挂 yText
- * 观察者,从根上消除「CM update 中 view.dispatch」的重入崩溃。
+ * 正文用 Yjs；Suggestion / inline 幽灵预览为纯 CM StateField。
  */
 export class TextEditorSession {
   private disposed = false
@@ -167,13 +90,11 @@ export class TextEditorSession {
   private readonly yText: Y.Text
   private view: EditorView | null = null
   private threadId: string | null = null
-  /** summary 缓存,键为 hunkKey(hintFrom, originalText),与 server 侧 hunk 对齐 */
   private summariesByHunkKey = new Map<string, string>()
   private polishing = false
-  /** 本次润色开始时的正文快照;流式 diff 只对此快照有效 */
   private polishBaseline: string | null = null
-  /** AI 思考流累积文本（reasoning_content） */
-  private thinking = ''
+  private inlineGen = 0
+  private inlineAbort = false
   private readonly options: TextEditorSessionOptions
 
   constructor(options: TextEditorSessionOptions) {
@@ -182,12 +103,6 @@ export class TextEditorSession {
   }
 
   start(): void {
-    const mrGutter = gutter({
-      class: 'ai-mr-gutter',
-      markers: (v: EditorView) => v.state.field(gutterField),
-      initialSpacer: () => mrSpacer,
-    })
-
     const isDark = document.documentElement.classList.contains('dark')
     const editorTheme = EditorView.theme({
       '&': {
@@ -211,20 +126,131 @@ export class TextEditorSession {
         backgroundColor: isDark ? '#264f78' : '#bfdbfe',
       },
       '&.cm-focused': { outline: 'none' },
-      '.ai-mr-gutter': { width: '14px', whiteSpace: 'nowrap' },
-      '.ai-mr-spacer': { display: 'inline-block', width: '14px' },
-      '.ai-mr-dot': {
-        display: 'inline-block',
-        width: '8px',
-        height: '8px',
-        margin: '9px 3px 0',
-        borderRadius: '9999px',
-        background: '#3b82f6',
-        boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.2)',
-        cursor: 'help',
-        verticalAlign: 'top',
+      '.cm-inline-edit-old': {
+        backgroundColor: isDark ? 'rgba(239, 68, 68, 0.18)' : 'rgba(254, 226, 226, 0.9)',
+        color: isDark ? '#fca5a5' : '#b91c1c',
+        textDecoration: 'line-through',
+      },
+      '.cm-inline-edit-preview': {
+        margin: '6px 0 10px',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        border: isDark ? '1px solid rgba(16,185,129,0.35)' : '1px solid rgba(16,185,129,0.4)',
+        backgroundColor: isDark ? 'rgba(16, 185, 129, 0.08)' : 'rgba(236, 253, 245, 0.95)',
+      },
+      '.cm-inline-edit-meta': {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        padding: '4px 8px',
+        fontSize: '11px',
+        color: isDark ? '#94a3b8' : '#64748b',
+        borderBottom: isDark ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(16,185,129,0.25)',
+      },
+      '.cm-inline-edit-meta-label': {
+        flexShrink: '0',
+      },
+      '.cm-inline-edit-instruction-input': {
+        flex: '1',
+        minWidth: '0',
+        fontSize: '11px',
+        lineHeight: '1.4',
+        padding: '2px 6px',
+        borderRadius: '4px',
+        border: isDark ? '1px solid #475569' : '1px solid #cbd5e1',
+        background: isDark ? 'rgba(0,0,0,0.35)' : '#fff',
+        color: isDark ? '#e2e8f0' : '#0f172a',
+        outline: 'none',
+      },
+      '.cm-inline-edit-instruction-input:focus': {
+        borderColor: '#10b981',
+        boxShadow: '0 0 0 1px rgba(16,185,129,0.35)',
+      },
+      '.cm-inline-edit-ghost': {
+        padding: '8px 10px',
+        whiteSpace: 'pre-wrap',
+        color: isDark ? '#6ee7b7' : '#047857',
+        backgroundColor: isDark ? 'rgba(16, 185, 129, 0.12)' : 'rgba(209, 250, 229, 0.85)',
+        fontSize: 'inherit',
+        lineHeight: 'inherit',
+      },
+      '.cm-inline-edit-toolbar': {
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '6px',
+        padding: '6px 8px',
+        borderTop: isDark ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(16,185,129,0.25)',
+        backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.6)',
+      },
+      '.cm-inline-edit-btn': {
+        fontSize: '11px',
+        padding: '2px 8px',
+        borderRadius: '4px',
+        border: isDark ? '1px solid #475569' : '1px solid #cbd5e1',
+        background: 'transparent',
+        color: isDark ? '#e2e8f0' : '#334155',
+        cursor: 'pointer',
+      },
+      '.cm-inline-edit-btn:hover': {
+        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+      },
+      '.cm-inline-edit-btn:disabled': {
+        opacity: '0.45',
+        cursor: 'not-allowed',
+      },
+      '.cm-inline-edit-btn-accept': {
+        borderColor: '#059669',
+        color: isDark ? '#6ee7b7' : '#047857',
+      },
+      '.cm-inline-edit-btn-reject': {
+        borderColor: '#dc2626',
+        color: isDark ? '#fca5a5' : '#b91c1c',
+      },
+      '.cm-inline-edit-btn-stop': {
+        borderColor: '#d97706',
+        color: isDark ? '#fcd34d' : '#b45309',
       },
     }, { dark: isDark })
+
+    const selectionKeymap = Prec.highest(keymap.of([
+      {
+        key: 'Mod-k',
+        run: (view) => {
+          const { from, to } = view.state.selection.main
+          if (from === to)
+            return false
+          if (view.state.field(suggestionsField).length > 0) {
+            this.options.onAgentError?.({
+              message: '请先处理正文中的修订预览，或全部拒绝后再使用 ⌘K',
+              code: 'EDITOR_BUSY',
+              name: 'Busy',
+              json: '{}',
+            })
+            return true
+          }
+          this.options.onSelectionAction?.('edit', {
+            from,
+            to,
+            text: view.state.sliceDoc(from, to),
+          })
+          return true
+        },
+      },
+      {
+        key: 'Mod-j',
+        run: (view) => {
+          const { from, to } = view.state.selection.main
+          if (from === to)
+            return false
+          this.options.onSelectionAction?.('chat', {
+            from,
+            to,
+            text: view.state.sliceDoc(from, to),
+          })
+          return true
+        },
+      },
+    ]))
 
     this.view = new EditorView({
       state: EditorState.create({
@@ -233,14 +259,22 @@ export class TextEditorSession {
           markdown(),
           yCollab(this.yText, undefined),
           suggestionsField,
-          gutterField,
-          mrGutter,
-          // 只在面板相关签名变化时推 React,避免每次按键重渲染
+          suggestionGhostDecorations,
+          suggestionGhostChangeFilter(),
+          inlineEditField,
+          inlineEditDecorations,
+          inlineEditChangeFilter(),
+          selectionKeymap,
           EditorView.updateListener.of((v: ViewUpdate) => {
             const before = sugSignature(v.startState.field(suggestionsField))
             const after = sugSignature(v.state.field(suggestionsField))
             if (before !== after)
               this.options.onSuggestionsChange(v.state.field(suggestionsField))
+
+            const ieBefore = v.startState.field(inlineEditField)
+            const ieAfter = v.state.field(inlineEditField)
+            if (ieBefore !== ieAfter)
+              this.options.onInlineEditChange?.(ieAfter)
           }),
           editorTheme,
         ],
@@ -250,25 +284,38 @@ export class TextEditorSession {
 
     this.yText.insert(0, INITIAL_TEXT)
     this.options.onSuggestionsChange([])
+    this.options.onInlineEditChange?.(null)
   }
 
   dispose(): void {
     if (this.disposed)
       return
     this.disposed = true
+    this.inlineAbort = true
     this.view?.destroy()
     this.view = null
     this.ydoc.destroy()
   }
 
+  getInlineEdit(): InlineEditState | null {
+    return this.view?.state.field(inlineEditField) ?? null
+  }
+
+  coordsAtPos(pos: number): { top: number, left: number, bottom: number } | null {
+    if (!this.view)
+      return null
+    const c = this.view.coordsAtPos(pos)
+    if (!c)
+      return null
+    return { top: c.top, left: c.left, bottom: c.bottom }
+  }
+
   accept(sid: string): void {
-    // 不变量:润色中禁止接受,防止写入未完成的 newText(代码层兜底,不依赖 UI disabled)
     if (!this.alive() || this.polishing || !this.view)
       return
     const s = this.view.state.field(suggestionsField).find(x => x.sid === sid)
-    if (!s)
+    if (!s || s.stale)
       return
-    // 锚点区间文本已被改动 → 失效,拒绝写入
     if (s.originalText && this.view.state.sliceDoc(s.from, s.to) !== s.originalText)
       return
     this.view.dispatch({
@@ -283,8 +330,241 @@ export class TextEditorSession {
     this.view.dispatch({ effects: removeSuggestionEffect.of(sid) })
   }
 
+  /** 自后向前接受，降低位置漂移风险 */
+  acceptAll(): void {
+    if (!this.alive() || this.polishing || !this.view)
+      return
+    const sugs = [...this.view.state.field(suggestionsField)]
+      .filter(s => !s.stale)
+      .sort((a, b) => b.from - a.from)
+    for (const s of sugs)
+      this.accept(s.sid)
+  }
+
+  rejectAll(): void {
+    if (!this.alive() || !this.view)
+      return
+    this.clearSuggestions()
+  }
+
+  stopInline(): void {
+    this.inlineAbort = true
+    if (!this.view)
+      return
+    const edit = this.view.state.field(inlineEditField)
+    if (edit?.streaming) {
+      this.view.dispatch({
+        effects: setInlineAiTextEffect.of({ aiText: edit.aiText, streaming: false }),
+      })
+    }
+  }
+
+  rejectInline(): void {
+    this.inlineAbort = true
+    if (!this.alive() || !this.view)
+      return
+    this.view.dispatch({ effects: clearInlineEditEffect.of(null) })
+  }
+
+  beginFollowUpEdit(): void {
+    if (!this.alive() || !this.view)
+      return
+    const edit = this.view.state.field(inlineEditField)
+    if (!edit || edit.streaming)
+      return
+    this.view.dispatch({ effects: setEditingInstructionEffect.of(true) })
+  }
+
+  cancelFollowUpEdit(): void {
+    if (!this.alive() || !this.view)
+      return
+    const edit = this.view.state.field(inlineEditField)
+    if (!edit?.editingInstruction)
+      return
+    this.view.dispatch({ effects: setEditingInstructionEffect.of(false) })
+  }
+
+  acceptInline(): void {
+    if (!this.alive() || !this.view)
+      return
+    const edit = this.view.state.field(inlineEditField)
+    if (!edit || edit.streaming || edit.editingInstruction)
+      return
+    const text = sanitizeInlineOutput(edit.aiText)
+    if (!text)
+      return
+    if (this.view.state.sliceDoc(edit.from, edit.to) !== edit.originalText)
+      return
+    const { from, to } = edit
+    // 先清幽灵预览解除 changeFilter 锁定，再一次性写入正文（经 yCollab）
+    this.view.dispatch({ effects: clearInlineEditEffect.of(null) })
+    this.view.dispatch({
+      changes: { from, to, insert: text },
+    })
+  }
+
+  async inlineEdit(params: {
+    from: number
+    to: number
+    text: string
+    instruction: string
+  }): Promise<void> {
+    if (!this.alive() || this.polishing || !this.view)
+      return
+    if (this.view.state.field(suggestionsField).length > 0) {
+      this.options.onAgentError?.({
+        message: '请先处理正文中的修订预览，或全部拒绝后再使用 ⌘K',
+        code: 'EDITOR_BUSY',
+        name: 'Busy',
+        json: '{}',
+      })
+      return
+    }
+    const ag = this.options.getAgent()
+    if (!ag || ag.isRunning)
+      return
+    if (this.view.state.sliceDoc(params.from, params.to) !== params.text)
+      return
+
+    const instruction = params.instruction.trim()
+    if (!instruction)
+      return
+
+    this.inlineAbort = false
+    const gen = ++this.inlineGen
+    const doc = this.view.state.doc
+    const userContent = buildInlineUserMessage({
+      instruction,
+      docBefore: doc.sliceString(0, params.from),
+      selectedText: params.text,
+      docAfter: doc.sliceString(params.to),
+    })
+
+    this.view.dispatch({
+      effects: startInlineEditEffect.of({
+        from: params.from,
+        to: params.to,
+        originalText: params.text,
+        instruction,
+        aiText: '',
+        streaming: true,
+      }),
+    })
+
+    this.setEditCase(ag, 'inline', {
+      polishInstruction: instruction,
+      focuses: [{ from: params.from, to: params.to, text: params.text }],
+    })
+    ag.setMessages([{ id: `writer-inline-${Date.now()}`, role: 'user', content: userContent }] as never[])
+    let aiText = ''
+    try {
+      if (!this.threadId)
+        this.threadId = (await Conversation.create('writer')).id
+      if (!this.alive() || gen !== this.inlineGen)
+        return
+      ag.threadId = this.threadId
+      await ag.runAgent({}, {
+        onEvent: ({ event }) => {
+          if (!this.alive() || gen !== this.inlineGen || this.inlineAbort)
+            return
+          if (event.type === 'TEXT_MESSAGE_CONTENT') {
+            aiText += event.delta ?? ''
+            this.view?.dispatch({
+              effects: setInlineAiTextEffect.of({
+                aiText: sanitizeInlineOutput(aiText) || aiText,
+                streaming: true,
+              }),
+            })
+          }
+          else if (event.type === 'RUN_ERROR') {
+            const ev = event as unknown as Record<string, unknown>
+            const str = (k: string): string => {
+              const v = ev[k]
+              return typeof v === 'string' ? v : ''
+            }
+            this.options.onAgentError?.({
+              message: str('message') || '选区改写失败',
+              code: str('code'),
+              name: str('name'),
+              json: str('json'),
+            })
+          }
+        },
+      })
+    }
+    catch (err) {
+      if (this.alive() && gen === this.inlineGen) {
+        console.error('writer inline 失败:', err)
+        const message = err instanceof Error ? err.message : String(err)
+        this.options.onAgentError?.({
+          message,
+          code: 'AGENT_LOCAL',
+          name: err instanceof Error ? err.name : 'Error',
+          json: JSON.stringify({}, null, 2),
+        })
+      }
+    }
+    finally {
+      if (this.alive() && gen === this.inlineGen && this.view) {
+        const finalText = sanitizeInlineOutput(aiText)
+        this.view.dispatch({
+          effects: setInlineAiTextEffect.of({
+            aiText: finalText || aiText,
+            streaming: false,
+          }),
+        })
+      }
+      this.setEditCase(ag, 'document')
+    }
+  }
+
+  /** 将对话 write 提案应用到多段幽灵 Suggestions（不改正文直至用户 accept） */
+  applyProposal(params: {
+    baseline: string
+    polished: string
+    changes?: WriterChangeSummary[]
+  }): boolean {
+    if (!this.alive() || !this.view)
+      return false
+    if (this.view.state.field(inlineEditField)) {
+      this.options.onAgentError?.({
+        message: '请先结束行内改写，再应用对话中的修改',
+        code: 'EDITOR_BUSY',
+        name: 'Busy',
+        json: '{}',
+      })
+      return false
+    }
+    const current = this.view.state.doc.toString()
+    if (current !== params.baseline) {
+      this.options.onAgentError?.({
+        message: '文稿已变更，无法应用此次修改建议',
+        code: 'BASELINE_STALE',
+        name: 'Stale',
+        json: '{}',
+      })
+      return false
+    }
+    const polished = params.polished.trim()
+    if (!polished)
+      return false
+
+    this.clearSuggestions()
+    this.summariesByHunkKey.clear()
+    if (params.changes?.length)
+      this.applyAgentSummaries({ changes: params.changes })
+    this.syncSuggestions(params.baseline, polished, { final: true })
+    return true
+  }
+
+  getDocText(): string {
+    return this.view?.state.doc.toString() ?? ''
+  }
+
   async polish(): Promise<void> {
     if (!this.alive() || this.polishing || !this.view)
+      return
+    if (this.view.state.field(inlineEditField))
       return
     const ag = this.options.getAgent()
     if (!ag || ag.isRunning)
@@ -297,10 +577,10 @@ export class TextEditorSession {
     this.summariesByHunkKey.clear()
     this.polishBaseline = original
     this.polishing = true
-    this.thinking = ''
     this.options.onPolishingChange(true)
-    this.options.onThinkingChange('')
     let aiText = ''
+    let polishedFromCustom = ''
+    this.setEditCase(ag, 'document', { documentBaseline: original })
     ag.setMessages([{ id: `writer-user-${Date.now()}`, role: 'user', content: original }] as never[])
     try {
       if (!this.threadId)
@@ -312,25 +592,22 @@ export class TextEditorSession {
         onEvent: ({ event }) => {
           if (!this.alive() || this.polishBaseline === null)
             return
-          if (event.type === 'TEXT_MESSAGE_CONTENT') {
+          if (event.type === 'CUSTOM' && event.name === WRITER_CHANGE_SUMMARIES_EVENT) {
+            const value = event.value as {
+              changes?: WriterChangeSummary[]
+              polished?: string
+            } | null
+            this.applyAgentSummaries(value)
+            if (typeof value?.polished === 'string' && value.polished.trim()) {
+              polishedFromCustom = value.polished
+              this.syncSuggestions(original, polishedFromCustom, { final: true })
+            }
+          }
+          else if (event.type === 'TEXT_MESSAGE_CONTENT') {
+            // document 案助手气泡为短说明；改稿在 CUSTOM.polished
             aiText += event.delta ?? ''
-            this.syncSuggestions(original, aiText)
-          }
-          else if (event.type === 'REASONING_MESSAGE_START') {
-            this.thinking = ''
-            this.options.onThinkingChange(this.thinking)
-          }
-          else if (event.type === 'REASONING_MESSAGE_CONTENT') {
-            this.thinking += event.delta ?? ''
-            this.options.onThinkingChange(this.thinking)
-          }
-          else if (event.type === 'CUSTOM' && event.name === WRITER_CHANGE_SUMMARIES_EVENT) {
-            this.applyAgentSummaries(event.value)
-            // summary 到达时流已结束、aiText 为终态,直接做 final 提交(含尾部 hunk)
-            this.syncSuggestions(original, aiText, { final: true })
           }
           else if (event.type === 'RUN_ERROR') {
-            // RUN_ERROR 扩展字段由后端 serializeAgentError 挂载（ag-ui passthrough 透传）
             const ev = event as unknown as Record<string, unknown>
             const str = (k: string): string => {
               const v = ev[k]
@@ -344,12 +621,26 @@ export class TextEditorSession {
             })
           }
         },
+        onCustomEvent: ({ event }) => {
+          if (!this.alive() || this.polishBaseline === null)
+            return
+          if (event.name !== WRITER_CHANGE_SUMMARIES_EVENT)
+            return
+          const value = event.value as {
+            changes?: WriterChangeSummary[]
+            polished?: string
+          } | null
+          this.applyAgentSummaries(value)
+          if (typeof value?.polished === 'string' && value.polished.trim()) {
+            polishedFromCustom = value.polished
+            this.syncSuggestions(original, polishedFromCustom, { final: true })
+          }
+        },
       })
     }
     catch (err) {
       if (this.alive()) {
         console.error('writer agent 失败:', err)
-        // 本地异常兜底（非 RUN_ERROR 事件路径，如 runAgent reject）
         const message = err instanceof Error ? err.message : String(err)
         const detail: Record<string, string> = {}
         if (err instanceof Error && err.stack)
@@ -364,16 +655,33 @@ export class TextEditorSession {
     }
     finally {
       if (this.alive()) {
-        // 兜底:若 summaryLlm 失败导致 CUSTOM 未到达,这里仍提交尾部 hunk(无 summary)
-        if (this.polishBaseline !== null)
-          this.syncSuggestions(original, aiText, { final: true })
+        const finalPolished = polishedFromCustom || aiText
+        if (this.polishBaseline !== null && finalPolished.trim())
+          this.syncSuggestions(original, finalPolished, { final: true })
         this.polishing = false
         this.polishBaseline = null
-        this.thinking = ''
         this.options.onPolishingChange(false)
-        this.options.onThinkingChange('')
       }
     }
+  }
+
+  private setEditCase(
+    ag: WriterAgent,
+    editCase: 'inline' | 'document',
+    extra?: Record<string, unknown>,
+  ): void {
+    const prev = ag.state != null && typeof ag.state === 'object' ? ag.state : {}
+    const next = {
+      ...prev,
+      editCase,
+      writerMode: editCase === 'inline' ? 'inline' : 'polish',
+      ...extra,
+    }
+    const withSetState = ag as WriterAgent & { setState?: (s: Record<string, unknown>) => void }
+    if (typeof withSetState.setState === 'function')
+      withSetState.setState(next)
+    else
+      ag.state = next
   }
 
   private alive(): boolean {
@@ -398,16 +706,6 @@ export class TextEditorSession {
     return this.summariesByHunkKey.get(hunkKey(hintFrom, originalText)) ?? ''
   }
 
-  /**
-   * 用冻结的 `original` 与累积的 `aiText` 重算 hunk,经 setSuggestionsEffect 写入 CM 状态。
-   *
-   * - `final=false`(流式中):丢弃按文档顺序的最后一个 hunk(仍在生长的尾部),避免边界
-   *   漂移导致卡片抖动;已稳定的 hunk 用 hunkKey 做 sid 原地更新。
-   * - `final=true`(流式结束):提交全部 hunk(含尾部),并填入已缓存的 summary。
-   *
-   * 位置=hunk 在 original 中的偏移;润色中 yText 不变,故等价于当前 CM doc 位置。
-   * 若用户在润色中改了正文(doc ≠ original)→ 作废基线、清空建议,避免快照坐标错位。
-   */
   private syncSuggestions(original: string, aiText: string, opts?: { final?: boolean }): void {
     if (!this.alive() || !this.view)
       return

@@ -70,7 +70,7 @@ const GRAPH_AGENT_DEFINITIONS = {
     },
   },
   writer: {
-    description: '中文文本润色 writer（流式输出润色后完整文本）',
+    description: '中文文本改写（editCase=inline 选区幽灵预览；document 全文+修订摘要）',
     resolveStreamInput: (input) => {
       // 原文可经 state.originalMarkdown 或最后 user message 传入
       const userText = extractLastUserMessage(input, {
@@ -80,6 +80,62 @@ const GRAPH_AGENT_DEFINITIONS = {
       if (userText.trim())
         return buildMessagesInput(userText)
       return { messages: [] }
+    },
+    resolveConfigurable: (input) => {
+      const state = input.state as {
+        writerMode?: unknown
+        editCase?: unknown
+        polishInstruction?: unknown
+        documentBaseline?: unknown
+        focuses?: unknown
+      } | undefined
+      const editCase = state?.editCase === 'inline' || state?.editCase === 'document'
+        ? state.editCase
+        : state?.writerMode === 'inline' ? 'inline' : 'document'
+      const polishInstruction = typeof state?.polishInstruction === 'string'
+        ? state.polishInstruction
+        : undefined
+      const documentBaseline = typeof state?.documentBaseline === 'string'
+        ? state.documentBaseline
+        : undefined
+      return {
+        editCase,
+        writerMode: editCase === 'inline' ? 'inline' : 'polish',
+        ...(polishInstruction ? { polishInstruction } : {}),
+        ...(documentBaseline ? { documentBaseline } : {}),
+        ...(Array.isArray(state?.focuses) ? { focuses: state.focuses } : {}),
+      }
+    },
+  },
+  editorChat: {
+    description: '写作助手对话（意图分流 Ask/Write；Write 自动落到多段红绿幽灵）',
+    resolveStreamInput: input => buildMessagesInput(extractLastUserMessage(input, {
+      defaultMessage: '',
+    })),
+    resolveConfigurable: (input) => {
+      const state = input.state as {
+        forceIntent?: unknown
+        documentBaseline?: unknown
+        polishInstruction?: unknown
+        focuses?: unknown
+        editCase?: unknown
+      } | undefined
+      const forceIntent = state?.forceIntent === 'ask' || state?.forceIntent === 'write'
+        ? state.forceIntent
+        : undefined
+      const documentBaseline = typeof state?.documentBaseline === 'string'
+        ? state.documentBaseline
+        : undefined
+      const polishInstruction = typeof state?.polishInstruction === 'string'
+        ? state.polishInstruction
+        : undefined
+      return {
+        editCase: 'document' as const,
+        ...(forceIntent ? { forceIntent } : {}),
+        ...(documentBaseline ? { documentBaseline } : {}),
+        ...(polishInstruction ? { polishInstruction } : {}),
+        ...(Array.isArray(state?.focuses) ? { focuses: state.focuses } : {}),
+      }
     },
   },
   kb: {

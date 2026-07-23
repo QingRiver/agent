@@ -73,9 +73,21 @@ export const WriterChangeSummarySchema = z.object({
 
 export const WriterChangeSummariesSchema = z.object({
   changes: z.array(WriterChangeSummarySchema),
+  /** document 改稿全文；供客户端 Apply，可与助手短说明分离 */
+  polished: z.string().optional(),
+  /** 生成改稿时的原文快照，Apply 时校验 */
+  baseline: z.string().optional(),
 })
 
 /** summaryLlm 结构化输出:按 hunk 索引顺序返回每条修改说明 */
 export const WriterHunkSummariesSchema = z.object({
   summaries: z.array(z.string()),
 })
+
+/** editorChat 意图分类 */
+export const EditorChatIntentSchema = z.object({
+  intent: z.enum(['ask', 'write']),
+})
+export type EditorChatIntent = z.infer<typeof EditorChatIntentSchema>['intent']
+
+export type EditorEditCase = 'inline' | 'document'

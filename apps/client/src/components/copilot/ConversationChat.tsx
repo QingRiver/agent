@@ -1,4 +1,5 @@
 import type { GraphsName } from '@agent/graph'
+import type { CopilotChatAssistantMessageProps } from '@copilotkit/react-core/v2'
 import {
   CopilotChat,
   CopilotChatConfigurationProvider,
@@ -19,6 +20,10 @@ interface ConversationChatProps {
   /** HITL 挂起时禁用输入，避免 CopilotKit 因未 resume 而拒绝新 run */
   blockInput?: boolean
   blockInputHint?: string
+  /** 自定义提交：若提供则覆盖默认发送逻辑 */
+  onSubmitMessage?: (value: string) => void | Promise<void>
+  /** 覆盖默认 assistant 气泡（默认 ErrorAssistantMessage） */
+  assistantMessage?: (props: CopilotChatAssistantMessageProps) => React.ReactNode
   children?: React.ReactNode
 }
 
@@ -31,6 +36,8 @@ export function ConversationChat({
   placeholder = '输入消息…',
   blockInput = false,
   blockInputHint = '请先完成上方的人机交互，再继续输入消息。',
+  onSubmitMessage,
+  assistantMessage = ErrorAssistantMessage,
   children,
 }: ConversationChatProps) {
   const { agent } = useAgent({ agentId: graphsName })
@@ -53,11 +60,12 @@ export function ConversationChat({
             agentId={graphsName}
             className={chatClassName}
             labels={{ chatInputPlaceholder: placeholder }}
+            {...(onSubmitMessage ? { onSubmitMessage } : {})}
             messageView={{
               // 自定义 assistant slot:isError 消息渲染成对话流内错误卡片,否则透传默认。
               // slot 类型要求 CopilotChatAssistantMessage 的 namespace(Toolbar/CopyButton 等),
               // ErrorAssistantMessage 是分支透传组件无 namespace,as never 对齐 slot 类型
-              assistantMessage: ErrorAssistantMessage as never,
+              assistantMessage: assistantMessage as never,
               userMessage: { copyButton: () => null },
             }}
             onError={(raw) => {

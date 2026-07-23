@@ -1,4 +1,4 @@
-/** 一条 AI 修订建议(MR),供右侧面板渲染。from/to 为 CM doc 位置,tr.changes.mapPos 追踪 */
+/** 一条 AI 修订建议；from/to 为 CM doc 位置，tr.changes.mapPos 追踪；正文内红绿幽灵展示 */
 export interface Suggestion {
   sid: string
   summary: string

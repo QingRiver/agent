@@ -121,6 +121,9 @@ export {
 } from './kb'
 export {
   computeHunks,
+  type EditorChatIntent,
+  EditorChatIntentSchema,
+  type EditorEditCase,
   type Hunk,
   hunkKey,
   WRITER_CHANGE_SUMMARIES_EVENT,

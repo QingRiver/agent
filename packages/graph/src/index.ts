@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { claudeAgentGraph } from './claudeAgentGraph'
+import { editorChatGraph } from './editorChatGraph'
 import { hitlGraph } from './hitlGraph'
 import { kbGraph } from './kbGraph'
 import { simpleToolCallGraph } from './simpleToolCallGraph'
@@ -7,6 +8,8 @@ import { tushareGraph } from './tushareGraph'
 import { weatherGraph } from './weatherGraph'
 import { writerGraph } from './writerGraph'
 
+export { editorChatGraph } from './editorChatGraph'
+export { type EditorFocus, runWriteEdit, type WriteEditInput } from './editorWriteEdit'
 export { ASK_SYSTEM_PROMPT, ASK_TOOLS } from './hitl/ask-tools'
 export {
   KB_CITATIONS_EVENT,
@@ -25,6 +28,7 @@ export const Graphs = {
   kb: kbGraph,
   tushare: tushareGraph,
   writer: writerGraph,
+  editorChat: editorChatGraph,
 } as const
 
 export type GraphsName = keyof typeof Graphs
