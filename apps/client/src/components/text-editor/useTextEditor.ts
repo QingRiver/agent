@@ -3,6 +3,8 @@ import type { RefObject } from 'react'
 import type { TextEditorSession, WriterAgent } from './TextEditorSession'
 import type { Suggestion } from './types'
 import { useAgent } from '@copilotkit/react-core/v2'
+import { ThemeStore } from '@stores/theme-store'
+import { useAtomValue } from 'jotai'
 import { useEffect, useRef, useState } from 'react'
 import { TextEditorSession as Session } from './TextEditorSession'
 
@@ -24,6 +26,7 @@ export function useTextEditor(): UseTextEditorResult {
   const sessionRef = useRef<TextEditorSession | null>(null)
   const agentRef = useRef(agent)
   agentRef.current = agent
+  const mode = useAtomValue(ThemeStore.modeAtom)
 
   const [polishing, setPolishing] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
@@ -50,7 +53,7 @@ export function useTextEditor(): UseTextEditorResult {
       session.dispose()
       sessionRef.current = null
     }
-  }, [])
+  }, [mode])
 
   return {
     mountRef,

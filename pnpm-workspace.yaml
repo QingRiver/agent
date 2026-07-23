@@ -71,6 +71,7 @@ catalog:
   marked-gfm-heading-id: ^4.1.4
   marked-highlight: ^2.2.4
   marked-katex-extension: ^5.1.10
+  mermaid: ^10.9.5
   openai: ^6.41.0
   pg: ^8.22.0
   radash: ^12.1.1

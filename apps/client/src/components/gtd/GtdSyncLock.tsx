@@ -24,8 +24,8 @@ export function GtdSyncLock() {
   }
 
   return (
-    <div className="flex items-center gap-3 border-b border-rose-900/60 bg-rose-950/40 px-4 py-2 text-sm text-rose-200">
-      <AlertTriangle className="size-4 shrink-0 text-rose-400" />
+    <div className="flex items-center gap-3 border-b border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-800 dark:text-rose-200">
+      <AlertTriangle className="size-4 shrink-0 text-rose-600 dark:text-rose-400" />
       <span className="min-w-0 flex-1 truncate">
         同步冲突，编辑已锁定
         {error ? `：${error}` : ''}
@@ -34,7 +34,7 @@ export function GtdSyncLock() {
         type="button"
         size="sm"
         variant="outline"
-        className="h-7 border-rose-800 text-rose-200 hover:bg-rose-900/40"
+        className="h-7 border-rose-500/30 text-rose-800 hover:bg-rose-500/10 dark:text-rose-200"
         disabled={recovering}
         onClick={onRecover}
       >

@@ -6,6 +6,7 @@ import markedFootnote from 'marked-footnote'
 import { gfmHeadingId } from 'marked-gfm-heading-id'
 import { markedHighlight } from 'marked-highlight'
 import markedKatex from 'marked-katex-extension'
+import { markedMermaid } from './marked-mermaid'
 
 export interface TocItem {
   text: string
@@ -23,10 +24,15 @@ const marked = new Marked()
   .use(markedHighlight({
     langPrefix: 'hljs language-',
     highlight(code, lang) {
+      // 原样返回，避免 hljs 转义/改写后污染 mermaid 源码
+      if (lang === 'mermaid')
+        return code
       const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
       return hljs.highlight(code, { language }).value
     },
   }))
+  // 须在 marked-highlight 之后：非 mermaid 返回 false，回落到 highlight
+  .use(markedMermaid())
 
 const HEADING_RE = /<h([1-6])[^>]*\sid=["']([^"']+)["'][^>]*>([\s\S]*?)<\/h\1>/gi
 

@@ -1,6 +1,6 @@
 # @agent/markdown
 
-客户端 Markdown → HTML：GFM 标题 id、脚注、KaTeX、highlight.js，并提取 TOC。供知识库预览等前端场景使用。
+客户端 Markdown → HTML：GFM 标题 id、脚注、KaTeX、highlight.js、mermaid 占位（`<div class="mermaid">`），并提取 TOC。供知识库预览等前端场景使用；图表需在 DOM 注入后由 client 调用 `mermaid.run()`。
 
 ## 导出
 

@@ -1,18 +1,41 @@
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
+import { ThemeStore } from '@stores/theme-store'
+import { useAtomValue } from 'jotai'
 import { useEffect, useRef } from 'react'
 
-const editorTheme = EditorView.theme({
-  '&': { height: '100%', backgroundColor: 'transparent', color: '#e6edf3' },
-  '.cm-scroller': { overflow: 'auto', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: '13px' },
-  '.cm-content': { caretColor: '#e6edf3', padding: '12px 0' },
-  '.cm-gutters': { backgroundColor: 'transparent', color: '#6b7280', border: 'none' },
-  '.cm-activeLine': { backgroundColor: 'rgba(255,255,255,0.03)' },
-  '.cm-activeLineGutter': { backgroundColor: 'transparent' },
-  '.cm-selectionBackground, ::selection': { backgroundColor: '#264f78' },
-  '&.cm-focused': { outline: 'none' },
-}, { dark: true })
+function createEditorTheme(isDark: boolean) {
+  return EditorView.theme({
+    '&': {
+      height: '100%',
+      backgroundColor: 'transparent',
+      color: isDark ? '#e6edf3' : '#1f2937',
+    },
+    '.cm-scroller': {
+      overflow: 'auto',
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      fontSize: '13px',
+    },
+    '.cm-content': {
+      caretColor: isDark ? '#e6edf3' : '#1f2937',
+      padding: '12px 0',
+    },
+    '.cm-gutters': {
+      backgroundColor: 'transparent',
+      color: isDark ? '#6b7280' : '#9ca3af',
+      border: 'none',
+    },
+    '.cm-activeLine': {
+      backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.04)',
+    },
+    '.cm-activeLineGutter': { backgroundColor: 'transparent' },
+    '.cm-selectionBackground, ::selection': {
+      backgroundColor: isDark ? '#264f78' : '#bfdbfe',
+    },
+    '&.cm-focused': { outline: 'none' },
+  }, { dark: isDark })
+}
 
 interface KbMarkdownEditorProps {
   value: string
@@ -26,6 +49,8 @@ export function KbMarkdownEditor({ value, onChange, docId }: KbMarkdownEditorPro
   const initialDoc = useRef(value).current
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const mode = useAtomValue(ThemeStore.modeAtom)
+  const isDark = mode === 'dark'
 
   useEffect(() => {
     const mount = mountRef.current
@@ -38,7 +63,7 @@ export function KbMarkdownEditor({ value, onChange, docId }: KbMarkdownEditorPro
         extensions: [
           EditorView.lineWrapping,
           markdown(),
-          editorTheme,
+          createEditorTheme(isDark),
           EditorView.updateListener.of((update) => {
             if (update.docChanged)
               onChangeRef.current(update.state.doc.toString())
@@ -51,12 +76,12 @@ export function KbMarkdownEditor({ value, onChange, docId }: KbMarkdownEditorPro
     return () => {
       view.destroy()
     }
-  }, [docId, initialDoc])
+  }, [docId, initialDoc, isDark])
 
   return (
     <div
       ref={mountRef}
-      className="min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-950/40"
+      className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-muted/40"
     />
   )
 }

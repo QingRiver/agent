@@ -15,6 +15,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as KbRouteImport } from './routes/kb'
 import { Route as GtdRouteImport } from './routes/gtd'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SettingsThemeRouteImport } from './routes/settings.theme'
 
 const TextEditorRoute = TextEditorRouteImport.update({
   id: '/text-editor',
@@ -46,6 +47,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsThemeRoute = SettingsThemeRouteImport.update({
+  id: '/settings/theme',
+  path: '/settings/theme',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -54,6 +60,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/text-editor': typeof TextEditorRoute
+  '/settings/theme': typeof SettingsThemeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -62,6 +69,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/text-editor': typeof TextEditorRoute
+  '/settings/theme': typeof SettingsThemeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -71,12 +79,27 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/text-editor': typeof TextEditorRoute
+  '/settings/theme': typeof SettingsThemeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/gtd' | '/kb' | '/login' | '/register' | '/text-editor'
+  fullPaths:
+    | '/'
+    | '/gtd'
+    | '/kb'
+    | '/login'
+    | '/register'
+    | '/text-editor'
+    | '/settings/theme'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/gtd' | '/kb' | '/login' | '/register' | '/text-editor'
+  to:
+    | '/'
+    | '/gtd'
+    | '/kb'
+    | '/login'
+    | '/register'
+    | '/text-editor'
+    | '/settings/theme'
   id:
     | '__root__'
     | '/'
@@ -85,6 +108,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/text-editor'
+    | '/settings/theme'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -94,6 +118,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   TextEditorRoute: typeof TextEditorRoute
+  SettingsThemeRoute: typeof SettingsThemeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -140,6 +165,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/theme': {
+      id: '/settings/theme'
+      path: '/settings/theme'
+      fullPath: '/settings/theme'
+      preLoaderRoute: typeof SettingsThemeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -150,6 +182,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   TextEditorRoute: TextEditorRoute,
+  SettingsThemeRoute: SettingsThemeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

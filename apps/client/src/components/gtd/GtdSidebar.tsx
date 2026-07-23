@@ -71,13 +71,13 @@ function NavItem({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-100',
-        active && 'bg-slate-800 text-slate-100',
+        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground hover:bg-accent hover:text-foreground',
+        active && 'bg-accent text-accent-foreground',
       )}
       style={{ paddingLeft: `${8 + indent * 12}px` }}
     >
       {dragHandle}
-      {Icon && <Icon className="size-3.5 shrink-0 text-slate-500" />}
+      {Icon && <Icon className="size-3.5 shrink-0 text-muted-foreground" />}
       <span className="truncate">{label}</span>
     </button>
   )
@@ -105,7 +105,7 @@ function SortableNavItem({
         {...props}
         dragHandle={(
           <span
-            className="flex size-8 shrink-0 cursor-grab items-center justify-center rounded text-slate-700 hover:bg-slate-700 hover:text-slate-300"
+            className="flex size-8 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
             title="拖动排序"
             onClick={e => e.stopPropagation()}
             {...attributes}
@@ -360,14 +360,14 @@ export function GtdSidebar() {
           reorderFolder(id, target)
       }}
     >
-      <aside className="flex w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-950/80">
-        <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-500">GTD</span>
+      <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">GTD</span>
           <div className="flex items-center gap-2">
-            {syncLabel && <span className="text-[10px] text-slate-500">{syncLabel}</span>}
+            {syncLabel && <span className="text-[10px] text-muted-foreground">{syncLabel}</span>}
             <button
               type="button"
-              className="text-slate-500 hover:text-slate-300"
+              className="text-muted-foreground hover:text-foreground"
               title="导出 JSON"
               onClick={() => {
                 const json = exportDocument()
@@ -384,7 +384,7 @@ export function GtdSidebar() {
             </button>
             <button
               type="button"
-              className="text-slate-500 hover:text-slate-300"
+              className="text-muted-foreground hover:text-foreground"
               title="导入 JSON（仅新建，不覆盖）"
               onClick={() => fileInputRef.current?.click()}
             >
@@ -424,11 +424,11 @@ export function GtdSidebar() {
             })}
           </div>
 
-          <div className="mb-1 flex items-center justify-between px-2 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+          <div className="mb-1 flex items-center justify-between px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             <span>自定义透视</span>
             <button
               type="button"
-              className="flex size-8 items-center justify-center rounded-md hover:bg-slate-800 hover:text-slate-300"
+              className="flex size-8 items-center justify-center rounded-md hover:bg-accent hover:text-foreground"
               onClick={() => setPerspectiveEditorId('new')}
               title="新建自定义透视"
             >
@@ -448,7 +448,7 @@ export function GtdSidebar() {
                 </div>
                 <button
                   type="button"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-md text-slate-600 opacity-0 hover:bg-slate-800 hover:text-slate-300 group-hover:opacity-100"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground group-hover:opacity-100"
                   onClick={() => setPerspectiveEditorId(perspective.id)}
                   title="编辑自定义透视"
                 >
@@ -456,7 +456,7 @@ export function GtdSidebar() {
                 </button>
                 <button
                   type="button"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-md text-slate-600 opacity-0 hover:bg-rose-950 hover:text-rose-400 group-hover:opacity-100"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 group-hover:opacity-100"
                   onClick={() => removePerspective(perspective.id)}
                   title="删除自定义透视"
                 >
@@ -465,11 +465,11 @@ export function GtdSidebar() {
               </div>
             ))}
             {customPerspectives.length === 0 && (
-              <p className="px-2 py-1 text-xs text-slate-700">暂无自定义透视</p>
+              <p className="px-2 py-1 text-xs text-muted-foreground">暂无自定义透视</p>
             )}
           </div>
 
-          <div className="mb-1 px-2 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+          <div className="mb-1 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             项目
           </div>
           <div className="mb-3 space-y-0.5">
@@ -506,7 +506,7 @@ export function GtdSidebar() {
                   }
                 }}
                 placeholder="新项目"
-                className="h-9 border-slate-800 bg-transparent text-xs"
+                className="h-9 border-border bg-transparent text-xs"
               />
               <Button
                 type="button"
@@ -534,7 +534,7 @@ export function GtdSidebar() {
                   }
                 }}
                 placeholder="新文件夹"
-                className="h-9 border-slate-800 bg-transparent text-xs"
+                className="h-9 border-border bg-transparent text-xs"
               />
               <Button
                 type="button"
@@ -553,7 +553,7 @@ export function GtdSidebar() {
             </div>
           </div>
 
-          <div className="mb-1 px-2 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+          <div className="mb-1 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             标签
           </div>
           <div className="space-y-0.5">
@@ -574,7 +574,7 @@ export function GtdSidebar() {
                   }
                 }}
                 placeholder="新标签"
-                className="h-9 border-slate-800 bg-transparent text-xs"
+                className="h-9 border-border bg-transparent text-xs"
               />
               <Button
                 type="button"
@@ -595,7 +595,7 @@ export function GtdSidebar() {
         </div>
 
         {error && (
-          <div className="border-t border-rose-900/50 px-3 py-2 text-xs text-rose-400">
+          <div className="border-t border-rose-500/30 px-3 py-2 text-xs text-rose-800 dark:text-rose-200">
             {error}
           </div>
         )}

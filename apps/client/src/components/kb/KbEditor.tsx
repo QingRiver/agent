@@ -121,7 +121,7 @@ export function KbEditor() {
 
   if (!activeDoc) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 text-slate-400">
+      <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
         <p className="text-sm">从左侧选择文档，或新建一篇</p>
         <Button
           type="button"
@@ -154,28 +154,28 @@ export function KbEditor() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
         <input
           value={activeDoc.name}
           onChange={e => updateLocalName(e.target.value)}
-          className="min-w-[8rem] flex-1 rounded-md border border-slate-800 bg-transparent px-2 py-1.5 text-base font-medium text-slate-100 outline-none focus:border-slate-600"
+          className="min-w-[8rem] flex-1 rounded-md border border-border bg-transparent px-2 py-1.5 text-base font-medium text-foreground outline-none focus:border-border"
         />
         {activeDoc.vdir && (
-          <span className="max-w-[40%] truncate text-xs text-slate-500" title={activeDoc.vdir}>
+          <span className="max-w-[40%] truncate text-xs text-muted-foreground" title={activeDoc.vdir}>
             {activeDoc.vdir}
           </span>
         )}
-        <span className={`text-xs ${dirty ? 'text-amber-400' : 'text-slate-500'}`}>
+        <span className={`text-xs ${dirty ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`}>
           {statusLabel}
         </span>
-        <div className="flex items-center gap-1 rounded-md border border-slate-800 p-0.5">
+        <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
           {(['edit', 'split', 'preview'] as const).map(m => (
             <button
               key={m}
               type="button"
               onClick={() => changeMode(m)}
               className={`rounded px-2 py-1 text-xs ${
-                mode === m ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:text-slate-200'
+                mode === m ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {m === 'edit' ? '编辑' : m === 'split' ? '分屏' : '预览'}
@@ -210,14 +210,14 @@ export function KbEditor() {
           return (
             <span
               key={tag}
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ring-1 ring-inset ring-slate-700"
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ring-1 ring-inset ring-border"
               style={color ? { backgroundColor: `${color}33`, color, borderColor: color } : undefined}
             >
               {tag}
               <button
                 type="button"
                 onClick={() => void onRemoveTag(tag)}
-                className="text-slate-500 hover:text-red-400"
+                className="text-muted-foreground hover:text-destructive"
               >
                 <X className="size-3" />
               </button>
@@ -235,13 +235,13 @@ export function KbEditor() {
               }
             }}
             placeholder="加标签"
-            className="w-24 rounded-md border border-slate-800 bg-transparent px-2 py-0.5 text-xs text-slate-200 outline-none focus:border-slate-600"
+            className="w-24 rounded-md border border-border bg-transparent px-2 py-0.5 text-xs text-foreground outline-none focus:border-border"
           />
           <button
             type="button"
             onClick={() => void onAddTag()}
             disabled={!tagInput.trim()}
-            className="rounded p-0.5 text-slate-400 hover:text-slate-200 disabled:opacity-40"
+            className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40"
           >
             <Plus className="size-3.5" />
           </button>
@@ -249,7 +249,7 @@ export function KbEditor() {
       </div>
 
       {error && (
-        <p className="text-sm text-red-400">{error}</p>
+        <p className="text-sm text-destructive">{error}</p>
       )}
 
       <div className={`min-h-0 flex-1 ${mode === 'split' ? 'grid grid-cols-2 gap-3' : 'flex flex-col'}`}>
@@ -262,7 +262,7 @@ export function KbEditor() {
           />
         )}
         {(mode === 'preview' || mode === 'split') && (
-          <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-950/40">
+          <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-background">
             <KbMarkdownPreview content={activeDoc.content} className="h-full" />
           </div>
         )}

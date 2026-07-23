@@ -93,7 +93,7 @@ export function ConversationChat({
             }}
           />
           {blockInput && (
-            <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-10 border-t border-amber-700/50 bg-slate-900/95 px-3 py-2 text-sm text-amber-200">
+            <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-10 border-t border-amber-700/50 bg-card px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
               {blockInputHint}
             </div>
           )}

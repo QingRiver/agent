@@ -117,17 +117,17 @@ export function KbTagManager({ open, onClose }: KbTagManagerProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-800 p-3">
-          <span className="text-sm font-medium text-slate-200">标签管理</span>
-          <button type="button" onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200">
+      <div className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xl">
+        <div className="flex items-center justify-between border-b border-border p-3">
+          <span className="text-sm font-medium text-foreground">标签管理</span>
+          <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground">
             <X className="size-4" />
           </button>
         </div>
 
         <div className="flex-1 space-y-2 overflow-y-auto p-3">
           {/* 新建 */}
-          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2 border-b border-border pb-3">
             <input
               value={newName}
               onChange={e => setNewName(e.target.value)}
@@ -136,7 +136,7 @@ export function KbTagManager({ open, onClose }: KbTagManagerProps) {
                   void onCreate()
               }}
               placeholder="新标签名"
-              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-500"
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:border-border"
             />
             <div className="flex items-center gap-1">
               {PRESET_COLORS.map(c => (
@@ -161,14 +161,14 @@ export function KbTagManager({ open, onClose }: KbTagManagerProps) {
 
           {/* 列表 */}
           {tags.map(tag => (
-            <div key={tag.id} className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-2 py-1.5">
+            <div key={tag.id} className="flex items-center gap-2 rounded-md border border-border bg-muted px-2 py-1.5">
               {editingId === tag.id
                 ? (
                     <>
                       <input
                         value={editName}
                         onChange={e => setEditName(e.target.value)}
-                        className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-500"
+                        className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-sm text-foreground outline-none focus:border-border"
                       />
                       <div className="flex items-center gap-1">
                         {PRESET_COLORS.map(c => (
@@ -181,10 +181,10 @@ export function KbTagManager({ open, onClose }: KbTagManagerProps) {
                           />
                         ))}
                       </div>
-                      <button type="button" onClick={() => void onSaveEdit(tag)} disabled={busy} className="rounded p-1 text-emerald-400 hover:bg-slate-800">
+                      <button type="button" onClick={() => void onSaveEdit(tag)} disabled={busy} className="rounded p-1 text-emerald-700 hover:bg-accent dark:text-emerald-400">
                         <Check className="size-3.5" />
                       </button>
-                      <button type="button" onClick={() => setEditingId(null)} className="rounded p-1 text-slate-400 hover:bg-slate-800">
+                      <button type="button" onClick={() => setEditingId(null)} className="rounded p-1 text-muted-foreground hover:bg-accent">
                         <X className="size-3.5" />
                       </button>
                     </>
@@ -195,30 +195,30 @@ export function KbTagManager({ open, onClose }: KbTagManagerProps) {
                         className="size-3 shrink-0 rounded-full"
                         style={{ backgroundColor: tag.color ?? undefined, border: tag.color ? 'none' : '1px solid #475569' }}
                       />
-                      <span className="min-w-0 flex-1 truncate text-sm text-slate-200">{tag.name}</span>
-                      <button type="button" onClick={() => startEdit(tag)} disabled={busy} className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200">
+                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">{tag.name}</span>
+                      <button type="button" onClick={() => startEdit(tag)} disabled={busy} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground">
                         <Pencil className="size-3.5" />
                       </button>
-                      <button type="button" onClick={() => void onAskDelete(tag)} disabled={busy} className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-red-400">
+                      <button type="button" onClick={() => void onAskDelete(tag)} disabled={busy} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive">
                         <Trash2 className="size-3.5" />
                       </button>
                     </>
                   )}
             </div>
           ))}
-          {tags.length === 0 && <p className="py-4 text-center text-sm text-slate-500">暂无标签</p>}
+          {tags.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">暂无标签</p>}
         </div>
 
-        {error && <p className="border-t border-slate-800 p-2 text-sm text-red-400">{error}</p>}
+        {error && <p className="border-t border-border p-2 text-sm text-destructive">{error}</p>}
 
         {pendingDelete && (
-          <div className="space-y-2 border-t border-slate-800 bg-slate-900/80 p-3 text-xs text-slate-300">
+          <div className="space-y-2 border-t border-border bg-muted p-3 text-xs text-foreground">
             <p>
               确定删除标签「
               {pendingDelete.name}
               」？
               {pendingDelete.affectedDocs > 0 && (
-                <span className="text-amber-400">
+                <span className="text-amber-700 dark:text-amber-400">
                   将影响
                   {pendingDelete.affectedDocs}
                   {' '}
@@ -230,7 +230,7 @@ export function KbTagManager({ open, onClose }: KbTagManagerProps) {
               <button type="button" onClick={() => void onConfirmDelete()} className="rounded bg-red-600/80 px-2 py-1 text-white hover:bg-red-600">
                 删除
               </button>
-              <button type="button" onClick={() => setPendingDelete(null)} className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600">
+              <button type="button" onClick={() => setPendingDelete(null)} className="rounded bg-muted px-2 py-1 hover:bg-accent">
                 取消
               </button>
             </div>

@@ -47,18 +47,18 @@ function NewConversationDialogBody({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-100">新建对话</h2>
-        <p className="mt-1 text-sm text-slate-400">选择 Agent（创建后不可在本对话内切换）</p>
+      <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-xl">
+        <h2 className="text-lg font-semibold text-foreground">新建对话</h2>
+        <p className="mt-1 text-sm text-muted-foreground">选择 Agent（创建后不可在本对话内切换）</p>
 
         {loadingGraphs && (
-          <p className="mt-4 text-sm text-slate-400">加载 Agent 列表…</p>
+          <p className="mt-4 text-sm text-muted-foreground">加载 Agent 列表…</p>
         )}
         {graphsError != null && (
-          <p className="mt-4 text-sm text-red-400">{graphsError}</p>
+          <p className="mt-4 text-sm text-destructive">{graphsError}</p>
         )}
         {!loadingGraphs && graphsError == null && graphs.length === 0 && (
-          <p className="mt-4 text-sm text-slate-400">暂无可用 Agent</p>
+          <p className="mt-4 text-sm text-muted-foreground">暂无可用 Agent</p>
         )}
         {!loadingGraphs && graphs.length > 0 && (
           <ul className="mt-4 max-h-64 space-y-2 overflow-y-auto">
@@ -70,13 +70,13 @@ function NewConversationDialogBody({ onClose }: { onClose: () => void }) {
                   className={cn(
                     'w-full rounded-lg border px-3 py-2 text-left transition-colors',
                     graphsName === item.name
-                      ? 'border-slate-500 bg-slate-800 text-slate-100'
-                      : 'border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700',
+                      ? 'border-border bg-accent text-accent-foreground'
+                      : 'border-border bg-card text-foreground hover:border-border',
                   )}
                 >
                   <div className="text-sm font-medium">{item.name}</div>
                   {item.description.trim() !== '' && (
-                    <div className="mt-0.5 text-xs text-slate-500">{item.description}</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">{item.description}</div>
                   )}
                 </button>
               </li>

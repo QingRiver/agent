@@ -9,7 +9,10 @@ import {
   DropdownMenuTrigger,
 } from '@components/ui/dropdown-menu'
 import { useAuth } from '@hooks/useAuth'
-import { LogOut } from 'lucide-react'
+import { ThemeStore } from '@stores/theme-store'
+import { Link } from '@tanstack/react-router'
+import { useAtomValue } from 'jotai'
+import { LogOut, Moon, Palette, Sun } from 'lucide-react'
 
 function displayInitial(user: { name?: string, email?: string }): string {
   const source = user.name?.trim() || user.email?.trim() || '?'
@@ -18,6 +21,8 @@ function displayInitial(user: { name?: string, email?: string }): string {
 
 export function UserAvatarMenu() {
   const { user, isLoading, signOut } = useAuth()
+  const mode = useAtomValue(ThemeStore.modeAtom)
+  const isDark = mode === 'dark'
 
   if (isLoading || !user) {
     return (
@@ -30,7 +35,7 @@ export function UserAvatarMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="h-9 w-9 rounded-full p-0">
           <Avatar className="h-9 w-9">
-            <AvatarFallback className="bg-emerald-900 text-emerald-100">
+            <AvatarFallback className="bg-primary text-primary-foreground">
               {displayInitial(user)}
             </AvatarFallback>
           </Avatar>
@@ -45,6 +50,25 @@ export function UserAvatarMenu() {
             </span>
           </div>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/settings/theme" className="flex cursor-pointer items-center gap-2">
+            <Palette className="h-4 w-4" />
+            主题色
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="flex cursor-pointer items-center gap-2"
+          onSelect={(e) => {
+            e.preventDefault()
+            ThemeStore.toggleMode()
+          }}
+        >
+          {isDark
+            ? <Sun className="h-4 w-4" />
+            : <Moon className="h-4 w-4" />}
+          {isDark ? '切换亮色' : '切换暗色'}
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="flex cursor-pointer items-center gap-2 text-destructive focus:text-destructive"

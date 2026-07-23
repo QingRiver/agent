@@ -162,7 +162,7 @@ function opCategory(op: string): OpCategory {
 /** 逻辑节点：导轨 + 激活段颜色（静态字面量，避免 Tailwind purge 漏类） */
 const LOGIC_STYLE: Record<LogicColor, { rail: string, active: string, badge: 'primary' | 'amber' | 'destructive' }> = {
   primary: { rail: 'border-primary/40', active: 'bg-primary/15 text-primary', badge: 'primary' },
-  amber: { rail: 'border-amber-500/40', active: 'bg-amber-500/15 text-amber-400', badge: 'amber' },
+  amber: { rail: 'border-amber-500/40', active: 'bg-amber-500/15 text-amber-700 dark:text-amber-400', badge: 'amber' },
   destructive: { rail: 'border-destructive/40', active: 'bg-destructive/15 text-destructive', badge: 'destructive' },
 }
 
@@ -170,7 +170,7 @@ const LOGIC_STYLE: Record<LogicColor, { rail: string, active: string, badge: 'pr
 const OP_CHIP: Record<OpCategory, string> = {
   neutral: 'bg-muted/40 text-muted-foreground border-border',
   primary: 'bg-primary/10 text-primary border-primary/30',
-  amber: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+  amber: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30',
 }
 
 /** 操作符 chip 前置圆点 */
@@ -204,13 +204,13 @@ export function GtdPerspectiveEditor({
       role="dialog"
       aria-modal="true"
     >
-      <div className="flex h-full w-full flex-col border-l border-slate-800 bg-slate-950 shadow-2xl">
-        <header className="flex items-center justify-between border-b border-slate-800 p-4">
+      <div className="flex h-full w-full flex-col border-l border-border bg-card shadow-2xl">
+        <header className="flex items-center justify-between border-b border-border p-4">
           <div>
-            <h2 className="font-semibold text-slate-100">
+            <h2 className="font-semibold text-foreground">
               {perspective ? '编辑自定义透视' : '新建自定义透视'}
             </h2>
-            <p className="text-xs text-slate-500">可嵌套过滤树（与/或/非），深度 ≤ 5、节点 ≤ 32</p>
+            <p className="text-xs text-muted-foreground">可嵌套过滤树（与/或/非），深度 ≤ 5、节点 ≤ 32</p>
           </div>
           <Button type="button" variant="ghost" className="size-9 p-0" onClick={onClose}>
             <X className="size-4" />
@@ -225,7 +225,7 @@ export function GtdPerspectiveEditor({
           />
 
           <div className="grid grid-cols-2 gap-2">
-            <label className="space-y-1 text-xs text-slate-500">
+            <label className="space-y-1 text-xs text-muted-foreground">
               可用性
               <Select
                 value={input.availabilityFilter}
@@ -236,7 +236,7 @@ export function GtdPerspectiveEditor({
                 ))}
               </Select>
             </label>
-            <label className="space-y-1 text-xs text-slate-500">
+            <label className="space-y-1 text-xs text-muted-foreground">
               分组
               <Select
                 value={input.groupBy[0] ?? GROUP_KEY.NONE}
@@ -252,7 +252,7 @@ export function GtdPerspectiveEditor({
             </label>
           </div>
 
-          <div className="flex flex-wrap gap-4 text-sm text-slate-300">
+          <div className="flex flex-wrap gap-4 text-sm text-foreground">
             <label className="flex items-center gap-2">
               <Checkbox
                 checked={input.showCompleted}
@@ -281,12 +281,12 @@ export function GtdPerspectiveEditor({
 
           <section className="space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">过滤规则</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">过滤规则</h3>
             </div>
             <FilterTreeEditor store={store} node={input.filter} onChange={setFilter} />
           </section>
 
-          <label className="space-y-1 text-xs text-slate-500">
+          <label className="space-y-1 text-xs text-muted-foreground">
             排序
             <Select
               value={input.sortBy[0]?.field ?? SORT_FIELD.ORDER}
@@ -299,7 +299,7 @@ export function GtdPerspectiveEditor({
           </label>
         </div>
 
-        <footer className="flex justify-end gap-2 border-t border-slate-800 p-4">
+        <footer className="flex justify-end gap-2 border-t border-border p-4">
           {error && <p className="mr-auto self-center text-xs text-rose-400">{error}</p>}
           <Button type="button" variant="outline" className="h-9" onClick={onClose}>取消</Button>
           <Button type="button" className="h-9" disabled={!input.name.trim()} onClick={() => onSave(input)}>
@@ -324,8 +324,8 @@ function FilterTreeEditor({
 }) {
   if (node == null) {
     return (
-      <div className="space-y-3 rounded-lg border border-dashed border-slate-700 p-4">
-        <p className="text-xs text-slate-500">从一条规则或一个规则组开始构建可嵌套过滤树。</p>
+      <div className="space-y-3 rounded-lg border border-dashed border-border p-4">
+        <p className="text-xs text-muted-foreground">从一条规则或一个规则组开始构建可嵌套过滤树。</p>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" className="h-9" onClick={() => onChange(defaultLeaf(FILTER_FIELD.STATUS))}>
             <Plus className="size-4" />
@@ -380,7 +380,7 @@ function NodeEditor({
     const addChild = (child: FilterNode) =>
       onChange({ ...node, children: [...node.children, child] })
     return (
-      <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
+      <div className="space-y-3 rounded-lg border border-border bg-muted p-3">
         <div className="flex items-center gap-2">
           <div className="inline-flex items-center rounded-md border border-border p-0.5">
             <button
@@ -449,13 +449,13 @@ function NodeEditor({
 
   if (node.op === LOGIC_OP.NOT) {
     return (
-      <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
+      <div className="space-y-3 rounded-lg border border-border bg-muted p-3">
         <div className="flex items-center gap-2">
           <Badge variant="destructive">
             <CornerDownRight className="size-3" />
             {LOGIC_OP_TEXT[LOGIC_OP.NOT]}
           </Badge>
-          <span className="text-xs text-slate-500">对其下规则取反</span>
+          <span className="text-xs text-muted-foreground">对其下规则取反</span>
           <Button type="button" variant="ghost" className="ml-auto size-8 p-0 text-muted-foreground hover:text-destructive" onClick={onRemove}>
             <Trash2 className="size-4" />
           </Button>

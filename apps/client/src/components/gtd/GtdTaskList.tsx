@@ -52,7 +52,7 @@ function RenderNodes({
             <div key={node.key || 'root'} className="mb-3">
               {node.label
                 ? (
-                    <div className="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <div className="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       {node.label}
                     </div>
                   )
@@ -179,15 +179,15 @@ export function GtdTaskList() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold text-slate-100">{title}</h1>
-          <p className="text-xs text-slate-500">
+          <h1 className="truncate text-lg font-semibold text-foreground">{title}</h1>
+          <p className="text-xs text-muted-foreground">
             {isLoading ? '加载中…' : `${activeCount} 个活跃任务`}
           </p>
         </div>
         {selectedProject && (
-          <div className="flex shrink-0 rounded-lg border border-slate-700 bg-slate-900/60 p-0.5">
+          <div className="flex shrink-0 rounded-lg border border-border bg-muted p-0.5">
             {([
               [GROUP_TYPE.SEQUENTIAL, '顺序'],
               [GROUP_TYPE.PARALLEL, '并行'],
@@ -197,8 +197,8 @@ export function GtdTaskList() {
                 key={type}
                 type="button"
                 className={cn(
-                  'h-8 rounded-md px-3 text-xs text-slate-400 transition-colors',
-                  selectedProject.data.type === type && 'bg-slate-700 text-slate-100',
+                  'h-8 rounded-md px-3 text-xs text-muted-foreground transition-colors',
+                  selectedProject.data.type === type && 'bg-accent text-accent-foreground',
                 )}
                 onClick={() => patchProject(selectedProject.id, { type })}
               >
@@ -210,7 +210,7 @@ export function GtdTaskList() {
       </header>
 
       {canQuickAdd && (
-        <div className="flex shrink-0 gap-2 border-b border-slate-800 px-4 py-2">
+        <div className="flex shrink-0 gap-2 border-b border-border px-4 py-2">
           <Input
             value={draft}
             onChange={e => setDraft(e.target.value)}
@@ -219,7 +219,7 @@ export function GtdTaskList() {
                 onAdd()
             }}
             placeholder={selection.kind === 'project' ? '添加任务…' : '捕捉到收件箱…'}
-            className="border-slate-700 bg-slate-900/50"
+            className="border-border bg-muted"
           />
           <Button type="button" className="h-9" onClick={onAdd} disabled={!draft.trim()}>
             添加
@@ -266,7 +266,7 @@ export function GtdTaskList() {
           <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
             {tree.length === 0
               ? (
-                  <p className="px-2 py-8 text-center text-sm text-slate-500">暂无任务</p>
+                  <p className="px-2 py-8 text-center text-sm text-muted-foreground">暂无任务</p>
                 )
               : (
                   <RenderNodes

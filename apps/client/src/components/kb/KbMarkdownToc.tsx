@@ -21,10 +21,10 @@ export function KbMarkdownToc({ toc, scrollRootRef, className }: KbMarkdownTocPr
 
   return (
     <nav
-      className={`max-h-full self-start overflow-auto border-l border-slate-800 py-3 pl-3 text-xs text-slate-400 ${className ?? ''}`}
+      className={`max-h-full self-start overflow-auto border-l border-border py-3 pl-3 text-xs text-muted-foreground ${className ?? ''}`}
       aria-label="目录"
     >
-      <p className="mb-2 font-medium text-slate-300">目录</p>
+      <p className="mb-2 font-medium text-foreground">目录</p>
       <ul className="space-y-1">
         {toc.map(item => (
           <li
@@ -34,7 +34,7 @@ export function KbMarkdownToc({ toc, scrollRootRef, className }: KbMarkdownTocPr
             <a
               href={`#${item.slug}`}
               onClick={e => onClick(e, item.slug)}
-              className="block truncate hover:text-slate-200"
+              className="block truncate hover:text-foreground"
               title={item.text}
             >
               {item.text}

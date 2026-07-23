@@ -13,11 +13,11 @@ export function ApprovalCard({
 }: ApprovalCardProps) {
   return (
     <div className="space-y-2">
-      <h3 className="flex items-center gap-2 font-semibold text-amber-200">
+      <h3 className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-200">
         <span aria-hidden>⚠️</span>
         {title}
       </h3>
-      <p className="mt-2 rounded border border-slate-700 bg-slate-950/80 p-2 text-sm text-slate-200">
+      <p className="mt-2 rounded border border-border bg-card p-2 text-sm text-foreground">
         {content}
       </p>
       <div className="mt-3 flex gap-2">

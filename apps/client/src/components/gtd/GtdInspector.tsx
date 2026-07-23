@@ -53,30 +53,30 @@ export function GtdInspector() {
     const tagIds = rowStore.tagIdsOf(task.id)
 
     return (
-      <aside className="flex w-72 shrink-0 flex-col border-l border-slate-800 bg-slate-950/60">
-        <div className="border-b border-slate-800 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+      <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card">
+        <div className="border-b border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           任务
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
           <div className="space-y-1">
-            <Label className="text-xs text-slate-500">名称</Label>
+            <Label className="text-xs text-muted-foreground">名称</Label>
             <Input
               value={task.data.name}
               onChange={e => patchTask(task.id, { name: e.target.value || task.data.name })}
-              className="border-slate-700 bg-slate-900/50"
+              className="border-border bg-muted"
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-slate-500">备注</Label>
+            <Label className="text-xs text-muted-foreground">备注</Label>
             <textarea
               value={task.data.note ?? ''}
               onChange={e => patchTask(task.id, { note: e.target.value || null })}
               rows={4}
-              className="w-full rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200"
+              className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground"
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-slate-500">项目</Label>
+            <Label className="text-xs text-muted-foreground">项目</Label>
             <Select
               value={task.data.projectId ?? ''}
               onChange={e => patchTask(task.id, { projectId: e.target.value || null })}
@@ -88,7 +88,7 @@ export function GtdInspector() {
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-slate-500">标签</Label>
+            <Label className="text-xs text-muted-foreground">标签</Label>
             <div className="flex flex-wrap gap-1">
               {rowStore.liveTags().map((tag) => {
                 const on = tagIds.includes(tag.id)
@@ -103,7 +103,7 @@ export function GtdInspector() {
                       setTaskTags(task.id, next)
                     }}
                     className={`min-h-8 rounded-md px-2 py-1 text-xs ${
-                      on ? 'bg-slate-700 text-slate-100' : 'bg-slate-900 text-slate-500'
+                      on ? 'bg-accent text-accent-foreground' : 'bg-card text-muted-foreground'
                     }`}
                   >
                     {tag.data.name}
@@ -111,7 +111,7 @@ export function GtdInspector() {
                 )
               })}
               {rowStore.liveTags().length === 0 && (
-                <span className="text-xs text-slate-600">暂无标签</span>
+                <span className="text-xs text-muted-foreground">暂无标签</span>
               )}
             </div>
           </div>
@@ -127,11 +127,11 @@ export function GtdInspector() {
               onChange={iso => patchTask(task.id, { dueDate: iso })}
             />
           </div>
-          <section className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/30 p-3">
+          <section className="space-y-2 rounded-lg border border-border bg-muted p-3">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs font-medium text-slate-300">任务结构</div>
-                <div className="text-[11px] text-slate-500">
+                <div className="text-xs font-medium text-foreground">任务结构</div>
+                <div className="text-[11px] text-muted-foreground">
                   {taskChildren.length > 0 ? `${taskChildren.length} 个直接子任务` : '普通任务'}
                 </div>
               </div>
@@ -239,13 +239,13 @@ export function GtdInspector() {
   if (project) {
     const onHold = project.data.status === EXPLICIT_STATUS.ON_HOLD
     return (
-      <aside className="flex w-72 shrink-0 flex-col border-l border-slate-800 bg-slate-950/60">
-        <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-500">项目</span>
+      <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">项目</span>
           {selection.kind !== 'project' && (
             <button
               type="button"
-              className="text-[10px] text-slate-500 hover:text-slate-300"
+              className="text-[10px] text-muted-foreground hover:text-foreground"
               onClick={() => selectProjectForInspector(project.id)}
             >
               聚焦
@@ -254,24 +254,24 @@ export function GtdInspector() {
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
           <div className="space-y-1">
-            <Label className="text-xs text-slate-500">名称</Label>
+            <Label className="text-xs text-muted-foreground">名称</Label>
             <Input
               value={project.data.name}
               onChange={e => patchProject(project.id, { name: e.target.value || project.data.name })}
-              className="border-slate-700 bg-slate-900/50"
+              className="border-border bg-muted"
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-slate-500">备注</Label>
+            <Label className="text-xs text-muted-foreground">备注</Label>
             <textarea
               value={project.data.note ?? ''}
               onChange={e => patchProject(project.id, { note: e.target.value || null })}
               rows={4}
-              className="w-full rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200"
+              className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground"
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-slate-500">类型</Label>
+            <Label className="text-xs text-muted-foreground">类型</Label>
             <Select
               value={project.data.type}
               onChange={e =>
@@ -283,7 +283,7 @@ export function GtdInspector() {
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-slate-500">文件夹</Label>
+            <Label className="text-xs text-muted-foreground">文件夹</Label>
             <Select
               value={project.data.folderId ?? ''}
               onChange={e => patchProject(project.id, { folderId: e.target.value || null })}
@@ -319,8 +319,8 @@ export function GtdInspector() {
   }
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-l border-slate-800 bg-slate-950/40">
-      <div className="flex flex-1 items-center justify-center px-4 text-center text-sm text-slate-600">
+    <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card">
+      <div className="flex flex-1 items-center justify-center px-4 text-center text-sm text-muted-foreground">
         选择任务或项目以编辑详情
       </div>
     </aside>

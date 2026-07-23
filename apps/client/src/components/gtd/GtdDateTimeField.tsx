@@ -46,18 +46,18 @@ export function GtdDateTimeField({ label, value, onChange, className }: GtdDateT
 
   return (
     <div className={cn('space-y-1', className)}>
-      <div className="text-xs text-slate-500">{label}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             type="button"
             variant="outline"
             className={cn(
-              'h-9 w-full justify-start gap-2 border-slate-700 bg-slate-900/50 px-3 font-normal hover:bg-slate-800',
-              !selected && 'text-slate-500',
+              'h-9 w-full justify-start gap-2 border-border bg-muted px-3 font-normal hover:bg-accent',
+              !selected && 'text-muted-foreground',
             )}
           >
-            <CalendarIcon className="size-3.5 shrink-0 text-slate-400" />
+            <CalendarIcon className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="truncate">{display}</span>
           </Button>
         </PopoverTrigger>
@@ -74,7 +74,7 @@ export function GtdDateTimeField({ label, value, onChange, className }: GtdDateT
             }}
             locale={dayPickerZhCN}
           />
-          <div className="flex items-center gap-2 border-t border-slate-800 px-3 py-2">
+          <div className="flex items-center gap-2 border-t border-border px-3 py-2">
             <input
               type="time"
               value={timeValue}
@@ -82,13 +82,13 @@ export function GtdDateTimeField({ label, value, onChange, className }: GtdDateT
                 const base = selected ?? new Date()
                 onChange(combineDateAndTime(base, e.target.value || '09:00'))
               }}
-              className="h-8 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 text-sm text-slate-200 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-8 flex-1 rounded-md border border-border bg-card px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-8 px-2 text-slate-400"
+              className="h-8 px-2 text-muted-foreground"
               disabled={!selected}
               onClick={() => {
                 onChange(null)

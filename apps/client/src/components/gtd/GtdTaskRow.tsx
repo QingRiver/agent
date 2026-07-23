@@ -10,9 +10,9 @@ import { ChevronDown, ChevronRight, Flag, GripVertical, Repeat2 } from 'lucide-r
 
 function statusDotClass(computed: ComputedStatus | null, explicit: string): string {
   if (explicit === EXPLICIT_STATUS.COMPLETED)
-    return 'bg-slate-500'
+    return 'bg-muted-foreground'
   if (explicit === EXPLICIT_STATUS.CANCELLED || explicit === EXPLICIT_STATUS.DELETED)
-    return 'bg-slate-600'
+    return 'bg-muted-foreground/80'
   switch (computed) {
     case COMPUTED_STATUS.AVAILABLE:
       return 'bg-emerald-400'
@@ -21,9 +21,9 @@ function statusDotClass(computed: ComputedStatus | null, explicit: string): stri
     case COMPUTED_STATUS.OVERDUE:
       return 'bg-rose-400'
     case COMPUTED_STATUS.BLOCKED:
-      return 'bg-slate-500'
+      return 'bg-muted-foreground'
     default:
-      return 'bg-slate-500'
+      return 'bg-muted-foreground'
   }
 }
 
@@ -91,8 +91,8 @@ export function GtdTaskRow({
           selectTask(taskId)
       }}
       className={cn(
-        'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-800/80',
-        selected && 'bg-slate-800',
+        'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent/80',
+        selected && 'bg-accent',
         isDragging && 'z-10 opacity-50',
       )}
       style={{
@@ -104,7 +104,7 @@ export function GtdTaskRow({
       {sortable && (
         <button
           type="button"
-          className="flex size-8 shrink-0 cursor-grab items-center justify-center rounded text-slate-600 hover:bg-slate-700 hover:text-slate-300 active:cursor-grabbing"
+          className="flex size-8 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
           title="拖动排序"
           aria-label="拖动排序"
           onClick={e => e.stopPropagation()}
@@ -118,7 +118,7 @@ export function GtdTaskRow({
         ? (
             <button
               type="button"
-              className="flex size-8 shrink-0 items-center justify-center rounded text-slate-500 hover:bg-slate-700 hover:text-slate-200"
+              className="flex size-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
               aria-label={collapsed ? '展开子任务' : '折叠子任务'}
               onClick={(e) => {
                 e.stopPropagation()
@@ -144,16 +144,16 @@ export function GtdTaskRow({
         aria-label={done ? '标记未完成' : '标记完成'}
       />
       <span className={cn('size-1.5 shrink-0 rounded-full', statusDotClass(computed, task.data.status))} />
-      <span className={cn('min-w-0 flex-1 truncate', done && 'text-slate-500 line-through')}>
+      <span className={cn('min-w-0 flex-1 truncate', done && 'text-muted-foreground line-through')}>
         {task.data.name}
       </span>
       {task.data.repeatRuleId && (
-        <Repeat2 className="size-3.5 shrink-0 text-slate-500" aria-label="重复任务" />
+        <Repeat2 className="size-3.5 shrink-0 text-muted-foreground" aria-label="重复任务" />
       )}
       {dueLabel && (
         <span className={cn(
           'shrink-0 text-xs',
-          computed === COMPUTED_STATUS.OVERDUE ? 'text-rose-400' : 'text-slate-500',
+          computed === COMPUTED_STATUS.OVERDUE ? 'text-rose-400' : 'text-muted-foreground',
         )}
         >
           {dueLabel}
@@ -165,7 +165,7 @@ export function GtdTaskRow({
         size="sm"
         className={cn(
           'h-8 w-8 shrink-0 p-0',
-          task.data.flagged ? 'text-amber-400' : 'text-slate-600 opacity-0 group-hover:opacity-100',
+          task.data.flagged ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground opacity-0 group-hover:opacity-100',
         )}
         onClick={(e) => {
           e.stopPropagation()

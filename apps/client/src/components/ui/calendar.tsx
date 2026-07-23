@@ -23,21 +23,21 @@ export function Calendar({
         months: 'relative flex flex-col gap-3',
         month: 'flex w-full flex-col gap-3',
         month_caption: 'flex h-8 items-center justify-center px-8',
-        caption_label: 'text-sm font-medium text-slate-100',
+        caption_label: 'text-sm font-medium text-foreground',
         nav: 'absolute inset-x-0 top-0 flex items-center justify-between px-1',
         button_previous:
-          'inline-flex size-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-slate-100',
+          'inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground',
         button_next:
-          'inline-flex size-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-slate-100',
+          'inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground',
         weekdays: 'flex',
-        weekday: 'w-8 text-center text-[0.7rem] font-medium text-slate-500',
+        weekday: 'w-8 text-center text-[0.7rem] font-medium text-muted-foreground',
         week: 'mt-1 flex w-full',
         day: 'relative h-8 w-8 p-0 text-center text-sm',
         day_button:
-          'inline-flex size-8 items-center justify-center rounded-md text-slate-200 hover:bg-slate-800',
+          'inline-flex size-8 items-center justify-center rounded-md text-foreground hover:bg-accent',
         selected: '[&_button]:bg-primary [&_button]:text-primary-foreground [&_button]:hover:bg-primary/90',
         today: '[&_button]:font-semibold [&_button]:text-primary',
-        outside: '[&_button]:text-slate-600',
+        outside: '[&_button]:text-muted-foreground',
         disabled: '[&_button]:opacity-40',
         hidden: 'invisible',
         ...classNames,
@@ -67,11 +67,11 @@ function CalendarDayButton({
       type="button"
       data-day={day.date.toLocaleDateString()}
       className={cn(
-        'inline-flex size-8 items-center justify-center rounded-md text-sm text-slate-200',
-        'hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'inline-flex size-8 items-center justify-center rounded-md text-sm text-foreground',
+        'hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         modifiers.selected && 'bg-primary text-primary-foreground hover:bg-primary/90',
         modifiers.today && !modifiers.selected && 'font-semibold text-primary',
-        modifiers.outside && 'text-slate-600',
+        modifiers.outside && 'text-muted-foreground',
         modifiers.disabled && 'opacity-40',
         className,
       )}

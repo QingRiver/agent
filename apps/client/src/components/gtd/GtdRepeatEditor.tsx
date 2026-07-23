@@ -50,11 +50,11 @@ export function GtdRepeatEditor({
     : defaultRule())
 
   return (
-    <section className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/30 p-3">
+    <section className="space-y-2 rounded-lg border border-border bg-muted p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="text-xs font-medium text-slate-300">重复</div>
-          <div className="text-[11px] text-slate-500">完成后保留当前实例，并生成下一实例</div>
+          <div className="text-xs font-medium text-foreground">重复</div>
+          <div className="text-[11px] text-muted-foreground">完成后保留当前实例，并生成下一实例</div>
         </div>
         <Button
           type="button"
@@ -75,10 +75,10 @@ export function GtdRepeatEditor({
       </div>
 
       {enabled && (
-        <div className="space-y-3 border-t border-slate-800 pt-3">
+        <div className="space-y-3 border-t border-border pt-3">
           <div className="grid grid-cols-2 gap-2">
             <label className="space-y-1">
-              <span className="text-xs text-slate-500">周期</span>
+              <span className="text-xs text-muted-foreground">周期</span>
               <Select
                 value={draft.cycle}
                 onChange={e => setDraft(current => ({
@@ -95,7 +95,7 @@ export function GtdRepeatEditor({
               </Select>
             </label>
             <label className="space-y-1">
-              <span className="text-xs text-slate-500">每 N 个周期</span>
+              <span className="text-xs text-muted-foreground">每 N 个周期</span>
               <Input
                 type="number"
                 min={1}
@@ -109,7 +109,7 @@ export function GtdRepeatEditor({
           </div>
 
           <label className="block space-y-1">
-            <span className="text-xs text-slate-500">下一实例基准</span>
+            <span className="text-xs text-muted-foreground">下一实例基准</span>
             <Select
               value={draft.anchor}
               onChange={e => setDraft(current => ({
@@ -134,7 +134,7 @@ export function GtdRepeatEditor({
 
           {draft.cycle === REPEAT_CYCLE.WEEKLY && (
             <div className="space-y-1">
-              <Label className="text-xs text-slate-500">星期（不选表示不限）</Label>
+              <Label className="text-xs text-muted-foreground">星期（不选表示不限）</Label>
               <div className="flex flex-wrap gap-1">
                 {WEEKDAYS.map((label, day) => {
                   const selected = draft.daysOfWeek.includes(day)
@@ -152,7 +152,7 @@ export function GtdRepeatEditor({
                       className={`size-8 rounded-md border text-xs ${
                         selected
                           ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-slate-700 bg-slate-950 text-slate-400'
+                          : 'border-border bg-background text-muted-foreground'
                       }`}
                     >
                       {label}
@@ -170,7 +170,7 @@ export function GtdRepeatEditor({
           />
 
           <label className="block space-y-1">
-            <span className="text-xs text-slate-500">最多完成次数（可选）</span>
+            <span className="text-xs text-muted-foreground">最多完成次数（可选）</span>
             <Input
               type="number"
               min={1}
@@ -186,7 +186,7 @@ export function GtdRepeatEditor({
           </label>
 
           {rule && (
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-muted-foreground">
               已完成
               {' '}
               {rule.completedOccurrences}

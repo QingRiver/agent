@@ -188,13 +188,28 @@ export class TextEditorSession {
       initialSpacer: () => mrSpacer,
     })
 
+    const isDark = document.documentElement.classList.contains('dark')
     const editorTheme = EditorView.theme({
-      '&': { backgroundColor: 'transparent', color: '#e6edf3' },
-      '.cm-content': { caretColor: '#e6edf3', padding: '4px 0' },
-      '.cm-gutters': { backgroundColor: 'transparent', color: '#6b7280', border: 'none' },
-      '.cm-activeLine': { backgroundColor: 'rgba(255,255,255,0.03)' },
+      '&': {
+        backgroundColor: 'transparent',
+        color: isDark ? '#e6edf3' : '#1f2937',
+      },
+      '.cm-content': {
+        caretColor: isDark ? '#e6edf3' : '#1f2937',
+        padding: '4px 0',
+      },
+      '.cm-gutters': {
+        backgroundColor: 'transparent',
+        color: isDark ? '#6b7280' : '#9ca3af',
+        border: 'none',
+      },
+      '.cm-activeLine': {
+        backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.04)',
+      },
       '.cm-activeLineGutter': { backgroundColor: 'transparent' },
-      '.cm-selectionBackground, ::selection': { backgroundColor: '#264f78' },
+      '.cm-selectionBackground, ::selection': {
+        backgroundColor: isDark ? '#264f78' : '#bfdbfe',
+      },
       '&.cm-focused': { outline: 'none' },
       '.ai-mr-gutter': { width: '14px', whiteSpace: 'nowrap' },
       '.ai-mr-spacer': { display: 'inline-block', width: '14px' },
@@ -209,7 +224,7 @@ export class TextEditorSession {
         cursor: 'help',
         verticalAlign: 'top',
       },
-    }, { dark: true })
+    }, { dark: isDark })
 
     this.view = new EditorView({
       state: EditorState.create({

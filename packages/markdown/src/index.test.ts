@@ -18,6 +18,34 @@ describe('renderMarkdown', () => {
     expect(html).toContain('language-ts')
   })
 
+  it('将 mermaid 代码块转为 .mermaid 占位且不破坏其他高亮', () => {
+    const md = [
+      '```mermaid',
+      'graph TD;',
+      '  A-->B',
+      '```',
+      '',
+      '```ts',
+      'const x = 1',
+      '```',
+      '',
+    ].join('\n')
+    const { html } = renderMarkdown(md)
+    expect(html).toContain('class="mermaid"')
+    expect(html).toContain('graph TD;')
+    expect(html).not.toMatch(/<pre[^>]*>[\s\S]*graph TD/)
+    expect(html).toContain('hljs')
+    expect(html).toContain('language-ts')
+  })
+
+  it('mermaid 源码中的 HTML 特殊字符被转义（不双重转义）', () => {
+    const { html } = renderMarkdown('```mermaid\nA["<script>"]\n```\n')
+    expect(html).toContain('class="mermaid"')
+    expect(html).toMatch(/&lt;script&gt;/)
+    expect(html).not.toContain('&amp;lt;')
+    expect(html).not.toContain('<script>')
+  })
+
   it('渲染 GFM 脚注', () => {
     const { html } = renderMarkdown('Note[^1].\n\n[^1]: Footnote body\n')
     expect(html).toMatch(/data-footnote-ref|footnote/)

@@ -37,39 +37,39 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
   }
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col border-l border-slate-800 bg-slate-950/80">
-      <div className="flex items-center gap-2 border-b border-slate-800 p-3">
-        <Search className="size-4 text-slate-400" />
-        <span className="flex-1 text-sm font-medium text-slate-200">召回测试</span>
+    <aside className="flex h-full w-80 shrink-0 flex-col border-l border-border bg-card">
+      <div className="flex items-center gap-2 border-b border-border p-3">
+        <Search className="size-4 text-muted-foreground" />
+        <span className="flex-1 text-sm font-medium text-foreground">召回测试</span>
         <button
           type="button"
           title="关闭"
           onClick={onClose}
-          className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <X className="size-4" />
         </button>
       </div>
 
-      <p className="border-b border-slate-800 px-3 py-2 text-xs text-slate-500">
+      <p className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
         仅检索
-        <span className="text-slate-400">已提交</span>
+        <span className="text-muted-foreground">已提交</span>
         内容；未提交的草稿不会命中。
       </p>
 
-      <form onSubmit={e => void onSubmit(e)} className="flex gap-2 border-b border-slate-800 p-3">
+      <form onSubmit={e => void onSubmit(e)} className="flex gap-2 border-b border-border p-3">
         <input
           value={q}
           onChange={e => setQ(e.target.value)}
           placeholder="输入查询，如 SKU-9001…"
-          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-500"
+          className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:border-border"
         />
         <Button type="submit" size="sm" disabled={loading || !q.trim()}>
           {loading ? <Loader2 className="size-3.5 animate-spin" /> : '查询'}
         </Button>
       </form>
 
-      <label className="flex items-center gap-2 border-b border-slate-800 px-3 py-2 text-xs text-slate-400">
+      <label className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground">
         <input
           type="checkbox"
           checked={enableRerank}
@@ -77,16 +77,16 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
           className="size-3.5 accent-sky-500"
         />
         启用 rerank
-        <span className="text-slate-600">（关闭则仅 RRF 直出，更快，用于测试/自验）</span>
+        <span className="text-muted-foreground">（关闭则仅 RRF 直出，更快，用于测试/自验）</span>
       </label>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {error && (
-          <p className="mb-2 text-sm text-red-400">{error}</p>
+          <p className="mb-2 text-sm text-destructive">{error}</p>
         )}
         {result && (
           <div className="space-y-3">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               命中
               {' '}
               {result.chunks.length}
@@ -95,16 +95,16 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
               {result.fallback ? '（含 LLM fallback）' : ''}
             </p>
             {result.chunks.length === 0 && (
-              <p className="text-sm text-slate-500">无结果。确认文档已提交且关键词能对上。</p>
+              <p className="text-sm text-muted-foreground">无结果。确认文档已提交且关键词能对上。</p>
             )}
             {result.chunks.map(chunk => (
               <article
                 key={chunk.chunk_id || `${chunk.source_doc_id}:${chunk.raw_text.slice(0, 24)}`}
-                className="rounded-lg border border-slate-800 bg-slate-900/50 p-2.5"
+                className="rounded-lg border border-border bg-muted p-2.5"
               >
-                <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                   {chunk.rank != null && (
-                    <span className="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">
+                    <span className="rounded bg-accent px-1.5 py-0.5 text-foreground">
                       #
                       {chunk.rank}
                     </span>
@@ -129,11 +129,11 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
                   </span>
                 </div>
                 {chunk.heading_path.length > 0 && (
-                  <p className="mb-1 truncate text-xs text-sky-400/80">
+                  <p className="mb-1 truncate text-xs text-sky-700/80 dark:text-sky-400/80">
                     {chunk.heading_path.join(' / ')}
                   </p>
                 )}
-                <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-sans text-xs leading-relaxed text-slate-300">
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-sans text-xs leading-relaxed text-foreground">
                   {chunk.raw_text}
                 </pre>
               </article>
@@ -141,7 +141,7 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
           </div>
         )}
         {!result && !error && !loading && (
-          <p className="text-sm text-slate-500">提交文档后在此试检索。</p>
+          <p className="text-sm text-muted-foreground">提交文档后在此试检索。</p>
         )}
       </div>
     </aside>

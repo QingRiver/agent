@@ -77,7 +77,7 @@ function InputCard({
   const [value, setValue] = useState('')
   return (
     <div className="space-y-2">
-      <h3 className="font-semibold text-cyan-200">
+      <h3 className="font-semibold text-cyan-700 dark:text-cyan-300">
         {message}
       </h3>
       <form
@@ -90,7 +90,7 @@ function InputCard({
       >
         <input
           type="text"
-          className="flex-1 rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-cyan-500"
+          className="flex-1 rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground outline-none focus:border-cyan-500"
           {...(placeholder != null ? { placeholder } : {})}
           value={value}
           onChange={e => setValue(e.target.value)}
@@ -119,7 +119,7 @@ function SelectCard({
   const [selected, setSelected] = useState<Set<number>>(() => new Set())
   return (
     <div className="space-y-2">
-      <h3 className="font-semibold text-cyan-200">
+      <h3 className="font-semibold text-cyan-700 dark:text-cyan-300">
         {message}
       </h3>
       <div className="space-y-1">
@@ -131,7 +131,7 @@ function SelectCard({
             <button
               type="button"
               key={opt.value}
-              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm ${isCursor ? 'bg-slate-800 text-cyan-200' : 'text-slate-200'}`}
+              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm ${isCursor ? 'bg-accent text-accent-foreground' : 'text-foreground'}`}
               onClick={() => {
                 if (multiple) {
                   setSelected((prev) => {
@@ -152,7 +152,7 @@ function SelectCard({
               <span aria-hidden>{prefix}</span>
               <span>{opt.label}</span>
               {opt.description != null && (
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-muted-foreground">
                   —
                   {opt.description}
                 </span>
@@ -187,12 +187,12 @@ function ModalCard({
   onSelect: (action: string) => void
 }) {
   return (
-    <div className="space-y-2 rounded-lg border border-amber-700/50 bg-slate-950/60 p-3">
-      <h3 className="flex items-center gap-2 font-semibold text-amber-200">
+    <div className="space-y-2 rounded-lg border border-amber-700/50 bg-card p-3">
+      <h3 className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-200">
         <span aria-hidden>⚠️</span>
         {title}
       </h3>
-      <p className="rounded border border-slate-700 bg-slate-950/80 p-2 text-sm text-slate-200">
+      <p className="rounded border border-border bg-card p-2 text-sm text-foreground">
         {body}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -201,7 +201,7 @@ function ModalCard({
             type="button"
             key={action}
             onClick={() => onSelect(action)}
-            className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-600"
+            className="rounded-lg bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground hover:bg-secondary/80"
           >
             {action}
           </button>
@@ -220,7 +220,7 @@ function UnlockCard({
 }) {
   return (
     <div className="space-y-2">
-      <p className="text-sm text-slate-300">
+      <p className="text-sm text-foreground">
         {message}
       </p>
       <button type="button" onClick={onConfirm} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500">

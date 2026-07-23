@@ -209,7 +209,7 @@ export function KbFileTree({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {pendingDeleteId && (
-        <div className="space-y-2 border-b border-slate-800 bg-slate-900/80 p-2 text-xs text-slate-300">
+        <div className="space-y-2 border-b border-border bg-muted p-2 text-xs text-foreground">
           <p>
             确定删除该文件夹？子文件夹会一并删除；其中的文档会移到根级，文档本身不会被删除。
           </p>
@@ -223,7 +223,7 @@ export function KbFileTree({
             </button>
             <button
               type="button"
-              className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+              className="rounded bg-muted px-2 py-1 hover:bg-accent"
               onClick={() => setPendingDeleteId(null)}
             >
               取消
@@ -242,13 +242,13 @@ export function KbFileTree({
         onDrop={e => void onRootDrop(e)}
       >
         <div className="mb-1 flex items-center gap-1 px-1">
-          <span className="flex-1 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+          <span className="flex-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             文件
           </span>
           <button
             type="button"
             title="新建根级文件夹"
-            className="rounded-md p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
+            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
             onClick={() => {
               if (creatingUnder === null) {
                 cancelDraft()
@@ -367,18 +367,18 @@ function NameDraft({
       className="mb-0.5 flex items-center gap-1 py-0.5"
       style={{ paddingLeft: 8 + depth * 12 }}
     >
-      <Folder className="size-3.5 shrink-0 text-slate-500" />
+      <Folder className="size-3.5 shrink-0 text-muted-foreground" />
       <input
         autoFocus
         value={value}
         onChange={e => onChange(e.target.value)}
         onKeyDown={onKeyDown}
-        className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-sm text-slate-100 outline-none focus:border-sky-500"
+        className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-sm text-foreground outline-none focus:border-sky-500"
       />
       <button
         type="submit"
         title={submitLabel}
-        className="shrink-0 rounded p-1 text-sky-400 hover:bg-slate-800 hover:text-sky-300"
+        className="shrink-0 rounded p-1 text-sky-700 hover:bg-accent hover:text-sky-600 dark:text-sky-400 dark:hover:text-sky-300"
       >
         <span className="sr-only">{submitLabel}</span>
         <span className="text-xs font-medium">✓</span>
@@ -387,7 +387,7 @@ function NameDraft({
         type="button"
         title="取消"
         onClick={onCancel}
-        className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
+        className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
       >
         <X className="size-3.5" />
       </button>
@@ -469,9 +469,9 @@ function TreeNodes({
                       onDragLeave={e => onFolderDragLeave(e, node.id)}
                       onDrop={e => onFolderDrop(e, node.id)}
                       className={cn(
-                        'group flex w-full items-center gap-0.5 rounded-md text-sm text-slate-300',
-                        over && 'bg-sky-950/60 ring-1 ring-inset ring-sky-500/40',
-                        !over && 'hover:bg-slate-800',
+                        'group flex w-full items-center gap-0.5 rounded-md text-sm text-foreground',
+                        over && 'bg-sky-500/10 ring-1 ring-inset ring-sky-500/40',
+                        !over && 'hover:bg-accent',
                       )}
                       style={{ paddingLeft: 4 + depth * 12 }}
                     >
@@ -481,8 +481,8 @@ function TreeNodes({
                         className="flex min-w-0 flex-1 items-center gap-1 px-1 py-1 text-left"
                       >
                         {open
-                          ? <ChevronDown className="size-3.5 shrink-0 text-slate-500" />
-                          : <ChevronRight className="size-3.5 shrink-0 text-slate-500" />}
+                          ? <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                          : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
                         {open
                           ? <FolderOpen className="size-3.5 shrink-0 text-amber-500/80" />
                           : <Folder className="size-3.5 shrink-0 text-amber-500/80" />}
@@ -492,7 +492,7 @@ function TreeNodes({
                         <button
                           type="button"
                           title="新建子文件夹"
-                          className="rounded p-1 text-slate-500 hover:bg-slate-700 hover:text-slate-200"
+                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
                           onClick={() => onStartCreate(node.id)}
                         >
                           <FolderPlus className="size-3" />
@@ -500,7 +500,7 @@ function TreeNodes({
                         <button
                           type="button"
                           title="重命名"
-                          className="rounded p-1 text-slate-500 hover:bg-slate-700 hover:text-slate-200"
+                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
                           onClick={() => onStartRename(node.id, node.name)}
                         >
                           <Pencil className="size-3" />
@@ -508,7 +508,7 @@ function TreeNodes({
                         <button
                           type="button"
                           title="删除文件夹"
-                          className="rounded p-1 text-slate-500 hover:bg-slate-700 hover:text-red-400"
+                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
                           onClick={() => onRequestDelete(node.id)}
                         >
                           <Trash2 className="size-3" />
@@ -568,12 +568,12 @@ function TreeNodes({
             onDragEnd={onDragEnd}
             onClick={() => onSelect(node.id)}
             className={cn(
-              'flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-800',
-              selected ? 'bg-slate-800 text-slate-100' : 'text-slate-300',
+              'flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent',
+              selected ? 'bg-accent text-accent-foreground' : 'text-foreground',
             )}
             style={{ paddingLeft: 8 + depth * 12 }}
           >
-            <FileText className="size-3.5 shrink-0 text-slate-500" />
+            <FileText className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate">{node.name}</span>
             {dirty && (
               <span

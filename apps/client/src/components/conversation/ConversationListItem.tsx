@@ -28,8 +28,8 @@ export function ConversationListItem({
       className={cn(
         'group flex items-start gap-1 rounded-lg px-2 py-2 text-sm transition-colors',
         selected
-          ? 'bg-slate-800 text-slate-100'
-          : 'text-slate-300 hover:bg-slate-800/60',
+          ? 'bg-accent text-accent-foreground'
+          : 'text-foreground hover:bg-accent/60',
       )}
     >
       <button
@@ -38,7 +38,7 @@ export function ConversationListItem({
         className="min-w-0 flex-1 text-left"
       >
         <div className="truncate font-medium">{conversation.title}</div>
-        <div className="mt-0.5 truncate text-xs text-slate-500">{conversation.agentId}</div>
+        <div className="mt-0.5 truncate text-xs text-muted-foreground">{conversation.agentId}</div>
       </button>
       <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <button
@@ -51,7 +51,7 @@ export function ConversationListItem({
             else
               onPin()
           }}
-          className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           {conversation.pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
         </button>
@@ -62,15 +62,15 @@ export function ConversationListItem({
             e.stopPropagation()
             setConfirmDelete(true)
           }}
-          className="rounded p-1 text-slate-400 hover:bg-red-900/50 hover:text-red-300"
+          className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
         >
           <Trash2 className="size-3.5" />
         </button>
       </div>
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-xl">
-            <p className="text-sm text-slate-200">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-card p-4 shadow-xl">
+            <p className="text-sm text-foreground">
               删除「
               {conversation.title}
               」？关联的检查点数据将一并清除。

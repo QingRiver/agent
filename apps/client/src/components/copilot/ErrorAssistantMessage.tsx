@@ -84,7 +84,7 @@ function ErrorCard({ messageId, messages, content, code, json }: ErrorCardProps)
   return (
     <div className="my-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm">
       <div className="flex items-start gap-2">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400" />
         <div className="min-w-0 flex-1">
           <div className="whitespace-pre-wrap break-words text-red-500">{content}</div>
 
@@ -111,7 +111,7 @@ function ErrorCard({ messageId, messages, content, code, json }: ErrorCardProps)
               <button
                 type="button"
                 onClick={() => setExpanded(v => !v)}
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-red-400 transition hover:text-red-500"
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-red-600 transition hover:text-red-700 dark:text-red-400 dark:hover:text-red-500"
               >
                 {expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
                 查看详情
@@ -120,7 +120,7 @@ function ErrorCard({ messageId, messages, content, code, json }: ErrorCardProps)
           </div>
 
           {expanded && (code !== '' || json !== '') && (
-            <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-all rounded bg-black/20 p-2 text-[11px] leading-relaxed text-red-400">
+            <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-all rounded bg-black/20 p-2 text-[11px] leading-relaxed text-red-600 dark:text-red-400">
               {code !== '' && (
                 <div>
                   <span className="text-red-500/70">code</span>

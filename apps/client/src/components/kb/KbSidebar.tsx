@@ -113,16 +113,16 @@ export function KbSidebar({
   }
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-950/80">
-      <div className="flex items-center gap-1 border-b border-slate-800 p-2">
-        <span className="flex-1 px-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-border bg-card">
+      <div className="flex items-center gap-1 border-b border-border p-2">
+        <span className="flex-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           知识库
         </span>
         <button
           type="button"
           title="引入文档"
           onClick={() => setImportOpen(true)}
-          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <Plus className="size-3.5" />
         </button>
@@ -131,8 +131,8 @@ export function KbSidebar({
             type="button"
             title="召回测试"
             onClick={onToggleRecall}
-            className={`rounded-md p-1.5 hover:bg-slate-800 ${
-              recallOpen ? 'bg-slate-800 text-sky-300' : 'text-slate-400 hover:text-slate-200'
+            className={`rounded-md p-1.5 hover:bg-accent ${
+              recallOpen ? 'bg-accent text-sky-700 dark:text-sky-300' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <Search className="size-3.5" />
@@ -142,7 +142,7 @@ export function KbSidebar({
           type="button"
           title="刷新"
           onClick={() => void refresh()}
-          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <RefreshCw className="size-3.5" />
         </button>
@@ -151,14 +151,14 @@ export function KbSidebar({
           title="删除当前文档"
           disabled={!activeId}
           onClick={() => setPendingDelete(true)}
-          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-red-400 disabled:opacity-40"
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive disabled:opacity-40"
         >
           <Trash2 className="size-3.5" />
         </button>
       </div>
 
       {pendingDelete && activeId && (
-        <div className="space-y-2 border-b border-slate-800 bg-slate-900/80 p-2 text-xs text-slate-300">
+        <div className="space-y-2 border-b border-border bg-muted p-2 text-xs text-foreground">
           <p>确定删除当前文档？不可恢复。</p>
           <div className="flex gap-2">
             <button
@@ -170,7 +170,7 @@ export function KbSidebar({
             </button>
             <button
               type="button"
-              className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+              className="rounded bg-muted px-2 py-1 hover:bg-accent"
               onClick={() => setPendingDelete(false)}
             >
               取消
@@ -180,7 +180,7 @@ export function KbSidebar({
       )}
 
       {tags.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1 border-b border-slate-800 p-2">
+        <div className="flex flex-wrap items-center gap-1 border-b border-border p-2">
           {tags.map((tag) => {
             const on = selectedTags.includes(tag.name)
             return (
@@ -189,7 +189,7 @@ export function KbSidebar({
                 type="button"
                 onClick={() => toggleTag(tag.name)}
                 className={`rounded-full px-2 py-0.5 text-xs ring-1 ring-inset ${
-                  on ? 'ring-2 ring-sky-400' : 'ring-slate-700'
+                  on ? 'ring-2 ring-sky-400' : 'ring-border'
                 }`}
                 style={tag.color
                   ? { backgroundColor: `${tag.color}33`, color: tag.color, borderColor: tag.color }
@@ -203,7 +203,7 @@ export function KbSidebar({
             type="button"
             title="管理标签"
             onClick={() => setTagManagerOpen(true)}
-            className="ml-auto rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <Settings2 className="size-3.5" />
           </button>
@@ -211,13 +211,13 @@ export function KbSidebar({
       )}
 
       {isLoading && (
-        <p className="px-2 py-2 text-sm text-slate-500">加载中…</p>
+        <p className="px-2 py-2 text-sm text-muted-foreground">加载中…</p>
       )}
       {error != null && (
-        <p className="px-2 py-2 text-sm text-red-400">{error}</p>
+        <p className="px-2 py-2 text-sm text-destructive">{error}</p>
       )}
       {!isLoading && tree.length === 0 && (
-        <p className="px-2 py-2 text-sm text-slate-500">
+        <p className="px-2 py-2 text-sm text-muted-foreground">
           暂无文档。可用顶部「引入」添加，或在下方新建文件夹。
         </p>
       )}

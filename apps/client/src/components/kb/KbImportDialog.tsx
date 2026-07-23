@@ -190,22 +190,22 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-800 p-3">
-          <span className="text-sm font-medium text-slate-200">引入文档 → 草稿</span>
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xl">
+        <div className="flex items-center justify-between border-b border-border p-3">
+          <span className="text-sm font-medium text-foreground">引入文档 → 草稿</span>
           <button
             type="button"
             onClick={() => {
               reset()
               onClose()
             }}
-            className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <X className="size-4" />
           </button>
         </div>
 
-        <div className="flex gap-1 border-b border-slate-800 p-2">
+        <div className="flex gap-1 border-b border-border p-2">
           {tabs.map(t => (
             <button
               key={t.key}
@@ -215,7 +215,7 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
                 setResults([])
               }}
               className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs ${
-                tab === t.key ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-200'
+                tab === t.key ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               <t.icon className="size-3.5" />
@@ -226,11 +226,11 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
 
         <div className="flex-1 space-y-3 overflow-y-auto p-3">
           <label className="block">
-            <span className="mb-1 block text-xs text-slate-400">目标文件夹</span>
+            <span className="mb-1 block text-xs text-muted-foreground">目标文件夹</span>
             <select
               value={parentNodeId ?? ''}
               onChange={e => setParentNodeId(e.target.value || null)}
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-500"
+              className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:border-border"
             >
               {folders.map(f => (
                 <option key={f.id ?? 'root'} value={f.id ?? ''}>
@@ -241,18 +241,18 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-xs text-slate-400">标签（逗号分隔，可选）</span>
+            <span className="mb-1 block text-xs text-muted-foreground">标签（逗号分隔，可选）</span>
             <input
               value={tags}
               onChange={e => setTags(e.target.value)}
               placeholder="rust,async"
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-500"
+              className="w-full rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground outline-none focus:border-border"
             />
           </label>
 
           {tab === 'files' && (
             <label className="block">
-              <span className="mb-1 block text-xs text-slate-400">
+              <span className="mb-1 block text-xs text-muted-foreground">
                 选择文件（.md/.docx/.pdf/.html/.txt；zip 请用「压缩包」页签）
               </span>
               <input
@@ -260,21 +260,21 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
                 multiple
                 accept=".md,.markdown,.docx,.pdf,.html,.htm,.txt"
                 onChange={e => setFileList(e.target.files)}
-                className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-slate-800 file:px-3 file:py-1.5 file:text-slate-200 hover:file:bg-slate-700"
+                className="block w-full text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-foreground hover:file:bg-muted"
               />
             </label>
           )}
 
           {tab === 'zip' && (
             <label className="block">
-              <span className="mb-1 block text-xs text-slate-400">
+              <span className="mb-1 block text-xs text-muted-foreground">
                 选择 zip（仅导入包内 .md/.markdown，按目录还原，最多 5 层；目标文件夹不生效）
               </span>
               <input
                 type="file"
                 accept=".zip"
                 onChange={e => setZipFile(e.target.files?.[0] ?? null)}
-                className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-slate-800 file:px-3 file:py-1.5 file:text-slate-200 hover:file:bg-slate-700"
+                className="block w-full text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-foreground hover:file:bg-muted"
               />
             </label>
           )}
@@ -282,32 +282,32 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
           {tab === 'text' && (
             <>
               <label className="block">
-                <span className="mb-1 block text-xs text-slate-400">标题</span>
+                <span className="mb-1 block text-xs text-muted-foreground">标题</span>
                 <input
                   value={textName}
                   onChange={e => setTextName(e.target.value)}
                   placeholder="文档标题"
-                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-500"
+                  className="w-full rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground outline-none focus:border-border"
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs text-slate-400">正文（Markdown）</span>
+                <span className="mb-1 block text-xs text-muted-foreground">正文（Markdown）</span>
                 <textarea
                   value={textContent}
                   onChange={e => setTextContent(e.target.value)}
                   rows={8}
                   placeholder="# 标题&#10;正文…"
-                  className="w-full resize-none rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-sm text-slate-100 outline-none focus:border-slate-500"
+                  className="w-full resize-none rounded-md border border-border bg-card px-2 py-1.5 font-mono text-sm text-foreground outline-none focus:border-border"
                 />
               </label>
             </>
           )}
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
 
           {results.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 导入
                 {' '}
                 {results.length}
@@ -318,15 +318,15 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
               {results.map(r => (
                 <div
                   key={r.docId}
-                  className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-2 py-1.5"
+                  className="flex items-center gap-2 rounded-md border border-border bg-muted px-2 py-1.5"
                 >
-                  <span className="min-w-0 flex-1 truncate text-sm text-slate-300">{r.name}</span>
-                  {r.vdir && <span className="truncate text-xs text-slate-500">{r.vdir}</span>}
-                  {r.skipped && <span className="text-xs text-amber-400">跳过</span>}
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{r.name}</span>
+                  {r.vdir && <span className="truncate text-xs text-muted-foreground">{r.vdir}</span>}
+                  {r.skipped && <span className="text-xs text-amber-700 dark:text-amber-400">跳过</span>}
                   <button
                     type="button"
                     onClick={() => openDoc(r.docId)}
-                    className="rounded px-2 py-0.5 text-xs text-sky-300 hover:bg-slate-800"
+                    className="rounded px-2 py-0.5 text-xs text-sky-700 hover:bg-accent dark:text-sky-300"
                   >
                     打开
                   </button>
@@ -336,7 +336,7 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-slate-800 p-3">
+        <div className="flex items-center justify-end gap-2 border-t border-border p-3">
           {results.length > 0 && (
             <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void onBatchCommit()}>
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}

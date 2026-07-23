@@ -23,10 +23,10 @@ export function CopilotRuntimeReady({ children }: CopilotRuntimeReadyProps) {
 
   if (status === CopilotKitCoreRuntimeConnectionStatus.Error) {
     return (
-      <p className="rounded-lg border border-red-800/60 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+      <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
         无法连接 Copilot Runtime（请确认 server 已启动且
         {' '}
-        <code className="rounded bg-slate-800 px-1">/api/copilotkit</code>
+        <code className="rounded bg-muted px-1">/api/copilotkit</code>
         {' '}
         可访问）。
       </p>
@@ -34,7 +34,7 @@ export function CopilotRuntimeReady({ children }: CopilotRuntimeReadyProps) {
   }
 
   return (
-    <p className="rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-400">
+    <p className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
       正在连接 Agent 运行时…
     </p>
   )

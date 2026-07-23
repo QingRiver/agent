@@ -2,6 +2,7 @@ import { RequireAuth } from '@components/auth/RequireAuth'
 import { UserAvatarMenu } from '@components/auth/UserAvatarMenu'
 import { ConversationSync } from '@components/conversation/ConversationSync'
 import { CopilotKitAppProvider } from '@components/copilot/CopilotKitAppProvider'
+import { ThemeSync } from '@components/theme/ThemeSync'
 import { AuthProvider } from '@contexts/AuthContext'
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 
@@ -12,6 +13,7 @@ export const Route = createRootRoute({
 function RootLayout() {
   return (
     <AuthProvider>
+      <ThemeSync />
       <CopilotKitAppProvider>
         <ConversationSync />
         <div className="min-h-screen bg-background text-foreground">

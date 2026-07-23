@@ -109,19 +109,19 @@ export function DiffView({ originalText, newText }: DiffViewProps) {
   )
 
   return (
-    <div className="space-y-0.5 rounded-lg border border-slate-800 bg-[#0b1220] p-2 font-mono text-sm leading-relaxed">
+    <div className="space-y-0.5 rounded-lg border border-border bg-card p-2 font-mono text-sm leading-relaxed">
       {originalText === '' && newText === '' && (
-        <div className="px-2 py-1 text-slate-600">
+        <div className="px-2 py-1 text-muted-foreground">
           （空内容）
         </div>
       )}
       {segments.map(({ id, seg }) => {
         if (seg.type === 'equal')
-          return <LineBlock key={id} text={seg.text} className="text-slate-500" />
+          return <LineBlock key={id} text={seg.text} className="text-muted-foreground" />
         if (seg.type === 'add')
-          return <LineBlock key={id} text={seg.text} className="bg-emerald-500/20 text-emerald-200" />
+          return <LineBlock key={id} text={seg.text} className="bg-emerald-500/20 text-emerald-800 dark:text-emerald-200" />
         if (seg.type === 'delete')
-          return <LineBlock key={id} text={seg.text} className="bg-red-500/20 text-red-200 line-through" />
+          return <LineBlock key={id} text={seg.text} className="bg-red-500/20 text-red-800 line-through dark:text-red-200" />
         // modify:按相似度决定 inline 词高亮 vs 整行染色
         const wd = wordDiff(seg.removed, seg.added).map(([op, text], j) => ({
           id: `${id}-w${j}-${op}`,
@@ -134,8 +134,8 @@ export function DiffView({ originalText, newText }: DiffViewProps) {
           // 整行重写:红底旧行 + 绿底新行
           return (
             <div key={id}>
-              <LineBlock text={seg.removed} className="bg-red-500/20 text-red-200 line-through" />
-              <LineBlock text={seg.added} className="bg-emerald-500/20 text-emerald-200" />
+              <LineBlock text={seg.removed} className="bg-red-500/20 text-red-800 line-through dark:text-red-200" />
+              <LineBlock text={seg.added} className="bg-emerald-500/20 text-emerald-800 dark:text-emerald-200" />
             </div>
           )
         }
@@ -147,10 +147,10 @@ export function DiffView({ originalText, newText }: DiffViewProps) {
                 key={partId}
                 className={
                   op === -1
-                    ? 'rounded bg-red-500/30 text-red-200 line-through'
+                    ? 'rounded bg-red-500/30 text-red-800 line-through dark:text-red-200'
                     : op === 1
-                      ? 'rounded bg-emerald-500/30 text-emerald-200'
-                      : 'text-slate-300'
+                      ? 'rounded bg-emerald-500/30 text-emerald-800 dark:text-emerald-200'
+                      : 'text-foreground'
                 }
               >
                 {text}
