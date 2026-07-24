@@ -4,12 +4,12 @@ import { EventType } from '@ag-ui/core'
 import { HumanMessage } from '@langchain/core/messages'
 import { Command, MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it } from 'vitest'
-import { hitlGraph } from './hitlGraph'
-import { aguiRunContext, aguiTransformerFactory } from './stream/index'
-import { getAIMessageContent } from './utils/index'
+import { aguiRunContext, aguiTransformerFactory } from '../stream/index'
+import { getAIMessageContent } from '../utils/index'
+import { devGraph } from './dev'
 
-describe('hitlGraph + AguiTransformer', () => {
-  const app = hitlGraph.compile({
+describe('devGraph hitlDemo + AguiTransformer', () => {
+  const app = devGraph.compile({
     checkpointer: new MemorySaver(),
     transformers: [aguiTransformerFactory],
   })
@@ -42,12 +42,19 @@ describe('hitlGraph + AguiTransformer', () => {
     }
   }
 
-  it('串联 input → select → multiSelect → approval 后完成流程', async () => {
-    const threadId = `hitl-${randomUUID()}`
+  it('澄清选 hitlDemo 后串联 input → select → multiSelect → approval', async () => {
+    const threadId = `dev-hitl-${randomUUID()}`
     const userInput = '向账户 0x123 转账 100 ETH'
 
-    const step1 = await streamUntilInterrupt(
+    const clarify = await streamUntilInterrupt(
       { input: userInput, messages: [new HumanMessage(userInput)] },
+      threadId,
+      'r0',
+    )
+    expect(clarify.onInterrupt?.value).toMatchObject({ type: 'select' })
+
+    const step1 = await streamUntilInterrupt(
+      new Command({ resume: { value: 'hitlDemo' } }),
       threadId,
       'r1',
     )
@@ -113,14 +120,15 @@ describe('hitlGraph + AguiTransformer', () => {
   }, 60_000)
 
   it('approval 拒绝时提前结束', async () => {
-    const threadId = `hitl-reject-${randomUUID()}`
+    const threadId = `dev-hitl-reject-${randomUUID()}`
     const userInput = '删除生产数据'
 
     await streamUntilInterrupt(
       { input: userInput, messages: [new HumanMessage(userInput)] },
       threadId,
-      'r1',
+      'r0',
     )
+    await streamUntilInterrupt(new Command({ resume: { value: 'hitlDemo' } }), threadId, 'r1')
     await streamUntilInterrupt(new Command({ resume: { value: '误操作恢复' } }), threadId, 'r2')
     await streamUntilInterrupt(new Command({ resume: { value: 'low' } }), threadId, 'r3')
     await streamUntilInterrupt(new Command({ resume: { values: [] } }), threadId, 'r4')

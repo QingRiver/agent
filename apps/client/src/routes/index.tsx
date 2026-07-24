@@ -1,8 +1,8 @@
 import type { GraphsName } from '@apis/api-types'
 import { ConversationSidebar } from '@components/conversation/ConversationSidebar'
 import { ConversationChat } from '@components/copilot/ConversationChat'
-import { HitlInterruptUi } from '@components/hitl/HitlInterruptUi'
-import { useHitlHasPendingInterrupt } from '@components/hitl/useHitlHasPendingInterrupt'
+import { AgentInterruptUi } from '@components/hitl/AgentInterruptUi'
+import { useAgentHasPendingInterrupt } from '@components/hitl/useAgentHasPendingInterrupt'
 import { useConversations } from '@hooks/useConversations'
 import { ChatLayout } from '@layouts/ChatLayout'
 import { createFileRoute } from '@tanstack/react-router'
@@ -18,8 +18,7 @@ function ChatPanel({
   threadId: string
   graphsName: GraphsName
 }) {
-  const hitlPending = useHitlHasPendingInterrupt()
-  const hasPendingInterrupt = graphsName === 'hitl' && hitlPending
+  const hasPendingInterrupt = useAgentHasPendingInterrupt(graphsName)
 
   return (
     <div className="flex h-full min-h-0 flex-col rounded-2xl border border-border bg-muted p-4">
@@ -32,9 +31,7 @@ function ChatPanel({
           threadId={threadId}
           blockInput={hasPendingInterrupt}
         >
-          {graphsName === 'hitl' && (
-            <HitlInterruptUi threadId={threadId} />
-          )}
+          <AgentInterruptUi agentId={graphsName} threadId={threadId} />
         </ConversationChat>
       </div>
     </div>

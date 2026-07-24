@@ -1,12 +1,12 @@
 import type { TextMessageContentEvent } from '@ag-ui/core'
-import type { AguiMappedEvent } from './stream'
+import type { AguiMappedEvent } from '../stream'
 import { randomUUID } from 'node:crypto'
 import { EventType } from '@ag-ui/core'
 import { AIMessage, HumanMessage } from '@langchain/core/messages'
 import { MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it, vi } from 'vitest'
-import { kbGraph } from './kbGraph'
-import { aguiRunContext, aguiTransformerFactory } from './stream'
+import { aguiRunContext, aguiTransformerFactory } from '../stream'
+import { kbGraph } from './kb'
 
 const { mockInvoke, retrieveAndRerank } = vi.hoisted(() => ({
   mockInvoke: vi.fn(async () => new AIMessage({

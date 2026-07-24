@@ -115,8 +115,41 @@ function SelectCard({
   multiple: boolean
   onConfirm: (value: string | string[]) => void
 }) {
+  const customIndex = options.length
   const [cursor, setCursor] = useState(0)
   const [selected, setSelected] = useState<Set<number>>(() => new Set())
+  const [custom, setCustom] = useState('')
+
+  const customTrimmed = custom.trim()
+  const toggleIndex = (i: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(i))
+        next.delete(i)
+      else
+        next.add(i)
+      return next
+    })
+  }
+
+  const confirmMulti = () => {
+    const values = Array.from(selected)
+      .filter(i => i < options.length)
+      .sort((a, b) => a - b)
+      .map(i => options[i]!.value)
+    if (selected.has(customIndex) && customTrimmed)
+      values.push(customTrimmed)
+    if (values.length === 0)
+      return
+    onConfirm(values)
+  }
+
+  const customIsCursor = cursor === customIndex
+  const customIsSelected = selected.has(customIndex)
+  const customPrefix = multiple
+    ? (customIsSelected ? '■' : '□')
+    : customIsCursor ? '●' : '○'
+
   return (
     <div className="space-y-2">
       <h3 className="font-semibold text-cyan-700 dark:text-cyan-300">
@@ -133,19 +166,10 @@ function SelectCard({
               key={opt.value}
               className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm ${isCursor ? 'bg-accent text-accent-foreground' : 'text-foreground'}`}
               onClick={() => {
-                if (multiple) {
-                  setSelected((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(i))
-                      next.delete(i)
-                    else
-                      next.add(i)
-                    return next
-                  })
-                }
-                else {
+                if (multiple)
+                  toggleIndex(i)
+                else
                   onConfirm(opt.value)
-                }
               }}
               onMouseEnter={() => setCursor(i)}
             >
@@ -160,12 +184,65 @@ function SelectCard({
             </button>
           )
         })}
+        <div
+          className={`flex w-full items-center gap-2 rounded px-2 py-1 text-sm ${customIsCursor ? 'bg-accent text-accent-foreground' : 'text-foreground'}`}
+          onMouseEnter={() => setCursor(customIndex)}
+        >
+          {multiple
+            ? (
+                <button
+                  type="button"
+                  className="shrink-0"
+                  aria-label="选中自定义输入"
+                  onClick={() => toggleIndex(customIndex)}
+                >
+                  <span aria-hidden>{customPrefix}</span>
+                </button>
+              )
+            : (
+                <span aria-hidden className="shrink-0">{customPrefix}</span>
+              )}
+          <input
+            type="text"
+            className="min-w-0 flex-1 rounded border border-border bg-card px-2 py-0.5 text-sm text-foreground outline-none focus:border-cyan-500"
+            placeholder="自定义输入…"
+            value={custom}
+            onChange={(e) => {
+              const next = e.target.value
+              setCustom(next)
+              if (multiple && next.trim()) {
+                setSelected((prev) => {
+                  if (prev.has(customIndex))
+                    return prev
+                  const n = new Set(prev)
+                  n.add(customIndex)
+                  return n
+                })
+              }
+            }}
+            onFocus={() => setCursor(customIndex)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter')
+                return
+              e.preventDefault()
+              if (!customTrimmed)
+                return
+              if (multiple)
+                confirmMulti()
+              else
+                onConfirm(customTrimmed)
+            }}
+          />
+        </div>
       </div>
       {multiple && (
         <button
           type="button"
-          disabled={selected.size === 0}
-          onClick={() => onConfirm(Array.from(selected).sort().map(i => options[i]!.value))}
+          disabled={
+            ![...selected].some(i => i < options.length)
+            && !(selected.has(customIndex) && customTrimmed)
+          }
+          onClick={confirmMulti}
           className="rounded-lg bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500 disabled:opacity-40"
         >
           确认选择

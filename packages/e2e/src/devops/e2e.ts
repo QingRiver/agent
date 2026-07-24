@@ -54,7 +54,7 @@ export function e2eUi(): void {
 /** hitl 图 vitest（packages/graph，不需 server） */
 export function e2eHitl(): void {
   console.log('[devops] e2e hitl graph (vitest)')
-  runInRepo('pnpm', ['exec', 'vitest', 'run', 'packages/graph/src/hitlGraph.test.ts'])
+  runInRepo('pnpm', ['exec', 'vitest', 'run', 'packages/graph/src/graphs/dev.test.ts'])
 }
 
 /** hitl agent SSE flow（需 pnpm dev + e2e auth） */

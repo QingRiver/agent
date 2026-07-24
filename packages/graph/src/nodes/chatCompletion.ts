@@ -1,27 +1,37 @@
+/**
+ * 直连 Chat Completions（非 LangChain）通用内核。
+ * - silent：整段返回，不进 AG-UI（分类 / hunk 摘要）
+ * - streamReasoning：流式；reasoning_* → AG-UI；content 只累积，不发 TEXT_MESSAGE_*
+ */
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
 import { EventType } from '@ag-ui/core'
 import { AGUI_WRITER_EVENT } from '../stream/aguiTransformer'
 
-/**
- * Document 改稿专用：直连流式 Completions。
- * - reasoning_content → AG-UI REASONING_MESSAGE_*（聊天里可展示思考）
- * - content 只累积返回，**不**发 TEXT_MESSAGE_*（避免全文刷屏）
- */
-export async function streamDocumentCompletion(
-  config: LangGraphRunnableConfig,
-  params: {
-    system: string
-    user: string
-    temperature?: number
-  },
-): Promise<string> {
+export type ChatCompletionMode = 'silent' | 'streamReasoning'
+
+function resolveOpenAiEnv(): { apiKey: string, base: string, model: string } {
   const apiKey = process.env.OPENAI_API_KEY ?? ''
   const base = (process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, '')
   const model = process.env.OPENAI_MODEL ?? ''
   if (!apiKey || !model)
     throw new Error('OPENAI_API_KEY / OPENAI_MODEL 未配置')
+  return { apiKey, base, model }
+}
+
+export async function runChatCompletion(
+  config: LangGraphRunnableConfig | undefined,
+  params: {
+    system: string
+    user: string
+    temperature?: number
+    mode: ChatCompletionMode
+  },
+): Promise<string> {
+  const { apiKey, base, model } = resolveOpenAiEnv()
+  const temperature = params.temperature ?? 0.7
+  const stream = params.mode === 'streamReasoning'
 
   const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
@@ -31,22 +41,31 @@ export async function streamDocumentCompletion(
     },
     body: JSON.stringify({
       model,
-      temperature: params.temperature ?? 0.7,
-      stream: true,
+      temperature,
+      stream,
       messages: [
         { role: 'system', content: params.system },
         { role: 'user', content: params.user },
       ],
     }),
   })
+
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new Error(`streamDocumentCompletion ${res.status}: ${body.slice(0, 200)}`)
+    throw new Error(`runChatCompletion(${params.mode}) ${res.status}: ${body.slice(0, 200)}`)
   }
-  if (!res.body)
-    throw new Error('streamDocumentCompletion: 无响应流')
 
-  const writer = config.writer
+  if (params.mode === 'silent') {
+    const data = await res.json() as {
+      choices?: Array<{ message?: { content?: string | null } }>
+    }
+    return data.choices?.[0]?.message?.content?.trim() ?? ''
+  }
+
+  if (!res.body)
+    throw new Error('runChatCompletion(streamReasoning): 无响应流')
+
+  const writer = config?.writer
   const emit = (payload: unknown) => {
     if (writer)
       writer({ name: AGUI_WRITER_EVENT, payload })

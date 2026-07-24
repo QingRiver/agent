@@ -27,28 +27,15 @@ const GRAPH_AGENT_DEFINITIONS = {
       defaultMessage: '你好，请简要介绍这个仓库的结构。',
     })),
   },
-  simpleToolCall: {
-    description: 'simpleToolCallGraph）',
-    resolveStreamInput: input => buildMessagesInput(extractLastUserMessage(input, {
-      defaultMessage: '取消订单 10086',
-    })),
-  },
-  weather: {
-    description: 'Weather ReAct）',
-    resolveStreamInput: input => buildMessagesInput(extractLastUserMessage(input, {
-      stateKeys: ['message'],
-      defaultMessage: '北京今天天气怎么样？',
-    })),
-  },
-  hitl: {
-    description: 'LangGraph HITL 中断投影）',
+  dev: {
+    description: '开发演示：澄清分流 → 天气 / 订单 ReAct / HITL approval',
     resolveStreamInput: (input) => {
       const resume = resolveResumeFromRunAgentInput(input)
       if (resume != null)
         return new Command({ resume })
       const userText = extractLastUserMessage(input, {
-        stateKeys: ['input'],
-        defaultMessage: '向账户 0x123... 转账 100 ETH',
+        stateKeys: ['input', 'message'],
+        defaultMessage: '开始演示',
       })
       return {
         input: userText,

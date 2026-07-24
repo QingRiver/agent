@@ -101,17 +101,59 @@ function SelectInteraction({
   multiple: boolean
   onConfirm: (value: string | string[]) => void
 }) {
+  const customIndex = options.length
+  const itemCount = options.length + 1
   const [cursor, setCursor] = useState(0)
   const [selected, setSelected] = useState<Set<number>>(() => new Set())
+  const [custom, setCustom] = useState('')
+  const customMode = cursor === customIndex
 
   useInput((input, key) => {
     if (key.upArrow) {
-      setCursor(prev => (prev > 0 ? prev - 1 : options.length - 1))
+      setCursor(prev => (prev > 0 ? prev - 1 : itemCount - 1))
+      return
     }
-    else if (key.downArrow) {
-      setCursor(prev => (prev < options.length - 1 ? prev + 1 : 0))
+    if (key.downArrow) {
+      setCursor(prev => (prev < itemCount - 1 ? prev + 1 : 0))
+      return
     }
-    else if (input === ' ') {
+
+    if (customMode) {
+      if (key.return) {
+        const trimmed = custom.trim()
+        if (!trimmed)
+          return
+        if (multiple) {
+          const values = Array.from(selected)
+            .filter(i => i < options.length)
+            .sort((a, b) => a - b)
+            .map(i => options[i]!.value)
+          values.push(trimmed)
+          onConfirm(values)
+        }
+        else {
+          onConfirm(trimmed)
+        }
+        return
+      }
+      if (key.backspace || key.delete) {
+        setCustom(prev => prev.slice(0, -1))
+        return
+      }
+      if (input && !key.ctrl && !key.meta) {
+        setCustom(prev => prev + input)
+        setSelected((prev) => {
+          if (prev.has(customIndex))
+            return prev
+          const next = new Set(prev)
+          next.add(customIndex)
+          return next
+        })
+      }
+      return
+    }
+
+    if (input === ' ') {
       if (multiple) {
         setSelected((prev) => {
           const next = new Set(prev)
@@ -122,10 +164,18 @@ function SelectInteraction({
           return next
         })
       }
+      return
     }
-    else if (key.return) {
+
+    if (key.return) {
       if (multiple) {
-        const values = Array.from(selected).sort().map(i => options[i]!.value)
+        const values = Array.from(selected)
+          .filter(i => i < options.length)
+          .sort((a, b) => a - b)
+          .map(i => options[i]!.value)
+        const trimmed = custom.trim()
+        if (selected.has(customIndex) && trimmed)
+          values.push(trimmed)
         onConfirm(values.length > 0 ? values : [options[cursor]!.value])
       }
       else {
@@ -162,9 +212,22 @@ function SelectInteraction({
           </Box>
         )
       })}
+      <Box>
+        <Text {...(customMode ? { color: 'cyan' as const } : {})}>
+          {`${customMode ? '▸' : ' '} ${multiple ? (selected.has(customIndex) ? '■' : '□') : (customMode ? '★' : '☆')} `}
+        </Text>
+        <Text dimColor={!custom}>
+          {custom || '自定义输入…'}
+        </Text>
+      </Box>
       {multiple && (
         <Text dimColor>
-          空格选择 · 回车确认
+          空格选择 · 末行可打字自定义 · 回车确认
+        </Text>
+      )}
+      {!multiple && customMode && (
+        <Text dimColor>
+          输入自定义内容后回车确认
         </Text>
       )}
     </Box>

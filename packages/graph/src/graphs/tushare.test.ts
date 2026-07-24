@@ -5,7 +5,7 @@ import { AIMessage } from '@langchain/core/messages'
 import { Annotation, Command, MemorySaver, StateGraph } from '@langchain/langgraph'
 import { ToolNode } from '@langchain/langgraph/prebuilt'
 import { describe, expect, it } from 'vitest'
-import { buildTushareToolset, tushareGraph } from './tushareGraph'
+import { buildTushareToolset, tushareGraph } from './tushare'
 
 /** mock Tushare MCP：stock_basic 返回两只候选，触发 resolve_stock 的 select 中断 */
 function mockTushareMcp(): TushareMcp {
@@ -28,7 +28,7 @@ describe('tushareGraph', () => {
     expect(() => tushareGraph.compile({ checkpointer: new MemorySaver() })).not.toThrow()
   })
 
-  it('resolve_stock 多匹配触发 select 中断，resume 后返回选定 ts_code（ask_human round-trip）', async () => {
+  it('resolve_stock 多匹配触发 select 中断，resume 后返回选定 ts_code（hitlSelect round-trip）', async () => {
     const toolset = await buildTushareToolset(mockTushareMcp())
     const resolveStock = toolset.tools.find(t => t.name === 'resolve_stock')!
 

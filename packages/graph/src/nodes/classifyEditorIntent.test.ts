@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { heuristicEditorIntent } from './editorWriteEdit'
+import { heuristicEditorIntent } from './classifyEditorIntent'
 
 describe('heuristicEditorIntent', () => {
   it('detects write verbs', () => {

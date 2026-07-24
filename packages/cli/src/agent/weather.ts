@@ -76,7 +76,7 @@ const weatherTool: ToolDef = {
 const WEATHER_SYSTEM_PROMPT = [
   '你是天气查询助手。',
   '当用户没有提供城市名时,调用 ask_input 工具询问用户,不要臆测。',
-  '若需要附加展示项,调用 ask_multi_choice 让用户选择(code/english/time)。',
+  '若需要附加展示项,调用 ask_multi_choice 让用户选择(code/english/time)；用户也可在末尾自定义补充项。',
   '只有当用户明确提供了城市名时才调用 get_weather 工具。',
   '工具调用后,基于查询结果用简洁友好的语言回复用户。',
 ].join('\n')

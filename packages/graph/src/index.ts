@@ -1,44 +1,25 @@
 import { z } from 'zod'
-import { claudeAgentGraph } from './claudeAgentGraph'
-import { editorChatGraph } from './editorChatGraph'
-import { hitlGraph } from './hitlGraph'
-import { kbGraph } from './kbGraph'
-import { simpleToolCallGraph } from './simpleToolCallGraph'
-import { tushareGraph } from './tushareGraph'
-import { weatherGraph } from './weatherGraph'
-import { writerGraph } from './writerGraph'
+import { claudeAgentGraph } from './graphs/claudeAgent'
+import { devGraph } from './graphs/dev'
+import { editorChatGraph } from './graphs/editorChat'
+import { kbGraph } from './graphs/kb'
+import { tushareGraph } from './graphs/tushare'
+import { writerGraph } from './graphs/writer'
 
-export { editorChatGraph } from './editorChatGraph'
-export { type EditorFocus, runWriteEdit, type WriteEditInput } from './editorWriteEdit'
-export { ASK_SYSTEM_PROMPT, ASK_TOOLS } from './hitl/ask-tools'
+export { claudeAgentGraph } from './graphs/claudeAgent'
+export { devGraph } from './graphs/dev'
+export { editorChatGraph } from './graphs/editorChat'
 export {
   KB_CITATIONS_EVENT,
   kbGraph,
-} from './kbGraph'
+} from './graphs/kb'
+export { tushareGraph } from './graphs/tushare'
 export {
-  FETCH_USER_ORDER_TOOL_NAME,
-  ORDER_TOOL_PROGRESS_EVENT,
-} from './simpleToolCallGraph'
-
-export const Graphs = {
-  claudeAgent: claudeAgentGraph,
-  simpleToolCall: simpleToolCallGraph,
-  weather: weatherGraph,
-  hitl: hitlGraph,
-  kb: kbGraph,
-  tushare: tushareGraph,
-  writer: writerGraph,
-  editorChat: editorChatGraph,
-} as const
-
-export type GraphsName = keyof typeof Graphs
-
-const graphsNameValues = Object.keys(Graphs) as GraphsName[]
-
-export const GraphsNameSchema = z.enum(
-  graphsNameValues as [GraphsName, ...GraphsName[]],
-)
-
+  WRITER_CHANGE_SUMMARIES_EVENT,
+  type WriterChangeSummary,
+  writerGraph,
+} from './graphs/writer'
+export { type EditorFocus, runWriteEdit, type WriteEditInput } from './nodes/writeEdit'
 export {
   type AguiExtensions,
   type AguiFinalizeContext,
@@ -56,8 +37,25 @@ export {
   mapToolsEventDataToAgUi,
   resolveResumeFromRunAgentInput,
 } from './stream/index'
+export { ASK_SYSTEM_PROMPT, ASK_TOOLS } from './tools/ask-tools'
 export {
-  WRITER_CHANGE_SUMMARIES_EVENT,
-  type WriterChangeSummary,
-  writerGraph,
-} from './writerGraph'
+  FETCH_USER_ORDER_TOOL_NAME,
+  ORDER_TOOL_PROGRESS_EVENT,
+} from './tools/order'
+
+export const Graphs = {
+  claudeAgent: claudeAgentGraph,
+  dev: devGraph,
+  kb: kbGraph,
+  tushare: tushareGraph,
+  writer: writerGraph,
+  editorChat: editorChatGraph,
+} as const
+
+export type GraphsName = keyof typeof Graphs
+
+const graphsNameValues = Object.keys(Graphs) as GraphsName[]
+
+export const GraphsNameSchema = z.enum(
+  graphsNameValues as [GraphsName, ...GraphsName[]],
+)

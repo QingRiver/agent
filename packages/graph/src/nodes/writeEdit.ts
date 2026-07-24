@@ -10,11 +10,11 @@ import {
   DOCUMENT_ASSISTANT_NOTE,
   DOCUMENT_WRITING_NOTE,
   SUMMARY_SYSTEM_PROMPT,
-} from './prompts/editorPrompts'
-import { writeAguiAssistantText } from './stream/writeAguiAssistantText'
-import { parseLlmJson } from './utils/parseLlmJson'
-import { silentChatCompletion } from './utils/silentChatCompletion'
-import { streamDocumentCompletion } from './utils/streamDocumentCompletion'
+} from '../prompts/editorPrompts'
+import { writeAguiAssistantText } from '../stream/writeAguiAssistantText'
+import { messageText } from '../utils/messageText'
+import { parseLlmJson } from '../utils/parseLlmJson'
+import { runChatCompletion } from './chatCompletion'
 
 export interface EditorFocus {
   text: string
@@ -32,43 +32,16 @@ export interface WriteEditInput {
   humanContent?: string
 }
 
+export interface WriteEditNodeOptions {
+  /** 强制 editCase（editorChat Write 路径用 document） */
+  editCase?: EditorEditCase
+}
+
 /** ⌘K / document 改稿：LangChain 默认流式 → AG-UI 文本与 reasoning */
 const llm = new ChatOpenAI({
   model: process.env.OPENAI_MODEL ?? '',
   temperature: 0.7,
 })
-
-export function messageText(message: BaseMessage | undefined): string {
-  if (!message)
-    return ''
-  const { content } = message
-  if (typeof content === 'string')
-    return content
-  if (Array.isArray(content)) {
-    return content.map((part) => {
-      if (typeof part === 'string')
-        return part
-      if (part && typeof part === 'object' && 'text' in part) {
-        const text = (part as { text?: unknown }).text
-        return typeof text === 'string' ? text : ''
-      }
-      return ''
-    }).join('')
-  }
-  return ''
-}
-
-/** 明显的改稿意图（避免 reasoning 模型 content 为空时误判为 ask） */
-export function heuristicEditorIntent(text: string): 'ask' | 'write' | null {
-  const t = text.trim()
-  if (!t)
-    return null
-  if (/润色|改写|扩写|缩写|展开说明|展开一下|续写|纠错|改成|改为|生成修改|更正式|更口语|精简|压缩/.test(t))
-    return 'write'
-  if (/什么意思|为什么|优缺点|怎么看|解释一下|是什么|如何理解|有何建议/.test(t))
-    return 'ask'
-  return null
-}
 
 export async function summarizeHunks(original: string, polished: string): Promise<WriterChangeSummary[]> {
   const hunks = computeHunks(original, polished).filter(h => h.originalText || h.newText)
@@ -79,10 +52,11 @@ export async function summarizeHunks(original: string, polished: string): Promis
     originalText: h.originalText || '(纯插入)',
     newText: h.newText || '(纯删除)',
   }))
-  const raw = await silentChatCompletion({
+  const raw = await runChatCompletion(undefined, {
     system: SUMMARY_SYSTEM_PROMPT,
     user: JSON.stringify(payload, null, 2),
     temperature: 0,
+    mode: 'silent',
   })
   const parsed = parseLlmJson(raw, WriterHunkSummariesSchema)
   const summaries = parsed?.summaries ?? []
@@ -135,10 +109,11 @@ export async function runWriteEdit(
 
   // document：聊天先出「编写中…」；正文静默累积（不发 TEXT_MESSAGE）；reasoning 单独推 AG-UI
   writeAguiAssistantText(config, DOCUMENT_WRITING_NOTE)
-  const polished = await streamDocumentCompletion(config, {
+  const polished = await runChatCompletion(config, {
     system,
     user: humanContent,
     temperature: 0.7,
+    mode: 'streamReasoning',
   })
 
   const baseline = input.documentBaseline!.trim()
@@ -197,4 +172,49 @@ export function readFocuses(config: LangGraphRunnableConfig): EditorFocus[] {
 export function readOptionalString(config: LangGraphRunnableConfig, key: string): string {
   const v = config.configurable?.[key]
   return typeof v === 'string' ? v : ''
+}
+
+async function writeEditNode(
+  state: { messages: BaseMessage[] },
+  config: LangGraphRunnableConfig,
+  options?: WriteEditNodeOptions,
+): Promise<{ messages: BaseMessage[] }> {
+  const editCase = options?.editCase ?? resolveEditCase(config)
+  const latestUser = [...state.messages].reverse().find(m => m.getType() === 'human')
+  const humanContent = messageText(latestUser)
+  const focuses = readFocuses(config)
+  const instructionFromConfig = readOptionalString(config, 'polishInstruction')
+  const instruction = instructionFromConfig || (editCase === 'document' ? humanContent : '')
+  const baselineFromConfig = readOptionalString(config, 'documentBaseline')
+  const baseline = baselineFromConfig
+    || (editCase === 'document' && !options?.editCase ? humanContent : '')
+
+  const input: WriteEditInput = { editCase }
+  if (editCase === 'document') {
+    if (baselineFromConfig || baseline)
+      input.documentBaseline = baselineFromConfig || baseline
+    if (instruction)
+      input.polishInstruction = instruction
+  }
+  else {
+    if (baselineFromConfig)
+      input.documentBaseline = baselineFromConfig
+    if (instructionFromConfig)
+      input.polishInstruction = instructionFromConfig
+    if (humanContent)
+      input.humanContent = humanContent
+  }
+  if (focuses.length)
+    input.focuses = focuses
+
+  const { messages } = await runWriteEdit(input, config)
+  return { messages }
+}
+
+/** writer / editorChat 共用的 writeEdit 节点工厂 */
+export function makeWriteEditNode(opts?: WriteEditNodeOptions) {
+  return async (
+    state: { messages: BaseMessage[] },
+    config: LangGraphRunnableConfig,
+  ): Promise<{ messages: BaseMessage[] }> => writeEditNode(state, config, opts)
 }

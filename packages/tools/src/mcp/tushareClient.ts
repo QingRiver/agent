@@ -1,6 +1,5 @@
 import process from 'node:process'
 import { Client } from '@modelcontextprotocol/sdk/client'
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp'
 
 const TOKEN_HINT = '请在环境变量设置 TUSHARE_TOKEN（tushare.pro 用户中心获取）'
@@ -41,28 +40,20 @@ function mcpAuthHeaders(token: string): HeadersInit {
   }
 }
 
-function createTransports(url: URL, token: string): {
-  streamable: StreamableHTTPClientTransport
-  sse: SSEClientTransport
-} {
-  const headers = mcpAuthHeaders(token)
-  return {
-    streamable: new StreamableHTTPClientTransport(url, {
-      requestInit: { headers },
-    }),
-    sse: new SSEClientTransport(url, {
-      requestInit: { headers },
-      eventSourceInit: {
-        fetch: (input, init) => fetch(input, {
-          ...init,
-          headers: {
-            ...(init?.headers as Record<string, string> | undefined),
-            ...(headers as Record<string, string>),
-          },
-        }),
-      },
-    }),
-  }
+/**
+ * Tushare 对 GET 会返回长连接 SSE（仅 ping）。SDK 在 initialized 后会开这条 GET，
+ * Node fetch/undici 下会占住连接池，导致后续 tools/list、callTool 的 POST 永久 hang。
+ * 按 Streamable HTTP 规范对 GET 回 405，SDK 会跳过 GET SSE，仅走 POST（Tushare 实际也只靠 POST 回包）。
+ */
+function postOnlyFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const method = (
+    init?.method
+    ?? (input instanceof Request ? input.method : undefined)
+    ?? 'GET'
+  ).toUpperCase()
+  if (method === 'GET')
+    return Promise.resolve(new Response(null, { status: 405, statusText: 'Method Not Allowed' }))
+  return fetch(input, init)
 }
 
 function formatCallToolResult(result: {
@@ -91,11 +82,8 @@ function formatCallToolResult(result: {
   return body || '(无返回内容)'
 }
 
-/**
- * MCP SDK 的 connect/listTools 的 fetch 无内置超时，tushare 服务偶发不响应时会永久 hang。
- * 此处统一加超时：超时即 reject（transport.close() 会 abort 底层 fetch），让上层 toolsetPromise 重置、可重试。
- */
-const MCP_OP_TIMEOUT_MS = 15_000
+/** MCP SDK 的 fetch 无内置超时；超时即 reject，close() 会 abort 底层请求以便重试。 */
+const MCP_OP_TIMEOUT_MS = 25_000
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -109,45 +97,25 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 async function connectClient(
   url: URL,
   token: string,
-): Promise<{ client: Client, transport: { close: () => Promise<void> } }> {
+): Promise<{ client: Client, transport: StreamableHTTPClientTransport }> {
   const client = new Client({ name: 'agent-mcp', version: '0.0.0' })
-  const { streamable, sse } = createTransports(url, token)
+  const transport = new StreamableHTTPClientTransport(url, {
+    requestInit: { headers: mcpAuthHeaders(token) },
+    fetch: postOnlyFetch,
+  })
 
   try {
     await withTimeout(
-      client.connect(streamable as Parameters<Client['connect']>[0]),
+      client.connect(transport as Parameters<Client['connect']>[0]),
       MCP_OP_TIMEOUT_MS,
       'Tushare MCP Streamable HTTP 连接',
     )
-    return { client, transport: streamable }
+    return { client, transport }
   }
-  catch (streamableError) {
-    // close 会触发 transport 内部 abortController，中断仍 hang 的 fetch
-    try {
-      await streamable.close()
-    }
-    catch {
-      // ignore close errors while falling back
-    }
-
-    try {
-      await withTimeout(
-        client.connect(sse as Parameters<Client['connect']>[0]),
-        MCP_OP_TIMEOUT_MS,
-        'Tushare MCP SSE 连接',
-      )
-      return { client, transport: sse }
-    }
-    catch (sseError) {
-      await sse.close().catch(() => undefined)
-      const streamableMsg = streamableError instanceof Error
-        ? streamableError.message
-        : String(streamableError)
-      const sseMsg = sseError instanceof Error ? sseError.message : String(sseError)
-      throw new Error(
-        `连接 Tushare MCP 失败（Streamable HTTP: ${streamableMsg}; SSE: ${sseMsg}）`,
-      )
-    }
+  catch (err) {
+    await transport.close().catch(() => undefined)
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`连接 Tushare MCP 失败（Streamable HTTP: ${msg}）`)
   }
 }
 
