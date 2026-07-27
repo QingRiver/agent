@@ -3,7 +3,7 @@ import type { LangGraphRunnableConfig } from '@langchain/langgraph'
 import type { EditorChatStateType } from '../state/editorChatState'
 import { EditorChatIntentSchema } from '@agent/protocol'
 import { CLASSIFY_INTENT_SYSTEM_PROMPT } from '../prompts/editorPrompts'
-import { messageText } from '../utils/messageText'
+import { lastHumanMessageText } from '../utils/messageText'
 import { parseLlmJson } from '../utils/parseLlmJson'
 import { runChatCompletion } from './chatCompletion'
 
@@ -33,9 +33,8 @@ export async function classifyEditorIntent(
   if (forced)
     return { intent: forced }
 
-  const latestUser = [...state.messages].reverse().find(m => m.getType() === 'human')
-  const text = messageText(latestUser)
-  if (!text.trim())
+  const text = lastHumanMessageText(state.messages)
+  if (!text)
     return { intent: 'ask' }
 
   const byHeuristic = heuristicEditorIntent(text)

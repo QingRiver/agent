@@ -4,20 +4,16 @@ import type {
   StateSnapshotEvent,
 } from '@ag-ui/core'
 import type {
-  InterruptPayload,
   MessagesEventData,
   ProtocolEvent,
   StreamChannel,
   StreamTransformer,
   ToolsEventData,
 } from '@langchain/langgraph'
-import type { BuildInterruptFinalizeOptions } from './mapInterruptToAgUi'
 import type { AguiReasoningEvent, AguiTextMessageEvent } from './mapMessagesToAgUi'
 import type { AguiToolEvent } from './mapToolsToAgUi'
 import { EventType } from '@ag-ui/core'
 import { StreamChannel as StreamChannelImpl } from '@langchain/langgraph'
-import { aguiRunContext } from './aguiRunContext'
-import { buildInterruptFinalizeEvents } from './mapInterruptToAgUi'
 import { mapMessagesEventDataToAgUi } from './mapMessagesToAgUi'
 import { mapToolsEventDataToAgUi } from './mapToolsToAgUi'
 
@@ -32,20 +28,6 @@ export type AguiMappedEvent
     | StateSnapshotEvent
     | RunFinishedEvent
 
-interface TaskEventData {
-  interrupts?: Array<{
-    id?: string
-    interruptId?: string
-    value?: unknown
-    payload?: unknown
-  }>
-}
-
-export interface AguiFinalizeContext {
-  threadId: string
-  runId: string
-}
-
 export interface AguiExtensions {
   aguiEvents: StreamChannel<AguiMappedEvent>
   toolEvents: StreamChannel<AguiToolEvent>
@@ -53,6 +35,10 @@ export interface AguiExtensions {
   messageEvents: StreamChannel<AguiTextMessageEvent>
 }
 
+/**
+ * 只映射过程事件（tools / messages / custom）。
+ * interrupt / RUN_FINISHED 收尾由 server `streamGraphAguiEvents` 读 `stream.interrupted` 补发。
+ */
 export class AguiTransformer implements StreamTransformer<AguiExtensions> {
   #aguiEvents!: StreamChannel<AguiMappedEvent>
   #toolEvents!: StreamChannel<AguiToolEvent>
@@ -63,10 +49,6 @@ export class AguiTransformer implements StreamTransformer<AguiExtensions> {
     activeReasoningMessageId: null as string | null,
   }
 
-  #lastValues: Record<string, unknown> | undefined
-  readonly #interrupts = new Map<string, InterruptPayload>()
-  #emittedRunFinished = false
-
   init(): AguiExtensions {
     this.#aguiEvents = StreamChannelImpl.local<AguiMappedEvent>()
     this.#toolEvents = StreamChannelImpl.local<AguiToolEvent>()
@@ -74,9 +56,6 @@ export class AguiTransformer implements StreamTransformer<AguiExtensions> {
     this.#messageEvents = StreamChannelImpl.local<AguiTextMessageEvent>()
     this.#textMessageState.activeMessageId = null
     this.#textMessageState.activeReasoningMessageId = null
-    this.#lastValues = undefined
-    this.#interrupts.clear()
-    this.#emittedRunFinished = false
     return {
       aguiEvents: this.#aguiEvents,
       toolEvents: this.#toolEvents,
@@ -85,20 +64,7 @@ export class AguiTransformer implements StreamTransformer<AguiExtensions> {
     }
   }
 
-  get emittedRunFinished(): boolean {
-    return this.#emittedRunFinished
-  }
-
   process(event: ProtocolEvent): boolean {
-    if (event.method === 'values') {
-      const data = event.params.data
-      if (data != null && typeof data === 'object' && !Array.isArray(data))
-        this.#lastValues = data as Record<string, unknown>
-    }
-
-    if (event.method === 'tasks')
-      this.collectTaskInterrupts(event)
-
     if (event.method === 'tools') {
       for (const aguiEvent of mapToolsEventDataToAgUi(event.params.data as ToolsEventData)) {
         this.#toolEvents.push(aguiEvent)
@@ -125,44 +91,6 @@ export class AguiTransformer implements StreamTransformer<AguiExtensions> {
       this.pushCustomEvent(event)
 
     return true
-  }
-
-  finalize(): void {
-    const ctx = aguiRunContext.current
-    if (this.#interrupts.size === 0 || ctx == null)
-      return
-
-    const finalizeOpts: BuildInterruptFinalizeOptions = {
-      threadId: ctx.threadId,
-      runId: ctx.runId,
-      interrupts: [...this.#interrupts.values()],
-      emitLegacyCustom: true,
-      ...(this.#lastValues != null ? { snapshot: this.#lastValues } : {}),
-    }
-    const events = buildInterruptFinalizeEvents(finalizeOpts)
-
-    for (const ev of events) {
-      this.#aguiEvents.push(ev as AguiMappedEvent)
-      if (ev.type === EventType.RUN_FINISHED)
-        this.#emittedRunFinished = true
-    }
-
-    this.#interrupts.clear()
-  }
-
-  private collectTaskInterrupts(event: ProtocolEvent) {
-    const data = event.params.data as TaskEventData | undefined
-    const rawList = data?.interrupts
-    if (!rawList?.length)
-      return
-
-    for (const item of rawList) {
-      const interruptId = (item.interruptId ?? item.id)?.trim()
-      if (!interruptId)
-        continue
-      const payload = item.payload !== undefined ? item.payload : item.value
-      this.#interrupts.set(interruptId, { interruptId, payload })
-    }
   }
 
   private pushCustomEvent(event: ProtocolEvent) {

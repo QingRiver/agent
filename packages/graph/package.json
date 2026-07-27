@@ -7,7 +7,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "tc": "pnpm -w run tsc-go --noEmit"
+    "tc": "pnpm -w run tsc-go --noEmit",
+    "graphs:md": "tsx scripts/export-graphs-mermaid.ts"
   },
   "dependencies": {
     "@ag-ui/core": "catalog:",
@@ -20,12 +21,12 @@
     "@langchain/langgraph": "catalog:",
     "@langchain/openai": "catalog:",
     "diff-match-patch": "catalog:",
-    "radash": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@types/diff-match-patch": "catalog:",
     "@types/node": "catalog:",
-    "ts-pattern": "catalog:"
+    "ts-pattern": "catalog:",
+    "tsx": "catalog:"
   }
 }

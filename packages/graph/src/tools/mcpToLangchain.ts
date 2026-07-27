@@ -6,13 +6,8 @@
  * 与 cli 的 `mcpToolsToToolDefs`（effect ToolDef）对应，但产出 langchain 工具供 ToolNode 调度。
  */
 import type { McpTool, TushareMcp } from '@agent/tools'
+import { toolErrorMessage } from '@agent/tools'
 import { DynamicStructuredTool } from '@langchain/core/tools'
-
-function toolErrorMessage(err: unknown): string {
-  if (err instanceof Error)
-    return err.message
-  return String(err)
-}
 
 /** 单个 MCP 工具 → DynamicStructuredTool（错误消化为字符串，避免 ToolNode 抛出中断流） */
 export function mcpToolToLangchainTool(

@@ -17,7 +17,6 @@
     "@agent/tools": "workspace:*",
     "@inkjs/ui": "catalog:",
     "@modelcontextprotocol/sdk": "catalog:",
-    "chalk": "catalog:",
     "effect": "catalog:",
     "ink": "catalog:",
     "marked": "catalog:",

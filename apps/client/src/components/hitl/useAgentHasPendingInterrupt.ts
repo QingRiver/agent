@@ -8,6 +8,3 @@ export function useAgentHasPendingInterrupt(agentId: GraphsName): boolean {
   const { agent } = useAgent({ agentId })
   return threadState?.pendingInterrupt != null || agent.pendingInterrupts.length > 0
 }
-
-/** @deprecated 使用 useAgentHasPendingInterrupt */
-export const useHitlHasPendingInterrupt = useAgentHasPendingInterrupt

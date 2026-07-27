@@ -2,7 +2,7 @@ import type { ApprovalDecision } from '@agent/protocol'
 import type { BaseMessage } from '@langchain/core/messages'
 import { Annotation } from '@langchain/langgraph'
 
-export type DevIntent = 'weather' | 'simpleTool' | 'hitlDemo' | null
+export type DevIntent = 'weather' | 'simpleTool' | 'hitlDemo' | 'kb' | null
 
 /** hitlDemo 支路执行结果 */
 export type HitlDemoResult

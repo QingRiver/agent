@@ -15,14 +15,8 @@ function heartbeat(c: Context<AppEnv>) {
 export const defaultRoutes = new Hono<AppEnv>()
   .get('/', heartbeat)
   .get('/heartbeat', heartbeat)
-  .get('/:param', (c) => {
-    if (c.req.query('debug') === '1') {
-      // eslint-disable-next-line no-debugger
-      debugger
-    }
-    return c.json({
-      message: `RouterHander Path:${c.req.path}`,
-      timestamp: new Date().toISOString(),
-      params: c.req.param('param'),
-    })
-  })
+  .get('/:param', c => c.json({
+    message: `RouterHander Path:${c.req.path}`,
+    timestamp: new Date().toISOString(),
+    params: c.req.param('param'),
+  }))

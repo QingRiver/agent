@@ -22,9 +22,7 @@ export {
 export { type EditorFocus, runWriteEdit, type WriteEditInput } from './nodes/writeEdit'
 export {
   type AguiExtensions,
-  type AguiFinalizeContext,
   type AguiMappedEvent,
-  aguiRunContext,
   type AguiTextMessageEvent,
   type AguiToolEvent,
   AguiTransformer,
@@ -37,7 +35,8 @@ export {
   mapToolsEventDataToAgUi,
   resolveResumeFromRunAgentInput,
 } from './stream/index'
-export { ASK_SYSTEM_PROMPT, ASK_TOOLS } from './tools/ask-tools'
+export { ASK_TOOLS } from './tools/ask-tools'
+export { KB_SEARCH_TOOL_NAME, KB_TOOLS } from './tools/kb'
 export {
   FETCH_USER_ORDER_TOOL_NAME,
   ORDER_TOOL_PROGRESS_EVENT,

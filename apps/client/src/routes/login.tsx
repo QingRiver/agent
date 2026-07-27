@@ -39,7 +39,7 @@ function LoginPage() {
       <Card className="w-full">
         <CardHeader>
           <CardTitle>登录</CardTitle>
-          <CardDescription>登录后使用 SQLite 持久化检查点</CardDescription>
+          <CardDescription>登录后使用 Postgres 持久化检查点</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>

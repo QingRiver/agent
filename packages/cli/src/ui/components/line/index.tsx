@@ -1,19 +1,6 @@
 import { StatusMessage, TextInput } from '@inkjs/ui'
 import { Box, Text } from 'ink'
 
-export function IntroLine({ message }: { message: string }) {
-  return (
-    <Box>
-      <Text color="cyan">
-        {'◇  '}
-      </Text>
-      <Text bold>
-        {message}
-      </Text>
-    </Box>
-  )
-}
-
 export function UserMessage({ content }: { content: string }) {
   return (
     <Box>

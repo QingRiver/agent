@@ -40,7 +40,7 @@ function RegisterPage() {
       <Card className="w-full">
         <CardHeader>
           <CardTitle>注册</CardTitle>
-          <CardDescription>创建账号以启用 SQLite 检查点</CardDescription>
+          <CardDescription>创建账号以启用 Postgres 检查点</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>

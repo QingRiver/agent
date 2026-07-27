@@ -1,7 +1,6 @@
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
-import { ASK_TOOLS } from './ask-tools'
 
 export const FETCH_USER_ORDER_TOOL_NAME = 'fetch_user_order'
 
@@ -25,4 +24,4 @@ export const fetchUserOrderTool = tool(
   },
 )
 
-export const ORDER_TOOLS = [fetchUserOrderTool, ...ASK_TOOLS]
+export const ORDER_TOOLS = [fetchUserOrderTool]

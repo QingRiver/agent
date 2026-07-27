@@ -1,5 +1,4 @@
 import process from 'node:process'
-import chalk from 'chalk'
 import supportsHyperlinksLib from 'supports-hyperlinks'
 
 // OSC 8 超链接转义：\e]8;;URL\e\\TEXT\e]8;;\e\\
@@ -39,17 +38,4 @@ export function supportsHyperlinks(): boolean {
     return true
 
   return false
-}
-
-/**
- * 构造可点击超链接字符串。不支持 OSC8 时降级为裸 url。
- * 颜色用基础 ANSI 蓝（wrap-ansi 能跨行保留基础色；RGB 主题色不行，故不用主题色）。
- */
-export function createHyperlink(url: string, content?: string): string {
-  if (!supportsHyperlinks())
-    return url
-
-  const displayText = content ?? url
-  const coloredText = chalk.blue(displayText)
-  return `${OSC8_START}${url}${OSC8_END}${coloredText}${OSC8_START}${OSC8_END}`
 }

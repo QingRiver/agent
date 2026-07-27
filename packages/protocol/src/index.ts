@@ -107,11 +107,26 @@ export const PendingInterruptSchema = z.discriminatedUnion('type', [
 ])
 export type PendingInterrupt = z.infer<typeof PendingInterruptSchema>
 
+/**
+ * InterruptRequest 的 value 形态（无 `interruptId`）。
+ * - 用于 live event / CopilotKit 等场景：值里不带 interruptId，需要调用方补回。
+ */
+export const InterruptRequestValueSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('input'), message: z.string(), placeholder: z.string().optional() }),
+  z.object({ type: z.literal('select'), message: z.string(), options: z.array(SelectOptionSchema) }),
+  z.object({ type: z.literal('multiSelect'), message: z.string(), options: z.array(SelectOptionSchema) }),
+  z.object({ type: z.literal('modal'), title: z.string(), body: z.string(), actions: z.array(z.string()) }),
+  z.object({ type: z.literal('approval'), message: z.string(), details: z.string() }),
+  z.object({ type: z.literal('unlock'), message: z.string(), key: z.string() }),
+])
+export type InterruptRequestValue = z.infer<typeof InterruptRequestValueSchema>
+
 /** 图执行态：checkpoints.sqlite 为唯一真相源 */
 export interface ThreadState {
   pendingInterrupt: PendingInterrupt | null
 }
 
+export { ASK_TOOLS_SYSTEM_PROMPT } from './askTools'
 export {
   KB_CITATIONS_EVENT,
   type KbCitation,

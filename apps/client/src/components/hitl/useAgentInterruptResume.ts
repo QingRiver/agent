@@ -33,6 +33,3 @@ export function useAgentInterruptResume(
     await onAfterResume?.()
   }, [agent, threadId, onAfterResume])
 }
-
-/** @deprecated 使用 useAgentInterruptResume */
-export const useHitlResume = useAgentInterruptResume

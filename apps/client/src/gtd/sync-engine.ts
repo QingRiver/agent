@@ -9,6 +9,7 @@
  * 防幽灵闪烁：outbox 非空 → 只 push 不 pull
  */
 import type { EntityRow, GtdCommand, GtdMutation, PullResponse, PushResponse } from '@agent/gtd'
+import { isMutation } from '@agent/gtd'
 import {
   clearAll,
   loadLastSyncId,
@@ -21,10 +22,6 @@ export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline'
 export interface SyncApi {
   push: (body: { mutations: GtdMutation[], commands: GtdCommand[], lastSyncId: number }) => Promise<PushResponse>
   pull: (body: { lastSyncId: number }) => Promise<PullResponse>
-}
-
-function isMutation(item: GtdMutation | GtdCommand): item is GtdMutation {
-  return 'op' in item
 }
 
 export class SyncEngine {

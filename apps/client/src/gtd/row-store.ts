@@ -7,7 +7,7 @@
  * rebaseTransaction：push/pull 响应的 ack/nack + changes merge + lastSyncId 推进。
  */
 import type { EntityRow, GtdCommand, GtdMutation, PushResponse } from '@agent/gtd'
-import { applyPush, RowStore } from '@agent/gtd'
+import { applyPush, isMutation, RowStore } from '@agent/gtd'
 
 const DB_NAME = 'gtd-sync'
 const DB_VERSION = 1
@@ -17,10 +17,6 @@ const META_STORE = 'meta'
 
 function rowKey(row: EntityRow): string {
   return `${row.entity}:${row.id}`
-}
-
-function isMutation(item: GtdMutation | GtdCommand): item is GtdMutation {
-  return 'op' in item
 }
 
 /** 打开/升级 IndexedDB */

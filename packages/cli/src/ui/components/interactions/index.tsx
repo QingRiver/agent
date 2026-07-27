@@ -9,7 +9,6 @@ import { useState } from 'react'
  * 按 request.type 分发到具体交互组件。激活期间焦点劫持到此区,
  * 输入区(Zone3)由 App 置灰失焦,杜绝双区同时收键。
  */
-
 export function InteractionRenderer({
   request,
   onRespond,
@@ -63,7 +62,6 @@ export function InteractionRenderer({
       )
   }
 }
-
 // ==========================================
 // 交互组件
 // ==========================================
@@ -89,7 +87,7 @@ function UnlockInteraction({
     </Box>
   )
 }
-
+export {}
 function SelectInteraction({
   message,
   options,
@@ -233,7 +231,6 @@ function SelectInteraction({
     </Box>
   )
 }
-
 function ModalInteraction({
   title,
   body,
@@ -279,7 +276,6 @@ function ModalInteraction({
     </Box>
   )
 }
-
 function InputInteraction({
   message,
   placeholder,

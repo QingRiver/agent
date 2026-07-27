@@ -434,50 +434,6 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
   }
 }
 
-// ---------------- loadSyncState ----------------
-
-/** 装配用户完整 SyncState（七表读 live+deleted 行 + clock + 幂等 ids）。 */
-export async function loadSyncState(userId: string, reqIds?: string[]): Promise<SyncState> {
-  const [folders, tags, projects, perspectives, tasks, taskTags, attachments, clockRow] = await Promise.all([
-    db.select().from(gtdFolders).where(eq(gtdFolders.userId, userId)),
-    db.select().from(gtdTags).where(eq(gtdTags.userId, userId)),
-    db.select().from(gtdProjects).where(eq(gtdProjects.userId, userId)),
-    db.select().from(gtdPerspectives).where(eq(gtdPerspectives.userId, userId)),
-    db.select().from(gtdTasks).where(eq(gtdTasks.userId, userId)),
-    db.select().from(gtdTaskTags).where(eq(gtdTaskTags.userId, userId)),
-    db.select().from(gtdAttachments).where(eq(gtdAttachments.userId, userId)),
-    db.select().from(gtdSyncClocks).where(eq(gtdSyncClocks.userId, userId)),
-  ])
-
-  const rows: EntityRow[] = [
-    ...folders.map(rowToFolderEntity),
-    ...tags.map(rowToTagEntity),
-    ...projects.map(rowToProjectEntity),
-    ...perspectives.map(rowToPerspectiveEntity),
-    ...tasks.map(rowToTaskEntity),
-    ...attachments.map(rowToAttachmentEntity),
-    ...taskTags.map(rowToTaskTagEntity),
-  ]
-
-  // 幂等：仅加载本次 req 涉及的已处理 ids（避免全量加载用户所有 mutation）
-  const processedIds = new Set<string>()
-  if (reqIds && reqIds.length > 0) {
-    const existing = await db.select({ mutationId: gtdSyncMutations.mutationId })
-      .from(gtdSyncMutations)
-      .where(and(eq(gtdSyncMutations.userId, userId), inArray(gtdSyncMutations.mutationId, reqIds)))
-    for (const m of existing) {
-      processedIds.add(m.mutationId)
-    }
-  }
-
-  return {
-    userId,
-    clock: clockRow[0]?.clock ?? 0,
-    rows,
-    processedIds,
-  }
-}
-
 // ---------------- pull ----------------
 
 /** 拉取增量：各表 sync_id > lastSyncId（含软删）→ EntityRow[]。 */
@@ -522,7 +478,7 @@ export async function applyPushToPg(userId: string, req: PushRequest): Promise<P
 
     // 2. 装配 SyncState（含 req 的幂等 ids）
     const reqIds = [...req.mutations.map(m => m.id), ...req.commands.map(c => c.id)]
-    const state = await loadSyncStateInTx(tx, userId, reqIds, oldClock)
+    const state = await loadSyncStateInTx(tx, userId, reqIds)
 
     // 3. applyPush 纯函数（内部 tryit 已捕获违规入 rejected，不抛）
     const result = applyPush(state, req)
@@ -559,8 +515,6 @@ export async function applyPushToPg(userId: string, req: PushRequest): Promise<P
 
     response.serverSyncId = newClock
     return response
-  }).then((r) => {
-    return r
   })
 }
 
@@ -568,7 +522,7 @@ export async function applyPushToPg(userId: string, req: PushRequest): Promise<P
  * 事务内装配 SyncState（loadSyncState 的 tx 版本，读同一事务快照）。
  *  事务绑定单一 pg 连接，禁止 Promise.all 并发 select（触发 pg 并发查询警告且可能错位结果），逐条 await。
  */
-async function loadSyncStateInTx(tx: Tx, userId: string, reqIds: string[], _oldClock: number): Promise<SyncState> {
+async function loadSyncStateInTx(tx: Tx, userId: string, reqIds: string[]): Promise<SyncState> {
   const folders = await tx.select().from(gtdFolders).where(eq(gtdFolders.userId, userId))
   const tags = await tx.select().from(gtdTags).where(eq(gtdTags.userId, userId))
   const projects = await tx.select().from(gtdProjects).where(eq(gtdProjects.userId, userId))

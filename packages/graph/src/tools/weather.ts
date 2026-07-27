@@ -1,7 +1,6 @@
 import { openMeteo } from '@agent/tools'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
-import { ASK_TOOLS } from './ask-tools'
 
 export const getWeatherTool = tool(
   async ({ location }) => {
@@ -22,4 +21,4 @@ export const getWeatherTool = tool(
   },
 )
 
-export const WEATHER_TOOLS = [getWeatherTool, ...ASK_TOOLS]
+export const WEATHER_TOOLS = [getWeatherTool]

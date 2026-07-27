@@ -46,7 +46,7 @@ export function UserAvatarMenu() {
           <div className="flex flex-col gap-0.5">
             <span>{user.name || user.email}</span>
             <span className="text-xs font-normal text-muted-foreground">
-              SQLite 检查点
+              Postgres 检查点
             </span>
           </div>
         </DropdownMenuLabel>

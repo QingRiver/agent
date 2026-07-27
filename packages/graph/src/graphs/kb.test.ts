@@ -5,7 +5,7 @@ import { EventType } from '@ag-ui/core'
 import { AIMessage, HumanMessage } from '@langchain/core/messages'
 import { MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it, vi } from 'vitest'
-import { aguiRunContext, aguiTransformerFactory } from '../stream'
+import { aguiTransformerFactory } from '../stream'
 import { kbGraph } from './kb'
 
 const { mockInvoke, retrieveAndRerank } = vi.hoisted(() => ({
@@ -54,25 +54,18 @@ async function runKbTurn(
   threadId: string,
   userText: string,
 ) {
-  const runId = randomUUID()
-  aguiRunContext.current = { threadId, runId }
-  try {
-    const stream = await app.streamEvents(
-      { messages: [new HumanMessage(userText)] },
-      { version: 'v3', configurable: { thread_id: threadId, kbId: 'kb_test' } },
-    )
-    const protocolDone = (async () => {
-      for await (const _ of stream) { /* drain */ }
-    })()
-    const events = await Array.fromAsync(
-      stream.extensions.aguiEvents as AsyncIterable<AguiMappedEvent>,
-    )
-    await protocolDone
-    return events
-  }
-  finally {
-    delete aguiRunContext.current
-  }
+  const stream = await app.streamEvents(
+    { messages: [new HumanMessage(userText)] },
+    { version: 'v3', configurable: { thread_id: threadId, kbId: 'kb_test' } },
+  )
+  const protocolDone = (async () => {
+    for await (const _ of stream) { /* drain */ }
+  })()
+  const events = await Array.fromAsync(
+    stream.extensions.aguiEvents as AsyncIterable<AguiMappedEvent>,
+  )
+  await protocolDone
+  return events
 }
 
 describe('kbGraph', () => {

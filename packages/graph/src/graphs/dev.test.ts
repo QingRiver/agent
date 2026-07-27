@@ -1,10 +1,11 @@
 import type { AIMessage, BaseMessage } from '@langchain/core/messages'
+import type { AguiMappedEvent } from '../stream/index'
 import { randomUUID } from 'node:crypto'
 import { EventType } from '@ag-ui/core'
 import { HumanMessage } from '@langchain/core/messages'
 import { Command, MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it } from 'vitest'
-import { aguiRunContext, aguiTransformerFactory } from '../stream/index'
+import { aguiTransformerFactory, buildInterruptFinalizeEvents } from '../stream/index'
 import { getAIMessageContent } from '../utils/index'
 import { devGraph } from './dev'
 
@@ -14,32 +15,39 @@ describe('devGraph hitlDemo + AguiTransformer', () => {
     transformers: [aguiTransformerFactory],
   })
 
+  /** 对齐 server `streamGraphAguiEvents`：aguiEvents 结束后按 stream.interrupted 补发收尾。 */
   async function streamUntilInterrupt(
     input: Parameters<typeof app.streamEvents>[0],
     threadId: string,
     runId: string,
   ) {
-    aguiRunContext.current = { threadId, runId }
-    try {
-      const stream = await app.streamEvents(
-        input,
-        { version: 'v3', configurable: { thread_id: threadId } },
-      )
-      const protocolDone = (async () => {
-        for await (const _ of stream) { /* drain protocol */ }
-      })()
-      const events = await Array.fromAsync(stream.extensions.aguiEvents)
-      await protocolDone
+    const stream = await app.streamEvents(
+      input,
+      { version: 'v3', configurable: { thread_id: threadId } },
+    )
+    const protocolDone = (async () => {
+      for await (const _ of stream) { /* drain protocol */ }
+    })()
+    const events: AguiMappedEvent[] = await Array.fromAsync(stream.extensions.aguiEvents)
+    await protocolDone
 
-      const onInterrupt = events.find(
-        e => e.type === EventType.CUSTOM && 'name' in e && e.name === 'on_interrupt',
-      ) as { value: Record<string, unknown> } | undefined
-      const runFinished = events.find(e => e.type === EventType.RUN_FINISHED)
-      return { onInterrupt, runFinished, events }
+    if (!events.some(e => e.type === EventType.RUN_FINISHED)) {
+      if (stream.interrupted && stream.interrupts.length > 0) {
+        const snapshot = await stream.output
+        events.push(...buildInterruptFinalizeEvents({
+          threadId,
+          runId,
+          interrupts: stream.interrupts,
+          snapshot: snapshot as Record<string, unknown>,
+        }) as AguiMappedEvent[])
+      }
     }
-    finally {
-      delete aguiRunContext.current
-    }
+
+    const onInterrupt = events.find(
+      e => e.type === EventType.CUSTOM && 'name' in e && e.name === 'on_interrupt',
+    ) as { value: Record<string, unknown> } | undefined
+    const runFinished = events.find(e => e.type === EventType.RUN_FINISHED)
+    return { onInterrupt, runFinished, events }
   }
 
   it('澄清选 hitlDemo 后串联 input → select → multiSelect → approval', async () => {

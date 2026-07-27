@@ -3,22 +3,25 @@ import { getAuth } from '../auth/auth'
 import { setupCheckpointer } from './checkpointer'
 import { migrateAppSchema } from './migrate'
 
-let bootstrapped = false
+let bootstrapPromise: Promise<void> | undefined
 
-export async function bootstrapDatabases(): Promise<void> {
-  if (bootstrapped)
-    return
+export function bootstrapDatabases(): Promise<void> {
+  if (bootstrapPromise)
+    return bootstrapPromise
 
-  // 1. better-auth 表（user/session/account/verification）
-  const { runMigrations } = await getMigrations(getAuth().options)
-  await runMigrations()
+  bootstrapPromise = (async () => {
+    // 1. better-auth 表（user/session/account/verification）
+    const { runMigrations } = await getMigrations(getAuth().options)
+    await runMigrations()
 
-  // 2. drizzle 表（conversation_threads）
-  await migrateAppSchema()
+    // 2. drizzle 表（conversation_threads）
+    await migrateAppSchema()
 
-  // 3. LangGraph checkpoint 表
-  await setupCheckpointer()
+    // 3. LangGraph checkpoint 表
+    await setupCheckpointer()
 
-  bootstrapped = true
-  console.log('[db] postgres ready (auth + conversation_threads + checkpoints)')
+    console.log('[db] postgres ready (auth + conversation_threads + checkpoints)')
+  })()
+
+  return bootstrapPromise
 }

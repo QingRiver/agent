@@ -1,5 +1,6 @@
 import type { DevStateType } from '../state/devState'
 import process from 'node:process'
+import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/protocol'
 import { SystemMessage } from '@langchain/core/messages'
 import { END, START, StateGraph } from '@langchain/langgraph'
 import { ToolNode } from '@langchain/langgraph/prebuilt'
@@ -10,7 +11,8 @@ import { clarifyDevIntent } from '../nodes/clarifyDevIntent'
 import { collectHitlDemo } from '../nodes/collectHitlDemo'
 import { executeHitlDemo } from '../nodes/executeHitlDemo'
 import { DevState } from '../state/devState'
-import { ASK_SYSTEM_PROMPT } from '../tools/ask-tools'
+import { ASK_TOOLS } from '../tools/ask-tools'
+import { KB_TOOLS } from '../tools/kb'
 import { ORDER_TOOLS } from '../tools/order'
 import { WEATHER_TOOLS } from '../tools/weather'
 
@@ -31,16 +33,26 @@ const ORDER_SYSTEM_PROMPT = [
   '3. 订单号已明确时直接 fetch_user_order，再简短总结结果。',
 ].join('\n')
 
+const KB_SYSTEM_PROMPT = [
+  '你是知识库问答助手。回答涉及已导入知识库内容的问题时，必须先调用 kb_search 检索，再据返回的引用片段作答。',
+  '硬性规则：',
+  '1. 用户问题可能涉及知识库时，先 kb_search 再回答；禁止凭空编造库内内容。',
+  '2. 回答时引用返回片段的编号（如 [1]、[2]），并标注来源 doc。',
+  '3. 工具返回「未找到」或澄清建议时，如实转达，不要臆造答案。',
+  '4. 问题明显与知识库无关时，可直接作答，不必调用工具。',
+].join('\n')
+
 const llm = new ChatOpenAI({
   model: process.env.OPENAI_MODEL ?? '',
   temperature: 0,
 })
 
-const weatherLlm = llm.bindTools(WEATHER_TOOLS)
-const orderLlm = llm.bindTools(ORDER_TOOLS)
+const weatherLlm = llm.bindTools([...WEATHER_TOOLS, ...ASK_TOOLS])
+const orderLlm = llm.bindTools([...ORDER_TOOLS, ...ASK_TOOLS])
+const kbLlm = llm.bindTools([...KB_TOOLS, ...ASK_TOOLS])
 
 async function agentWeather(state: DevStateType) {
-  const system = `${WEATHER_SYSTEM_PROMPT}\n\n${ASK_SYSTEM_PROMPT}`
+  const system = `${WEATHER_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`
   const messages = state.messages[0]?.type === 'system'
     ? state.messages
     : [new SystemMessage(system), ...state.messages]
@@ -49,11 +61,20 @@ async function agentWeather(state: DevStateType) {
 }
 
 async function agentOrder(state: DevStateType) {
-  const system = `${ORDER_SYSTEM_PROMPT}\n\n${ASK_SYSTEM_PROMPT}`
+  const system = `${ORDER_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`
   const messages = state.messages[0]?.type === 'system'
     ? state.messages
     : [new SystemMessage(system), ...state.messages]
   const response = await orderLlm.invoke(messages)
+  return { messages: [response] }
+}
+
+async function agentKb(state: DevStateType) {
+  const system = `${KB_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`
+  const messages = state.messages[0]?.type === 'system'
+    ? state.messages
+    : [new SystemMessage(system), ...state.messages]
+  const response = await kbLlm.invoke(messages)
   return { messages: [response] }
 }
 
@@ -65,18 +86,25 @@ function orderContinue(state: DevStateType): 'tools_order' | typeof END {
   return shouldContinue(state) === 'tools' ? 'tools_order' : END
 }
 
+function kbContinue(state: DevStateType): 'tools_kb' | typeof END {
+  return shouldContinue(state) === 'tools' ? 'tools_kb' : END
+}
+
 export const devGraph = new StateGraph(DevState)
   .addNode('clarify', clarifyDevIntent)
   .addNode('agent_weather', agentWeather)
-  .addNode('tools_weather', new ToolNode(WEATHER_TOOLS))
+  .addNode('tools_weather', new ToolNode([...WEATHER_TOOLS, ...ASK_TOOLS]))
   .addNode('agent_order', agentOrder)
-  .addNode('tools_order', new ToolNode(ORDER_TOOLS))
+  .addNode('tools_order', new ToolNode([...ORDER_TOOLS, ...ASK_TOOLS]))
+  .addNode('agent_kb', agentKb)
+  .addNode('tools_kb', new ToolNode([...KB_TOOLS, ...ASK_TOOLS]))
   .addNode('collect_hitl', collectHitlDemo)
   .addNode('execute_hitl', executeHitlDemo)
   .addEdge(START, 'clarify')
   .addConditionalEdges('clarify', routeByDevIntent, {
     agent_weather: 'agent_weather',
     agent_order: 'agent_order',
+    agent_kb: 'agent_kb',
     collect_hitl: 'collect_hitl',
   })
   .addConditionalEdges('agent_weather', weatherContinue, {
@@ -89,5 +117,10 @@ export const devGraph = new StateGraph(DevState)
     [END]: END,
   })
   .addEdge('tools_order', 'agent_order')
+  .addConditionalEdges('agent_kb', kbContinue, {
+    tools_kb: 'tools_kb',
+    [END]: END,
+  })
+  .addEdge('tools_kb', 'agent_kb')
   .addEdge('collect_hitl', 'execute_hitl')
   .addEdge('execute_hitl', END)

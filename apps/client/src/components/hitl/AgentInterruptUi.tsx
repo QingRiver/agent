@@ -81,6 +81,3 @@ export function AgentInterruptUi({ agentId, threadId }: AgentInterruptUiProps) {
 
   return null
 }
-
-/** @deprecated 使用 AgentInterruptUi */
-export const HitlInterruptUi = AgentInterruptUi

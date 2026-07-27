@@ -7,7 +7,7 @@ import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages
 import { ChatOpenAI } from '@langchain/openai'
 import { MAX_CITATION_RETRIES } from '../../state/kbState'
 import { getAIMessageContent } from '../../utils'
-import { lastUserMessage } from './lastUserMessage'
+import { lastHumanMessageText } from '../../utils/messageText'
 
 const llm = new ChatOpenAI({
   model: process.env.OPENAI_MODEL ?? '',
@@ -30,7 +30,7 @@ export async function kbGenerateNode(
   state: KbStateType,
   config: LangGraphRunnableConfig,
 ) {
-  const userQuery = lastUserMessage(state.messages)
+  const userQuery = lastHumanMessageText(state.messages)
   const context = buildContextFromChunks(state.retrievedChunks)
   const correction = state.citationRetries > 0
     ? state.messages.at(-1)?.content

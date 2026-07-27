@@ -6,12 +6,6 @@
 import type { ApprovalDecision, SelectOption } from '@agent/protocol'
 import { interrupt } from '@langchain/langgraph'
 
-export interface HitlOption {
-  label: string
-  value: string
-  description?: string | undefined
-}
-
 export async function hitlInput(params: {
   message: string
   placeholder?: string
@@ -28,10 +22,10 @@ export async function hitlInput(params: {
 
 export async function hitlSelect(params: {
   message: string
-  options: HitlOption[] | SelectOption[]
+  options: SelectOption[]
 }): Promise<{ value: string }> {
   return interrupt<
-    { type: 'select', message: string, options: HitlOption[] },
+    { type: 'select', message: string, options: SelectOption[] },
     { value: string }
   >({
     type: 'select',
@@ -46,10 +40,10 @@ export async function hitlSelect(params: {
 
 export async function hitlMultiSelect(params: {
   message: string
-  options: HitlOption[] | SelectOption[]
+  options: SelectOption[]
 }): Promise<{ values: string[] }> {
   return interrupt<
-    { type: 'multiSelect', message: string, options: HitlOption[] },
+    { type: 'multiSelect', message: string, options: SelectOption[] },
     { values: string[] }
   >({
     type: 'multiSelect',

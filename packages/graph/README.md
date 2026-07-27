@@ -52,5 +52,6 @@ import { Graphs, type GraphsName, AguiTransformer } from '@agent/graph'
 
 ```bash
 pnpm --filter @agent/graph tc
+pnpm --filter @agent/graph graphs:md   # compile 各图 → 根目录 GRAPHS.md（Mermaid）
 pnpm test    # 覆盖本包 *.test.ts
 ```

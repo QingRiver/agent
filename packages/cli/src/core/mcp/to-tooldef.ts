@@ -1,12 +1,7 @@
 import type { TushareMcp } from '@core/mcp/client'
 import type { ToolDef } from '@core/types'
+import { toolErrorMessage } from '@agent/tools'
 import { Effect } from 'effect'
-
-function toolErrorMessage(err: unknown): string {
-  if (err instanceof Error)
-    return err.message
-  return String(err)
-}
 
 function mcpToolsToToolDefs(mcp: TushareMcp): ToolDef[] {
   return mcp.tools.map((tool) => {

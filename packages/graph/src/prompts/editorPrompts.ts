@@ -17,7 +17,7 @@ export const CLASSIFY_INTENT_SYSTEM_PROMPT = [
   '只输出一行 JSON，不要 markdown 代码围栏，不要解释。格式：{"intent":"ask"} 或 {"intent":"write"}',
 ].join('\n')
 
-export const ASK_SYSTEM_PROMPT = [
+export const EDITOR_ASK_SYSTEM_PROMPT = [
   EDITOR_CONSTITUTION,
   '',
   '当前模式：Ask（问答与建议，不写入编辑器）。',

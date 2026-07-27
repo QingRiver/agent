@@ -8,6 +8,7 @@ const CLARIFY_OPTIONS = [
   { label: '天气查询', value: 'weather', description: 'Open-Meteo + ask_* 工具' },
   { label: '简单工具调用', value: 'simpleTool', description: '模拟取消订单工具' },
   { label: 'HITL 审批演示', value: 'hitlDemo', description: 'input→select→multiSelect→approval' },
+  { label: '知识库检索', value: 'kb', description: 'kb_search 工具：改写→召回→rerank' },
 ] as const
 
 const FALLBACK_WEATHER_MESSAGE = '没有匹配的工具,我们来看看天气怎么样吧'
@@ -16,7 +17,7 @@ const FALLBACK_WEATHER_MESSAGE = '没有匹配的工具,我们来看看天气怎
 export async function clarifyDevIntent(
   state: DevStateType,
 ): Promise<{ devIntent: DevIntent, messages?: AIMessage[] }> {
-  if (state.devIntent === 'weather' || state.devIntent === 'simpleTool' || state.devIntent === 'hitlDemo')
+  if (state.devIntent === 'weather' || state.devIntent === 'simpleTool' || state.devIntent === 'hitlDemo' || state.devIntent === 'kb')
     return { devIntent: state.devIntent }
 
   const resp = await hitlSelect({
@@ -29,7 +30,7 @@ export async function clarifyDevIntent(
   })
 
   const value = resp.value
-  if (value === 'weather' || value === 'simpleTool' || value === 'hitlDemo')
+  if (value === 'weather' || value === 'simpleTool' || value === 'hitlDemo' || value === 'kb')
     return { devIntent: value }
 
   return {

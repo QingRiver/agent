@@ -3,7 +3,7 @@ import { EventType } from '@ag-ui/core'
 import { AIMessage, HumanMessage } from '@langchain/core/messages'
 import { MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it, vi } from 'vitest'
-import { aguiRunContext, aguiTransformerFactory } from '../stream/index'
+import { aguiTransformerFactory } from '../stream/index'
 import { claudeAgentGraph } from './claudeAgent'
 
 vi.mock('@agent/claude-agent', async (importOriginal) => {
@@ -52,31 +52,25 @@ describe('claudeAgentGraph + AguiTransformer', () => {
     const threadId = `claude-${randomUUID()}`
     const userText = '列出根目录'
 
-    aguiRunContext.current = { threadId, runId: 'r1' }
-    try {
-      const stream = await app.streamEvents(
-        { messages: [new HumanMessage(userText)] },
-        { version: 'v3', configurable: { thread_id: threadId } },
-      )
-      const protocolDone = (async () => {
-        for await (const _ of stream) { /* drain */ }
-      })()
-      const events = await Array.fromAsync(stream.extensions.aguiEvents)
-      await protocolDone
+    const stream = await app.streamEvents(
+      { messages: [new HumanMessage(userText)] },
+      { version: 'v3', configurable: { thread_id: threadId } },
+    )
+    const protocolDone = (async () => {
+      for await (const _ of stream) { /* drain */ }
+    })()
+    const events = await Array.fromAsync(stream.extensions.aguiEvents)
+    await protocolDone
 
-      expect(events.some(e => e.type === EventType.TEXT_MESSAGE_CONTENT)).toBe(true)
+    expect(events.some(e => e.type === EventType.TEXT_MESSAGE_CONTENT)).toBe(true)
 
-      const snapshot = await app.getState({ configurable: { thread_id: threadId } })
-      const values = snapshot.values as {
-        messages?: unknown[]
-        claudeSessionId?: string
-      }
-      expect(values.claudeSessionId).toBe('claude-sess-1')
-      expect(Array.isArray(values.messages)).toBe(true)
-      expect((values.messages?.length ?? 0)).toBeGreaterThanOrEqual(2)
+    const snapshot = await app.getState({ configurable: { thread_id: threadId } })
+    const values = snapshot.values as {
+      messages?: unknown[]
+      claudeSessionId?: string
     }
-    finally {
-      delete aguiRunContext.current
-    }
+    expect(values.claudeSessionId).toBe('claude-sess-1')
+    expect(Array.isArray(values.messages)).toBe(true)
+    expect((values.messages?.length ?? 0)).toBeGreaterThanOrEqual(2)
   })
 })

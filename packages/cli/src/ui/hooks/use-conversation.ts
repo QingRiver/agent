@@ -9,7 +9,7 @@
  *  - 队列排空 + single-flight(streamingRef 守卫)
  *  - HITL 挂起/恢复:UI.interact 用 Effect.async 挂起,resume 回调存 resolveRef;respond 触发 resume
  *
- * 关键:UI.streaming.append → setBuffer(urgent),不用 useDeferredValue,保流式实时。
+ * 关键:UI.streaming.append 立即更新真相(ref)，渲染使用 useDeferredValue 做快照（可能略落后于真相），但避免闪烁。
  */
 
 import type { InteractionRequest, InteractionResponse, UIMessage } from '@core/types'

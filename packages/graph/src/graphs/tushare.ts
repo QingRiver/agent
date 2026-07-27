@@ -1,9 +1,9 @@
 import type { BaseMessage } from '@langchain/core/messages'
+import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/protocol'
 import { TUSHARE_SYSTEM_PROMPT } from '@agent/tools'
 import { SystemMessage } from '@langchain/core/messages'
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph'
 import { shouldContinue } from '../edges/shouldContinue'
-import { ASK_SYSTEM_PROMPT } from '../tools/ask-tools'
 import { fixMisplacedToolCalls } from '../tools/tushare/fixMisplacedToolCalls'
 import { getTushareToolset } from '../tools/tushare/toolset'
 
@@ -18,7 +18,7 @@ async function agent(state: typeof TushareState.State) {
   const { llmWithTools } = await getTushareToolset()
   const messages = state.messages[0]?.getType() === 'system'
     ? state.messages
-    : [new SystemMessage(`${TUSHARE_SYSTEM_PROMPT}\n\n${ASK_SYSTEM_PROMPT}`), ...state.messages]
+    : [new SystemMessage(`${TUSHARE_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`), ...state.messages]
   const response = await llmWithTools.invoke(messages)
   return { messages: [fixMisplacedToolCalls(response)] }
 }

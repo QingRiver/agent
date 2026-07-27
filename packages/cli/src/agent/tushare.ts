@@ -8,7 +8,6 @@ import {
   renderTushareSystemPrompt,
   TOKEN_HINT,
   toolErrorMessage,
-  TUSHARE_SYSTEM_PROMPT,
 } from '@agent/tools'
 import { interact } from '@core/agent-effect'
 import { mcpToolsToToolDefs } from '@core/mcp/to-tooldef'
@@ -107,4 +106,4 @@ function createTushareAgent(mcp: TushareMcp): { tools: ToolDef[], systemPrompt: 
   }
 }
 
-export { createTushareAgent, TUSHARE_SYSTEM_PROMPT }
+export { createTushareAgent }

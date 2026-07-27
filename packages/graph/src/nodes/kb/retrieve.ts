@@ -4,7 +4,7 @@ import type { KbStateType } from '../../state/kbState'
 import { env } from '@agent/env'
 import { retrieveAndRerank } from '@agent/kb'
 import { AIMessage } from '@langchain/core/messages'
-import { lastUserMessage } from './lastUserMessage'
+import { lastHumanMessageText } from '../../utils/messageText'
 
 function getKbId(config: LangGraphRunnableConfig): string {
   const configurable = config.configurable as { kbId?: string } | undefined
@@ -53,7 +53,7 @@ export async function kbRetrieveNode(
   config: LangGraphRunnableConfig,
 ) {
   const kbId = getKbId(config)
-  const userQuery = lastUserMessage(state.messages)
+  const userQuery = lastHumanMessageText(state.messages)
   const queries = state.rewrittenQueries.length
     ? state.rewrittenQueries
     : [userQuery]

@@ -1,9 +1,9 @@
 import type { KbStateType } from '../../state/kbState'
 import { rewriteQuery } from '@agent/kb'
-import { lastUserMessage } from './lastUserMessage'
+import { lastHumanMessageText } from '../../utils/messageText'
 
 export async function kbRewriteNode(state: KbStateType) {
-  const userQuery = lastUserMessage(state.messages)
+  const userQuery = lastHumanMessageText(state.messages)
   const rewrittenQueries = await rewriteQuery(userQuery)
   return {
     rewrittenQueries,

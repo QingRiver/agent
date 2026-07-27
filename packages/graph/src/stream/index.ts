@@ -1,8 +1,6 @@
-export { aguiRunContext } from './aguiRunContext'
 export {
   AGUI_WRITER_EVENT,
   type AguiExtensions,
-  type AguiFinalizeContext,
   type AguiMappedEvent,
   AguiTransformer,
   aguiTransformerFactory,

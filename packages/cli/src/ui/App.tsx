@@ -1,6 +1,6 @@
 import { Spinner } from '@inkjs/ui'
 import { Conversation } from '@ui/components/conversation'
-import { InteractionRenderer } from '@ui/components/insteractions'
+import { InteractionRenderer } from '@ui/components/interactions'
 import { InputPrompt } from '@ui/components/line'
 import { useConversation } from '@ui/hooks/use-conversation'
 import { Box, useApp, useInput } from 'ink'

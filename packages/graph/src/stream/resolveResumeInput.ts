@@ -20,7 +20,7 @@ function parseApprovalDecision(raw: unknown): ApprovalDecision | undefined {
         return parsed
     }
     catch {
-      return { approved: true }
+      return { approved: false }
     }
     return undefined
   }

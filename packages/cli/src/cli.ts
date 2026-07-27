@@ -1,5 +1,6 @@
 import process from 'node:process'
-import { INTERACT_SYSTEM_PROMPT, interactTools } from '@cli/agent/interact-tools'
+import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/protocol'
+import { interactTools } from '@cli/agent/interact-tools'
 import { createTushareAgent } from '@cli/agent/tushare'
 import { OpenAIDriver } from '@core/driver/openai'
 import { createTushareMcp } from '@core/mcp/client'
@@ -33,7 +34,7 @@ async function main() {
     boot(
       new OpenAIDriver(),
       [...tools, ...interactTools],
-      [systemPrompt, INTERACT_SYSTEM_PROMPT].join('\n\n'),
+      [systemPrompt, ASK_TOOLS_SYSTEM_PROMPT].join('\n\n'),
     )
   }
   catch (err) {

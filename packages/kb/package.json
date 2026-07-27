@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@agent/env": "workspace:*",
+    "@agent/protocol": "workspace:*",
     "@langchain/core": "catalog:",
     "@langchain/openai": "catalog:",
     "@langchain/textsplitters": "catalog:",

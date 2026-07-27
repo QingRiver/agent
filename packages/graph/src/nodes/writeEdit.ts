@@ -12,7 +12,7 @@ import {
   SUMMARY_SYSTEM_PROMPT,
 } from '../prompts/editorPrompts'
 import { writeAguiAssistantText } from '../stream/writeAguiAssistantText'
-import { messageText } from '../utils/messageText'
+import { lastHumanMessageText, messageText } from '../utils/messageText'
 import { parseLlmJson } from '../utils/parseLlmJson'
 import { runChatCompletion } from './chatCompletion'
 
@@ -180,8 +180,7 @@ async function writeEditNode(
   options?: WriteEditNodeOptions,
 ): Promise<{ messages: BaseMessage[] }> {
   const editCase = options?.editCase ?? resolveEditCase(config)
-  const latestUser = [...state.messages].reverse().find(m => m.getType() === 'human')
-  const humanContent = messageText(latestUser)
+  const humanContent = lastHumanMessageText(state.messages)
   const focuses = readFocuses(config)
   const instructionFromConfig = readOptionalString(config, 'polishInstruction')
   const instruction = instructionFromConfig || (editCase === 'document' ? humanContent : '')

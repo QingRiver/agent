@@ -3,7 +3,6 @@ import type { AguiMappedEvent } from '@agent/graph'
 import type { InterruptPayload, StreamChannel } from '@langchain/langgraph'
 import { EventType } from '@ag-ui/core'
 import {
-  aguiRunContext,
   buildInterruptFinalizeEvents,
 } from '@agent/graph'
 import { getRequestContext } from '../context/requestContext'
@@ -52,8 +51,6 @@ export async function* streamGraphAguiEvents(
   const collected: BaseEvent[] = []
 
   try {
-    aguiRunContext.current = { threadId, runId }
-
     const streamInput = options.resolveStreamInput(input)
     const extraConfigurable = options.resolveConfigurable?.(input) ?? {}
     const stream = await graph.streamEvents(streamInput, {
@@ -127,6 +124,5 @@ export async function* streamGraphAguiEvents(
     const ctx = getRequestContext()
     if (ctx)
       await ConversationService.touch(ctx.userId, input.threadId)
-    delete aguiRunContext.current
   }
 }
