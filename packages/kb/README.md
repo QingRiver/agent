@@ -10,7 +10,7 @@
 | qdrant | `getQdrantClient`、`ensureCollection`、`upsertChunks` |
 | embedding | `embedTexts`、`embedQuery` |
 | sparse | `QdrantBm25Provider`、`BgeM3SparseProvider` |
-| retrieve | `hybridRetrieve`、`retrieveAndRerank`、`rewriteQuery`、`validateCitations` |
+| retrieve | `hybridRetrieve`、`retrieveAndRerank`、`rewriteQuery`、`validateCitations`、`answerWithMarkdownLinks` |
 | rerank | `rerankDocuments`、`llmFallbackDecision` |
 
 ## 目录

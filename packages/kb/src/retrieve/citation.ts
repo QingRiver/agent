@@ -1,6 +1,11 @@
 import type { KbCitation, RetrievedChunk } from '../types'
 
-const CITATION_TAG_RE = /\[(\d+)\]/g
+export type { KbCitation } from '../types'
+
+/** 正文引用编号：`[n]` / `[^n]`（校验与后处理用） */
+const CITATION_REF_RE = /\[\^?(\d+)\]/g
+/** 尚未带链接的引用：`[n]` / `[^n]`，且后面不是 `(` */
+const CITATION_TO_LINK_RE = /\[\^?(\d+)\](?!\()/g
 
 export interface CitationValidationResult {
   ok: boolean
@@ -20,9 +25,9 @@ export function buildContextFromChunks(chunks: RetrievedChunk[]): string {
     .join('\n\n')
 }
 
-export function parseCitationIndices(answer: string): number[] {
+function parseCitationIndices(answer: string): number[] {
   const indices = new Set<number>()
-  for (const match of answer.matchAll(CITATION_TAG_RE)) {
+  for (const match of answer.matchAll(CITATION_REF_RE)) {
     const rawIndex = match[1]
     if (!rawIndex)
       continue
@@ -31,6 +36,17 @@ export function parseCitationIndices(answer: string): number[] {
       indices.add(index)
   }
   return [...indices].sort((a, b) => a - b)
+}
+
+/** KB 引文深链：客户端 /kb 可按 query 打开对应文档片段 */
+export function kbCitationHref(citation: KbCitation): string {
+  const q = new URLSearchParams({
+    doc: citation.source_doc_id,
+    chunk: citation.chunk_id,
+  })
+  if (citation.page_number != null)
+    q.set('p', String(citation.page_number))
+  return `/kb?${q.toString()}`
 }
 
 export function validateCitations(
@@ -72,7 +88,7 @@ export function validateCitations(
       correctionPrompt: [
         '你上一版答案中的引用编号无效或与检索片段不符。',
         `无效引用：${invalidIndices.map(i => `[${i}]`).join(', ')}`,
-        '请仅基于给定 context 重答，引用必须使用 [n] 格式且内容必须来自对应片段。',
+        '请仅基于给定 context 重答；引用须写成片段给出的 Markdown 链接，如 `[n](/kb?doc=…&chunk=…)`。',
       ].join('\n'),
     }
   }
@@ -80,8 +96,42 @@ export function validateCitations(
   return { ok: true, citations, invalidIndices: [] }
 }
 
+/**
+ * 将正文 `[n]` / `[^n]` 转为 Markdown 链接 `[n](/kb?doc=…&chunk=…)`。
+ * 已是 `[n](...)` 的不再改写；不在文末追加脚注定义。
+ */
+export function answerWithMarkdownLinks(
+  answer: string,
+  citations: KbCitation[],
+): string {
+  if (!citations.length)
+    return answer
+
+  const byIndex = new Map(citations.map(c => [c.index, c]))
+  return answer.replace(CITATION_TO_LINK_RE, (full, raw: string) => {
+    const index = Number.parseInt(raw, 10)
+    const citation = byIndex.get(index)
+    if (!citation)
+      return full
+    return `[${raw}](${kbCitationHref(citation)})`
+  })
+}
+
+/** 检索澄清：纯文本 message → 可渲染的 Markdown */
+export function formatClarifyMarkdown(message: string): string {
+  const body = message.trim() || '当前问题不够具体，请补充关键信息后重试。'
+  return [
+    '### 需要澄清',
+    '',
+    body,
+    '',
+    '> 请补充更具体的信息（对象、时间范围、文档名等）后再问。',
+    '',
+  ].join('\n')
+}
+
 function extractQuotedExcerpt(answer: string, index: number): string {
-  const pattern = new RegExp(`[「"']([^」"']+)[」"']\\s*\\[${index}\\]`)
+  const pattern = new RegExp(`[「"']([^」"']+)[」"']\\s*\\[\\^?${index}\\]`)
   const match = pattern.exec(answer)
   return match?.[1]?.trim() ?? ''
 }
@@ -96,8 +146,4 @@ function isExcerptInChunk(excerpt: string, chunkText: string): boolean {
 
 function normalizeForMatch(text: string): string {
   return text.replace(/\s+/g, '').toLowerCase()
-}
-
-export function citationsToPayload(citations: KbCitation[]): KbCitation[] {
-  return citations
 }

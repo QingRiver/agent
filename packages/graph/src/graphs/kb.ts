@@ -6,8 +6,6 @@ import { kbRetrieveNode } from '../nodes/kb/retrieve'
 import { kbRewriteNode } from '../nodes/kb/rewrite'
 import { KbState } from '../state/kbState'
 
-export { KB_CITATIONS_EVENT } from '@agent/protocol'
-
 export const kbGraph = new StateGraph(KbState)
   .addNode('rewrite', kbRewriteNode)
   .addNode('retrieve', kbRetrieveNode)

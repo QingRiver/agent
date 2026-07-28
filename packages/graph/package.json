@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./react-agent-prompts": "./src/prompts/reactAgentPrompts.ts"
   },
   "scripts": {
     "tc": "pnpm -w run tsc-go --noEmit",

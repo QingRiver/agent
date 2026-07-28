@@ -52,6 +52,12 @@ describe('renderMarkdown', () => {
     expect(html).toContain('Footnote body')
   })
 
+  it('渲染 Markdown 链接', () => {
+    const { html } = renderMarkdown('见 [1](/kb?doc=a&chunk=c1)。\n')
+    expect(html).toContain('href="/kb?doc=a&chunk=c1"')
+    expect(html).toContain('>1<')
+  })
+
   it('渲染行内与块级 LaTeX', () => {
     const { html } = renderMarkdown('Inline $a^2+b^2=c^2$\n\n$$\nE=mc^2\n$$\n')
     expect(html).toContain('katex')

@@ -33,6 +33,14 @@ interface ErrorClass {
 
 function classifyError(text: string): ErrorClass {
   const t = text.toLowerCase()
+  // LangGraph 节点转移触顶（= Lab maxSteps / recursionLimit）
+  if (t.includes('recursion limit') || t.includes('recursionlimit')) {
+    return {
+      code: 'GRAPH_STEP_LIMIT',
+      message: '已达最大图步数，本轮已中止',
+      hint: '可在 Agent Lab 调高「最大图步数」，或让任务更短路径完成',
+    }
+  }
   // 知识库基础设施未起（qdrant 6333 / markitdown 8200）
   if ((t.includes('econnrefused') || t.includes('fetch failed'))
     && (t.includes('6333') || t.includes('6334') || t.includes('8200')

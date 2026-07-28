@@ -4,8 +4,12 @@ import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
 import { env } from '@agent/env'
 import {
   aguiTransformerFactory,
+  clampMaxSteps,
   Graphs,
+  REACT_AGENT_MAX_STEPS_DEFAULT,
   resolveResumeFromRunAgentInput,
+  sanitizeKbId,
+  sanitizeUserPrompt,
 } from '@agent/graph'
 import { HumanMessage } from '@langchain/core/messages'
 import { Command } from '@langchain/langgraph'
@@ -18,6 +22,7 @@ interface GraphAgentDefinition {
   description: string
   resolveStreamInput: (input: RunAgentInput) => unknown
   resolveConfigurable?: (input: RunAgentInput) => Record<string, unknown>
+  resolveRecursionLimit?: (input: RunAgentInput) => number | undefined
 }
 
 const GRAPH_AGENT_DEFINITIONS = {
@@ -26,6 +31,34 @@ const GRAPH_AGENT_DEFINITIONS = {
     resolveStreamInput: input => buildMessagesInput(extractLastUserMessage(input, {
       defaultMessage: '你好，请简要介绍这个仓库的结构。',
     })),
+  },
+  reactAgent: {
+    description: '通用 ReAct（可配 prompt + ask_* + kb_search，Lab 试验台）',
+    resolveStreamInput: (input) => {
+      const resume = resolveResumeFromRunAgentInput(input)
+      if (resume != null)
+        return new Command({ resume })
+      const userText = extractLastUserMessage(input, {
+        defaultMessage: '你好',
+      })
+      return buildMessagesInput(userText)
+    },
+    resolveConfigurable: (input) => {
+      const state = input.state as {
+        userPrompt?: unknown
+        kbId?: unknown
+      } | undefined
+      return {
+        userPrompt: sanitizeUserPrompt(state?.userPrompt),
+        kbId: sanitizeKbId(state?.kbId, env.KB_COLLECTION),
+      }
+    },
+    /** 唯一环控：配置 maxSteps ≡ LangGraph recursionLimit（节点转移上限） */
+    resolveRecursionLimit: (input) => {
+      const state = input.state as { maxSteps?: unknown, maxToolRounds?: unknown } | undefined
+      // maxToolRounds：兼容旧 Lab localStorage 字段名
+      return clampMaxSteps(state?.maxSteps ?? state?.maxToolRounds ?? REACT_AGENT_MAX_STEPS_DEFAULT)
+    },
   },
   dev: {
     description: '开发演示：澄清分流 → 天气 / 订单 ReAct / HITL approval',
@@ -169,11 +202,15 @@ function createGraphAgent(name: GraphsName): GraphTransformerAguiAgent {
   const resolveConfigurable = 'resolveConfigurable' in definition
     ? definition.resolveConfigurable
     : undefined
+  const resolveRecursionLimit = 'resolveRecursionLimit' in definition
+    ? definition.resolveRecursionLimit
+    : undefined
   return new GraphTransformerAguiAgent(
     { agentId: name, description: definition.description },
     input => streamGraphAguiEvents(input, getAguiGraphApp(name), {
       resolveStreamInput: definition.resolveStreamInput,
       ...(resolveConfigurable ? { resolveConfigurable } : {}),
+      ...(resolveRecursionLimit ? { resolveRecursionLimit } : {}),
     }, name),
   )
 }

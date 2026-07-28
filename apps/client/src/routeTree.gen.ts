@@ -14,6 +14,7 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as KbRouteImport } from './routes/kb'
 import { Route as GtdRouteImport } from './routes/gtd'
+import { Route as AgentLabRouteImport } from './routes/agent-lab'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsThemeRouteImport } from './routes/settings.theme'
 
@@ -42,6 +43,11 @@ const GtdRoute = GtdRouteImport.update({
   path: '/gtd',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgentLabRoute = AgentLabRouteImport.update({
+  id: '/agent-lab',
+  path: '/agent-lab',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -55,6 +61,7 @@ const SettingsThemeRoute = SettingsThemeRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agent-lab': typeof AgentLabRoute
   '/gtd': typeof GtdRoute
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
@@ -64,6 +71,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agent-lab': typeof AgentLabRoute
   '/gtd': typeof GtdRoute
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
@@ -74,6 +82,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agent-lab': typeof AgentLabRoute
   '/gtd': typeof GtdRoute
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
@@ -85,6 +94,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/agent-lab'
     | '/gtd'
     | '/kb'
     | '/login'
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/agent-lab'
     | '/gtd'
     | '/kb'
     | '/login'
@@ -103,6 +114,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/agent-lab'
     | '/gtd'
     | '/kb'
     | '/login'
@@ -113,6 +125,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgentLabRoute: typeof AgentLabRoute
   GtdRoute: typeof GtdRoute
   KbRoute: typeof KbRoute
   LoginRoute: typeof LoginRoute
@@ -158,6 +171,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GtdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agent-lab': {
+      id: '/agent-lab'
+      path: '/agent-lab'
+      fullPath: '/agent-lab'
+      preLoaderRoute: typeof AgentLabRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -177,6 +197,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgentLabRoute: AgentLabRoute,
   GtdRoute: GtdRoute,
   KbRoute: KbRoute,
   LoginRoute: LoginRoute,

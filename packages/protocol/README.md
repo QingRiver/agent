@@ -1,14 +1,15 @@
 # @agent/protocol
 
-跨层**中性契约**：HITL 中断/恢复、KB 引文事件、Writer hunk/summary。不绑定 LangGraph、Copilot 或 CLI 实现。
+跨层**中性契约**：HITL 中断/恢复、Writer hunk/summary。不绑定 LangGraph、Copilot 或 CLI 实现。
 
 ## 导出概览
 
 | 领域 | 典型导出 |
 |------|----------|
 | HITL | `InterruptRequest` / `InterruptResponse`、`PendingInterrupt`、`ThreadState`、`toResponse` |
-| KB | `KB_CITATIONS_EVENT`、`KbCitation*` schemas |
 | Writer | `WRITER_CHANGE_SUMMARIES_EVENT`、`computeHunks`、`Hunk`、`WriterChangeSummary*` |
+
+> KB 引文已改为答案内 Markdown 链接（如 `[n](/kb?doc=…&chunk=…)`）；不再在本包导出 `KbCitation*` / 自定义事件。
 
 ## 设计要点
 
@@ -19,11 +20,11 @@
 
 ```ts
 import type { InterruptRequest, PendingInterrupt } from '@agent/protocol'
-import { KB_CITATIONS_EVENT, computeHunks } from '@agent/protocol'
+import { computeHunks } from '@agent/protocol'
 ```
 
 - **Client**：HITL 审批卡、文本编辑器 session（避免直接依赖 `@agent/graph`）
-- **Server shared / Graph / CLI**：会话 `threadState`、引文事件、interrupt 映射
+- **Server shared / Graph / CLI**：会话 `threadState`、interrupt 映射
 
 ## 常用命令
 
@@ -38,4 +39,3 @@ pnpm test
 - [wiki/LangGraph-AGUI-人在回路.md](../../wiki/LangGraph-AGUI-人在回路.md)
 - [wiki/CLI-交互实现.md](../../wiki/CLI-交互实现.md)
 - [wiki/文本编辑器.md](../../wiki/文本编辑器.md)
-- [wiki/RAG.md](../../wiki/RAG.md) — 引文事件名对齐

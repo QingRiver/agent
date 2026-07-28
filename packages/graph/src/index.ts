@@ -3,6 +3,7 @@ import { claudeAgentGraph } from './graphs/claudeAgent'
 import { devGraph } from './graphs/dev'
 import { editorChatGraph } from './graphs/editorChat'
 import { kbGraph } from './graphs/kb'
+import { reactAgentGraph } from './graphs/reactAgent'
 import { tushareGraph } from './graphs/tushare'
 import { writerGraph } from './graphs/writer'
 
@@ -10,9 +11,21 @@ export { claudeAgentGraph } from './graphs/claudeAgent'
 export { devGraph } from './graphs/dev'
 export { editorChatGraph } from './graphs/editorChat'
 export {
-  KB_CITATIONS_EVENT,
   kbGraph,
 } from './graphs/kb'
+export {
+  clampMaxSteps,
+  composeReactAgentSystemPrompt,
+  DEFAULT_REACT_AGENT_USER_PROMPT,
+  KB_SEARCH_SYSTEM_PROMPT,
+  REACT_AGENT_MAX_STEPS_DEFAULT,
+  REACT_AGENT_MAX_STEPS_MAX,
+  REACT_AGENT_MAX_STEPS_MIN,
+  REACT_AGENT_USER_PROMPT_MAX,
+  reactAgentGraph,
+  sanitizeKbId,
+  sanitizeUserPrompt,
+} from './graphs/reactAgent'
 export { tushareGraph } from './graphs/tushare'
 export {
   WRITER_CHANGE_SUMMARIES_EVENT,
@@ -44,6 +57,7 @@ export {
 
 export const Graphs = {
   claudeAgent: claudeAgentGraph,
+  reactAgent: reactAgentGraph,
   dev: devGraph,
   kb: kbGraph,
   tushare: tushareGraph,

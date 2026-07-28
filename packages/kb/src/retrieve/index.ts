@@ -1,8 +1,9 @@
 export {
+  answerWithMarkdownLinks,
   buildContextFromChunks,
-  citationsToPayload,
   type CitationValidationResult,
-  parseCitationIndices,
+  formatClarifyMarkdown,
+  kbCitationHref,
   validateCitations,
 } from './citation'
 export { hybridRetrieve, type HybridRetrieveOptions, rrfFusion } from './hybridRetriever'

@@ -128,13 +128,6 @@ export interface ThreadState {
 
 export { ASK_TOOLS_SYSTEM_PROMPT } from './askTools'
 export {
-  KB_CITATIONS_EVENT,
-  type KbCitation,
-  KbCitationSchema,
-  type KbCitationsPayload,
-  KbCitationsPayloadSchema,
-} from './kb'
-export {
   computeHunks,
   type EditorChatIntent,
   EditorChatIntentSchema,

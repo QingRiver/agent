@@ -1,5 +1,4 @@
 import type { RetrievedChunk } from '@agent/kb'
-import type { KbCitation } from '@agent/protocol'
 import type { BaseMessage } from '@langchain/core/messages'
 import { Annotation } from '@langchain/langgraph'
 
@@ -13,10 +12,6 @@ export const KbState = Annotation.Root({
     default: () => [],
   }),
   retrievedChunks: Annotation<RetrievedChunk[]>({
-    reducer: (_x, y) => y,
-    default: () => [],
-  }),
-  citations: Annotation<KbCitation[]>({
     reducer: (_x, y) => y,
     default: () => [],
   }),

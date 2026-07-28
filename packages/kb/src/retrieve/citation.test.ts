@@ -1,6 +1,12 @@
 import type { RetrievedChunk } from '../types'
 import { describe, expect, it } from 'vitest'
-import { buildContextFromChunks, validateCitations } from './citation'
+import {
+  answerWithMarkdownLinks,
+  buildContextFromChunks,
+  formatClarifyMarkdown,
+  kbCitationHref,
+  validateCitations,
+} from './citation'
 import { rrfFusion } from './hybridRetriever'
 
 const sampleChunks: RetrievedChunk[] = [
@@ -33,13 +39,46 @@ describe('citation', () => {
     const result = validateCitations(answer, sampleChunks)
     expect(result.ok).toBe(false)
     expect(result.invalidIndices).toContain(9)
-    expect(result.correctionPrompt).toContain('无效引用')
+    expect(result.correctionPrompt).toContain('Markdown 链接')
   })
 
   it('builds numbered context', () => {
     const context = buildContextFromChunks(sampleChunks)
     expect(context).toContain('[1]')
     expect(context).toContain('SKU-9001')
+  })
+
+  it('answerWithMarkdownLinks converts [n] to markdown links', () => {
+    const answer = '旗舰产品编号为 SKU-9001 [1]。'
+    const { citations } = validateCitations(answer, sampleChunks)
+    const md = answerWithMarkdownLinks(answer, citations)
+    expect(md).toContain('[1](/kb?doc=a&chunk=a%231)')
+    expect(md).not.toContain('[^1]')
+    expect(md).not.toMatch(/\[\^1\]:/)
+  })
+
+  it('answerWithMarkdownLinks skips already-linked [n](...)', () => {
+    const linked = '见 [1](/kb?doc=a&chunk=a%231) 与裸引用 [2]。'
+    const { citations } = validateCitations('见 [1] 与裸引用 [2]。', sampleChunks)
+    const md = answerWithMarkdownLinks(linked, citations)
+    expect(md).toBe('见 [1](/kb?doc=a&chunk=a%231) 与裸引用 [2](/kb?doc=b&chunk=b%231)。')
+  })
+
+  it('kbCitationHref encodes doc/chunk query', () => {
+    expect(kbCitationHref({
+      index: 1,
+      chunk_id: 'c/1',
+      source_doc_id: 'doc',
+      heading_path: [],
+      excerpt: 'x',
+      page_number: 3,
+    })).toBe('/kb?doc=doc&chunk=c%2F1&p=3')
+  })
+
+  it('formatClarifyMarkdown wraps message', () => {
+    const md = formatClarifyMarkdown('请说明要查哪家子公司。')
+    expect(md).toContain('### 需要澄清')
+    expect(md).toContain('请说明要查哪家子公司。')
   })
 })
 

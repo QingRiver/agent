@@ -10,6 +10,5 @@ export async function kbRewriteNode(state: KbStateType) {
     routeRejected: false,
     citationRetries: 0,
     retrievedChunks: [],
-    citations: [],
   }
 }

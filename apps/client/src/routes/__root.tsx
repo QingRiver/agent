@@ -43,6 +43,12 @@ function RootLayout() {
               >
                 GTD
               </Link>
+              <Link
+                to="/agent-lab"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
+              >
+                Agent Lab
+              </Link>
               <div className="ml-auto">
                 <UserAvatarMenu />
               </div>

@@ -138,6 +138,32 @@ body {
   text-decoration: underline;
 }
 
+/* KB 引文链接：源码是 [1](/kb?…)，展示为 [1]
+ * - `.prose`：KbMarkdownPreview 等本地 markdown
+ * - `[data-testid=copilot-assistant-message]`：CopilotKit 默认助手气泡（cpk:prose）
+ */
+.prose a[href^='/kb?']::before,
+[data-testid='copilot-assistant-message'] a[href^='/kb?']::before {
+  content: '[';
+}
+
+.prose a[href^='/kb?']::after,
+[data-testid='copilot-assistant-message'] a[href^='/kb?']::after {
+  content: ']';
+}
+
+.prose a[href^='/kb?'],
+[data-testid='copilot-assistant-message'] a[href^='/kb?'] {
+  text-decoration: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.prose a[href^='/kb?']:hover,
+[data-testid='copilot-assistant-message'] a[href^='/kb?']:hover {
+  text-decoration: underline;
+}
+
 /*
  * typography 默认 --tw-prose-pre-bg 是 slate/zinc-800（亮色模式也黑底）。
  * 改为跟 shadcn 语义色；hljs 只负责 token 着色，背景交给 pre。

@@ -1,11 +1,19 @@
 import type { RetrievedChunk } from '@agent/kb'
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
 import { env } from '@agent/env'
-import { retrieveAndRerank, rewriteQuery } from '@agent/kb'
+import {
+  formatClarifyMarkdown,
+  kbCitationHref,
+  retrieveAndRerank,
+  rewriteQuery,
+} from '@agent/kb'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 
 export const KB_SEARCH_TOOL_NAME = 'kb_search'
+
+/** 工具返回过长时截断，避免撑爆外层 ReAct 上下文 */
+const KB_SEARCH_RESULT_MAX_CHARS = 12_000
 
 /** 从运行时 configurable 取知识库 id，不暴露给 LLM；缺省回落到全局默认集合 */
 function getKbId(config: LangGraphRunnableConfig): string {
@@ -13,16 +21,28 @@ function getKbId(config: LangGraphRunnableConfig): string {
   return configurable?.kbId ?? env.KB_COLLECTION
 }
 
-/** 把结构化片段渲染成带引用编号的上下文文本，供 LLM 直接引用 */
+/** 片段上下文：给模型可粘贴的标准 MD 链接模板 */
 function formatChunks(chunks: RetrievedChunk[]): string {
   return chunks
-    .map((c, i) => `[${i + 1}] (doc=${c.source_doc_id} chunk=${c.chunk_id})\n${c.raw_text}`)
+    .map((c, i) => {
+      const index = i + 1
+      const href = kbCitationHref({
+        index,
+        chunk_id: c.chunk_id,
+        source_doc_id: c.source_doc_id,
+        heading_path: c.heading_path,
+        excerpt: '',
+        ...(c.page_number !== undefined ? { page_number: c.page_number } : {}),
+      })
+      const mdLink = `[${index}](${href})`
+      return `[${index}] 引用请写 \`${mdLink}\`\n${c.raw_text}`
+    })
     .join('\n\n---\n\n')
 }
 
 /**
  * 知识库检索工具：内部封装 query 改写 → 混合召回 → rerank → 兜底(clarify/retry_wider)。
- * 对调用方完全透明，返回带引用编号的上下文文本（或澄清/未命中提示），由 LLM 决定下一步。
+ * 返回文本含标准 MD 链接模板，供模型写进终答。
  */
 export const kbSearchTool = tool(
   async ({ query }, config) => {
@@ -36,11 +56,9 @@ export const kbSearchTool = tool(
         recallK: env.KB_RECALL_K,
       })
 
-      // clarify：召回质量不足以作答，把澄清建议作为工具结果回传，由 LLM 决定
       if (result.fallback?.decision === 'clarify')
-        return result.fallback.message
+        return formatClarifyMarkdown(result.fallback.message)
 
-      // retry_wider：召回过窄，扩大 recallK 再试一次并去重
       if (result.fallback?.decision === 'retry_wider') {
         const wider = await retrieveAndRerank(kbId, q, {
           skipRerank: false,
@@ -48,6 +66,8 @@ export const kbSearchTool = tool(
         })
         for (const c of wider.chunks)
           chunkMap.set(`${c.source_doc_id}:${c.chunk_id}`, c)
+        if (wider.fallback?.decision === 'clarify')
+          return formatClarifyMarkdown(wider.fallback.message)
       }
 
       for (const c of result.chunks)
@@ -57,16 +77,22 @@ export const kbSearchTool = tool(
         break
     }
 
-    if (!chunkMap.size)
+    if (!chunkMap.size) {
       return '知识库中未找到相关内容。若尚未导入文档，请先通过 /kb/ingest 导入后再试。'
+    }
 
-    return `找到 ${chunkMap.size} 条相关片段：\n\n${formatChunks([...chunkMap.values()])}`
+    const chunks = [...chunkMap.values()]
+    const body = `找到 ${chunks.length} 条相关片段：\n\n${formatChunks(chunks)}`
+    return body.length <= KB_SEARCH_RESULT_MAX_CHARS
+      ? body
+      : `${body.slice(0, KB_SEARCH_RESULT_MAX_CHARS)}\n\n…(已截断)`
   },
   {
     name: KB_SEARCH_TOOL_NAME,
     description:
       '在知识库中检索与用户问题相关的文档片段（内部含 query 改写、混合召回、rerank）。'
-      + '当需要回答涉及已导入知识库内容的问题时调用。返回带引用编号的上下文片段，请在回答中引用对应编号。',
+      + '当需要回答涉及已导入知识库内容的问题时调用。'
+      + '返回带编号的上下文；作答时在正文用工具给出的 Markdown 链接（如 [1](/kb?doc=…&chunk=…)）标注来源。',
     schema: z.object({
       query: z.string().describe('用于检索的自然语言问题或关键词'),
     }),

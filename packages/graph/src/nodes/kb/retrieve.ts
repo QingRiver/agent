@@ -2,7 +2,7 @@ import type { RetrievedChunk } from '@agent/kb'
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
 import type { KbStateType } from '../../state/kbState'
 import { env } from '@agent/env'
-import { retrieveAndRerank } from '@agent/kb'
+import { formatClarifyMarkdown, retrieveAndRerank } from '@agent/kb'
 import { AIMessage } from '@langchain/core/messages'
 import { lastHumanMessageText } from '../../utils/messageText'
 
@@ -64,7 +64,7 @@ export async function kbRetrieveNode(
     const outcome = await mergeRetrieveResult(chunkMap, kbId, query)
     if (outcome.clarifyMessage) {
       return {
-        messages: [new AIMessage(outcome.clarifyMessage)],
+        messages: [new AIMessage(formatClarifyMarkdown(outcome.clarifyMessage))],
         routeRejected: true,
       }
     }

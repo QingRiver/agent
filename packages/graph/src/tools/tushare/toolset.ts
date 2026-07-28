@@ -2,7 +2,6 @@ import type { TushareMcp } from '@agent/tools'
 import type { StructuredToolInterface } from '@langchain/core/tools'
 import process from 'node:process'
 import { createTushareMcp } from '@agent/tools'
-import { ToolNode } from '@langchain/langgraph/prebuilt'
 import { ChatOpenAI } from '@langchain/openai'
 import { ASK_TOOLS } from '../ask-tools'
 import { mcpToolsToLangchainTools } from '../mcpToLangchain'
@@ -11,7 +10,6 @@ import { createResolveStockTool } from './resolveStock'
 export interface TushareToolset {
   tools: StructuredToolInterface[]
   llmWithTools: ReturnType<ChatOpenAI['bindTools']>
-  toolNode: ToolNode
 }
 
 export async function buildTushareToolset(mcp: TushareMcp): Promise<TushareToolset> {
@@ -25,8 +23,7 @@ export async function buildTushareToolset(mcp: TushareMcp): Promise<TushareTools
     temperature: 0,
   })
   const llmWithTools = llm.bindTools(tools)
-  const toolNode = new ToolNode(tools)
-  return { tools, llmWithTools, toolNode }
+  return { tools, llmWithTools }
 }
 
 /**

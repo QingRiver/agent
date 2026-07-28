@@ -1,4 +1,3 @@
-import type { KbCitation as ProtocolKbCitation } from '@agent/protocol'
 import { z } from 'zod'
 
 export const KbChunkSchema = z.object({
@@ -35,4 +34,12 @@ export interface RetrievedChunk extends KbChunk {
   rerank_score?: number
 }
 
-export type KbCitation = ProtocolKbCitation
+/** 校验通过的引文中间结构，仅用于拼 Markdown 链接（不进协议 / 不进 graph state） */
+export interface KbCitation {
+  index: number
+  chunk_id: string
+  source_doc_id: string
+  page_number?: number
+  heading_path: string[]
+  excerpt: string
+}

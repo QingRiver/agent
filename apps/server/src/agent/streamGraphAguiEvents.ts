@@ -12,13 +12,19 @@ import { serializeAgentError } from './serializeError'
 export interface StreamGraphAguiOptions {
   resolveStreamInput: (input: RunAgentInput) => unknown
   resolveConfigurable?: (input: RunAgentInput) => Record<string, unknown>
+  /** LangGraph recursionLimit（reactAgent：与 Lab maxSteps 1:1） */
+  resolveRecursionLimit?: (input: RunAgentInput) => number | undefined
 }
 
 /** 带 `aguiTransformerFactory` 编译的图，`streamEvents(v3)` 才有 `extensions.aguiEvents` */
 export interface AguiTransformerGraphApp {
   streamEvents: (
     input: unknown,
-    options: { version: 'v3', configurable?: Record<string, unknown> },
+    options: {
+      version: 'v3'
+      configurable?: Record<string, unknown>
+      recursionLimit?: number
+    },
   ) => Promise<AguiTransformerGraphStream>
 }
 
@@ -53,9 +59,11 @@ export async function* streamGraphAguiEvents(
   try {
     const streamInput = options.resolveStreamInput(input)
     const extraConfigurable = options.resolveConfigurable?.(input) ?? {}
+    const recursionLimit = options.resolveRecursionLimit?.(input)
     const stream = await graph.streamEvents(streamInput, {
       version: 'v3',
       configurable: { thread_id: threadId, ...extraConfigurable },
+      ...(recursionLimit != null ? { recursionLimit } : {}),
     })
 
     // drain 主迭代器驱动 transformer；stream 内部节点出错时该迭代器会 reject，
