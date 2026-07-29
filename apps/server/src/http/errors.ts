@@ -1,6 +1,7 @@
 import type { Context } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { KbConflictError } from '../service/kb'
+import { TagsConflictError } from '../service/tags'
 
 /** 存在但非本人 / 不存在 → 404（不可见） */
 export function requireOwned<T extends { owner: string | null }>(row: T | null, userId: string): T {
@@ -17,7 +18,7 @@ export function notFound(message = 'Not found'): never {
 export function handleAppError(err: Error, c: Context): Response | Promise<Response> {
   if (err instanceof HTTPException)
     return c.json({ error: err.message }, err.status)
-  if (err instanceof KbConflictError)
+  if (err instanceof KbConflictError || err instanceof TagsConflictError)
     return c.json({ error: err.message }, 409)
   console.error('[server]', err)
   return c.json({ error: err.message }, 500)

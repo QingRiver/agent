@@ -57,7 +57,7 @@ describe.runIf(runE2e)('kb e2e（业务流：草稿 → 提交 → 检索）', (
 
   it('siliconFlow embedding 返回 1024 维', async () => {
     if (!env.SILICONFLOW_API_KEY)
-      throw new Error('SILICONFLOW_API_KEY 未设置，请在 .env 中配置后运行 pnpm devops e2e kb')
+      throw new Error('SILICONFLOW_API_KEY 未设置，请在 .env 中配置后运行 pnpm devops e2e kb-pipeline')
 
     const vector = await embedQuery('退款政策 SKU-9001')
     expect(vector).toHaveLength(1024)

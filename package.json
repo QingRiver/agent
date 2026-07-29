@@ -23,6 +23,7 @@
     "format": "pnpm exec eslint apps packages --fix",
     "test": "pnpm devops infra up test && vitest run",
     "test:watch": "vitest",
+    "e2e": "tsx packages/e2e/src/cli.ts e2e",
     "devops": "tsx packages/e2e/src/cli.ts"
   },
   "devDependencies": {

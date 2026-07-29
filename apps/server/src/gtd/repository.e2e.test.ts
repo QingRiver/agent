@@ -1,10 +1,10 @@
 import type { GtdDocument, Tag, Task } from '@agent/gtd'
 import { EXPLICIT_STATUS } from '@agent/gtd'
 import { eq } from 'drizzle-orm'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db/drizzle'
 import { migrateAppSchema } from '../db/migrate'
-import { gtdFolders, gtdPerspectives, gtdProjects, gtdTags, gtdTasks, gtdTaskTags } from '../db/schema'
+import { gtdFolders, gtdPerspectives, gtdProjects, gtdTasks, gtdTaskTags, tags } from '../db/schema'
 import { DrizzleGtdRepository } from './repository'
 
 const USER_ID = `gtd-e2e-${Date.now().toString(36)}`
@@ -55,8 +55,6 @@ function makeTag(overrides: Partial<Tag> = {}): Tag {
   return {
     id: 'tag-1',
     name: 'tag',
-    parentId: null,
-    order: 1,
     color: null,
     createdAt: NOW,
     updatedAt: null,
@@ -68,7 +66,7 @@ async function cleanup(): Promise<void> {
   await db.delete(gtdTasks).where(eq(gtdTasks.userId, USER_ID))
   await db.delete(gtdPerspectives).where(eq(gtdPerspectives.userId, USER_ID))
   await db.delete(gtdProjects).where(eq(gtdProjects.userId, USER_ID))
-  await db.delete(gtdTags).where(eq(gtdTags.userId, USER_ID))
+  await db.delete(tags).where(eq(tags.userId, USER_ID))
   await db.delete(gtdFolders).where(eq(gtdFolders.userId, USER_ID))
 }
 
@@ -77,6 +75,9 @@ describe('drizzleGtdRepository e2e', () => {
 
   beforeAll(async () => {
     await migrateAppSchema()
+  })
+
+  beforeEach(async () => {
     await cleanup()
   })
 
@@ -126,7 +127,7 @@ describe('drizzleGtdRepository e2e', () => {
   })
 
   it('saveTask 同步 gtd_task_tags', async () => {
-    const tagA = makeTag({ id: 'tag-a' })
+    const tagA = makeTag({ id: 'tag-a', name: 'tag-a' })
     const tagB = makeTag({ id: 'tag-b', name: 'tag-b' })
     const task = makeTask({ id: 'task-sync', tagIds: [tagA.id] })
     const doc = makeDoc({

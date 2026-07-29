@@ -23,7 +23,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import { bootstrapDatabases } from '../src/db/bootstrap'
 import { closePool, pool } from '../src/db/client'
 import { db } from '../src/db/drizzle'
-import { kbChunks, kbDocuments, kbNodes, kbTags } from '../src/db/schema'
+import { kbChunks, kbDocTags, kbDocuments, kbNodes } from '../src/db/schema'
 
 const { values } = parseArgs({
   allowPositionals: true,
@@ -71,17 +71,21 @@ async function clearByOwner(kbId: string, owner: string, dryRun: boolean): Promi
     : []
   const chunkIds = chunkRows.map(c => c.id)
 
-  const [{ count: nodeCount }] = await db
+  const nodeCountRows = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(kbNodes)
     .where(and(eq(kbNodes.kbId, kbId), eq(kbNodes.owner, owner)))
-  const [{ count: tagCount }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(kbTags)
-    .where(and(eq(kbTags.kbId, kbId), eq(kbTags.owner, owner)))
+  const nodeCount = nodeCountRows[0]?.count ?? 0
+  const tagLinkRows = docIds.length
+    ? await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(kbDocTags)
+        .where(inArray(kbDocTags.docId, docIds))
+    : []
+  const tagLinkCount = tagLinkRows[0]?.count ?? 0
 
   console.log(`[clear-kb] kbId=${kbId} owner=${owner}`)
-  console.log(`[clear-kb] docs=${docIds.length} chunks=${chunkIds.length} nodes=${nodeCount} tags=${tagCount}`)
+  console.log(`[clear-kb] docs=${docIds.length} chunks=${chunkIds.length} nodes=${nodeCount} tagLinks=${tagLinkCount}`)
 
   if (dryRun) {
     console.log('[clear-kb] dry-run，未写入')
@@ -109,7 +113,6 @@ async function clearByOwner(kbId: string, owner: string, dryRun: boolean): Promi
       and(eq(kbDocuments.kbId, kbId), eq(kbDocuments.owner, owner)),
     )
   }
-  await db.delete(kbTags).where(and(eq(kbTags.kbId, kbId), eq(kbTags.owner, owner)))
   await db.delete(kbNodes).where(and(eq(kbNodes.kbId, kbId), eq(kbNodes.owner, owner)))
 
   console.log('[clear-kb] done')
@@ -128,17 +131,21 @@ async function clearAll(kbId: string, dryRun: boolean): Promise<void> {
         .where(inArray(kbChunks.docId, docIds))
     : []
 
-  const [{ count: nodeCount }] = await db
+  const nodeCountRows = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(kbNodes)
     .where(eq(kbNodes.kbId, kbId))
-  const [{ count: tagCount }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(kbTags)
-    .where(eq(kbTags.kbId, kbId))
+  const nodeCount = nodeCountRows[0]?.count ?? 0
+  const tagLinkRows = docIds.length
+    ? await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(kbDocTags)
+        .where(inArray(kbDocTags.docId, docIds))
+    : []
+  const tagLinkCount = tagLinkRows[0]?.count ?? 0
 
   console.log(`[clear-kb] ALL kbId=${kbId}`)
-  console.log(`[clear-kb] docs=${docIds.length} chunks=${chunkRows.length} nodes=${nodeCount} tags=${tagCount}`)
+  console.log(`[clear-kb] docs=${docIds.length} chunks=${chunkRows.length} nodes=${nodeCount} tagLinks=${tagLinkCount}`)
 
   if (dryRun) {
     console.log('[clear-kb] dry-run，未写入')
@@ -147,7 +154,6 @@ async function clearAll(kbId: string, dryRun: boolean): Promise<void> {
 
   if (docIds.length)
     await db.delete(kbDocuments).where(eq(kbDocuments.kbId, kbId))
-  await db.delete(kbTags).where(eq(kbTags.kbId, kbId))
   await db.delete(kbNodes).where(eq(kbNodes.kbId, kbId))
 
   // 整库重建 Qdrant collection，避免孤儿点

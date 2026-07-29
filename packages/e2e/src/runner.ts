@@ -7,7 +7,7 @@ import { FLOWS, runFlow } from './flows'
  * 调用方（devops skill）：
  *   pnpm exec tsx packages/e2e/src/runner.ts <flow>
  * 直接使用：
- *   pnpm exec tsx packages/e2e/src/runner.ts hitl-agent
+ *   pnpm exec tsx packages/e2e/src/runner.ts tags
  *
  * 退出码：0 通过，1 失败（CI 据此判定）。每个 flow 自行打印通过标记。
  */

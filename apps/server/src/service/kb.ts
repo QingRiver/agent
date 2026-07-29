@@ -18,7 +18,8 @@ import {
 import { and, desc, eq, inArray, isNull, not, or, sql } from 'drizzle-orm'
 import JSZip from 'jszip'
 import { db } from '../db/drizzle'
-import { kbChunks, kbDocuments, kbNodes, kbTags } from '../db/schema'
+import { kbChunks, kbDocTags, kbDocuments, kbNodes } from '../db/schema'
+import { TagsService } from './tags'
 
 const SUPPORTED_EXTENSIONS = new Set(['.md', '.markdown', '.docx', '.pdf', '.html', '.htm', '.txt'])
 /** zip 导入仅收 Markdown，避免把包内杂项/Office 丢给 markitdown */
@@ -49,16 +50,6 @@ export interface KbNodeRow {
   updatedAt: number
 }
 
-export interface KbTagRow {
-  id: string
-  kbId: string
-  name: string
-  color: string | null
-  owner: string | null
-  createdAt: number
-  updatedAt: number
-}
-
 export interface KbDocSummary {
   id: string
   kbId: string
@@ -66,7 +57,7 @@ export interface KbDocSummary {
   name: string
   filename: string | null
   vdir: string | null
-  tags: string[]
+  tagIds: string[]
   owner: string | null
   summary: string | null
   keywords: string[]
@@ -167,7 +158,7 @@ function docSummary(row: typeof kbDocuments.$inferSelect): KbDocSummary {
     name: row.name,
     filename: row.filename,
     vdir: row.vdir,
-    tags: row.tags ?? [],
+    tagIds: [],
     owner: row.owner,
     summary: row.summary,
     keywords: row.keywords ?? [],
@@ -190,6 +181,31 @@ function docFull(row: typeof kbDocuments.$inferSelect): KbDoc {
     content: row.content,
     permissions: (row.permissions ?? {}) as Record<string, unknown>,
   }
+}
+
+async function attachTagIdsToDocs<T extends { id: string }>(
+  docs: T[],
+): Promise<(T & { tagIds: string[] })[]> {
+  if (!docs.length)
+    return docs.map(d => ({ ...d, tagIds: [] }))
+  const rows = await db
+    .select({ docId: kbDocTags.docId, tagId: kbDocTags.tagId })
+    .from(kbDocTags)
+    .where(inArray(kbDocTags.docId, docs.map(d => d.id)))
+  const byDoc = new Map<string, string[]>()
+  for (const row of rows) {
+    const list = byDoc.get(row.docId) ?? []
+    list.push(row.tagId)
+    byDoc.set(row.docId, list)
+  }
+  return docs.map(d => ({ ...d, tagIds: byDoc.get(d.id) ?? [] }))
+}
+
+async function attachTagIdsToDoc<T extends { id: string }>(
+  doc: T,
+): Promise<T & { tagIds: string[] }> {
+  const [withTags] = await attachTagIdsToDocs([doc])
+  return withTags!
 }
 
 /**
@@ -482,6 +498,7 @@ export class KbService {
     name: string
     content?: string
     owner?: string
+    tagIds?: string[]
     tags?: string[]
     filename?: string
   }): Promise<KbDoc> {
@@ -503,7 +520,6 @@ export class KbService {
       content,
       draftHash,
       publishedHash: null,
-      tags: args.tags ?? [],
       owner: args.owner ?? null,
       summary: null,
       keywords: [],
@@ -517,41 +533,50 @@ export class KbService {
       updatedAt: ts,
       indexedAt: null,
     })
-    // 保证 tag name 在 kb_tags 表：缺失则自动建（无 color），与 patchMeta 保持一致
-    if (args.tags != null && args.tags.length) {
-      const existing = new Set(
-        (await db
-          .select({ name: kbTags.name })
-          .from(kbTags)
-          .where(and(
-            eq(kbTags.kbId, args.kbId),
-            ...(args.owner != null ? [eq(kbTags.owner, args.owner)] : []),
-          )))
-          .map(r => r.name),
-      )
-      for (const name of args.tags) {
-        if (existing.has(name))
-          continue
-        await KbService.createTag({
-          kbId: args.kbId,
-          name,
-          ...(args.owner != null ? { owner: args.owner } : {}),
-        }).catch(() => {})
-        existing.add(name)
+
+    if (args.owner) {
+      if (args.tagIds?.length) {
+        await TagsService.setDocTagIds(id, args.owner, args.tagIds)
+      }
+      else if (args.tags?.length) {
+        const nameMap = await TagsService.ensureByNames(args.owner, args.tags)
+        const tagIds = args.tags.map(n => nameMap.get(n)).filter((tid): tid is string => !!tid)
+        await TagsService.setDocTagIds(id, args.owner, tagIds)
       }
     }
+
     const row = await db.select().from(kbDocuments).where(eq(kbDocuments.id, id)).limit(1)
-    return docFull(row[0]!)
+    return attachTagIdsToDoc(docFull(row[0]!))
   }
 
   static async getDoc(id: string): Promise<KbDoc | null> {
     const rows = await db.select().from(kbDocuments).where(eq(kbDocuments.id, id)).limit(1)
-    return rows[0] ? docFull(rows[0]) : null
+    return rows[0] ? attachTagIdsToDoc(docFull(rows[0])) : null
+  }
+
+  /** 按精确 vdir 查找文档（引文深链 path=） */
+  static async getDocByVdir(args: {
+    kbId: string
+    vdir: string
+    owner?: string
+  }): Promise<KbDoc | null> {
+    const conditions = [
+      eq(kbDocuments.kbId, args.kbId),
+      eq(kbDocuments.vdir, args.vdir),
+    ]
+    if (args.owner != null)
+      conditions.push(eq(kbDocuments.owner, args.owner))
+    const rows = await db
+      .select()
+      .from(kbDocuments)
+      .where(and(...conditions))
+      .limit(1)
+    return rows[0] ? attachTagIdsToDoc(docFull(rows[0])) : null
   }
 
   static async listDocs(args: {
     kbId: string
-    tag?: string
+    tagId?: string
     owner?: string
     vdirPrefix?: string
     parentNodeId?: string | null
@@ -559,8 +584,9 @@ export class KbService {
     const conditions = [eq(kbDocuments.kbId, args.kbId)]
     if (args.owner != null)
       conditions.push(eq(kbDocuments.owner, args.owner))
-    if (args.tag != null)
-      conditions.push(sql`${kbDocuments.tags} @> ARRAY[${args.tag}]::text[]`)
+    if (args.tagId != null) {
+      conditions.push(sql`exists (select 1 from kb_doc_tags where doc_id = ${kbDocuments.id} and tag_id = ${args.tagId})`)
+    }
     if (args.vdirPrefix != null) {
       const prefix = args.vdirPrefix
       // 精确前缀：vdir = prefix 或 vdir LIKE 'prefix/%'，避免 notes 命中 notes2
@@ -579,7 +605,7 @@ export class KbService {
       .from(kbDocuments)
       .where(and(...conditions))
       .orderBy(desc(kbDocuments.pinned), desc(kbDocuments.updatedAt))
-    return rows.map(docSummary)
+    return attachTagIdsToDocs(rows.map(docSummary))
   }
 
   static async saveDraft(id: string, patch: KbDraftUpdate): Promise<KbDoc | null> {
@@ -614,7 +640,7 @@ export class KbService {
       return null
     if (patch.name != null)
       await KbService.recomputeVdir(id)
-    return docFull(updated[0])
+    return attachTagIdsToDoc(docFull(updated[0]))
   }
 
   static async updateMeta(id: string, patch: KbMetaUpdate): Promise<KbDoc | null> {
@@ -622,7 +648,6 @@ export class KbService {
       .update(kbDocuments)
       .set({
         updatedAt: now(),
-        ...(patch.tags != null ? { tags: patch.tags } : {}),
         ...(patch.parentNodeId !== undefined ? { parentNodeId: patch.parentNodeId } : {}),
         ...(patch.name != null ? { name: patch.name } : {}),
         ...(patch.owner !== undefined ? { owner: patch.owner } : {}),
@@ -643,35 +668,14 @@ export class KbService {
       if (row.indexingStatus === 'completed')
         await setPayloadByDocId(row.kbId, id, { vdir: row.vdir })
     }
-    if (patch.tags != null && row.indexingStatus === 'completed')
-      await setPayloadByDocId(row.kbId, id, { tags: patch.tags })
 
-    // 加 tag 时保证 name 在 kb_tags 表：缺失则自动建（无 color），保证"文档标签属于标签管理的标签"
-    if (patch.tags != null && patch.tags.length) {
-      const existing = new Set(
-        (await db
-          .select({ name: kbTags.name })
-          .from(kbTags)
-          .where(and(
-            eq(kbTags.kbId, row.kbId),
-            ...(row.owner != null ? [eq(kbTags.owner, row.owner)] : []),
-          )))
-          .map(r => r.name),
-      )
-      const owner = row.owner
-      for (const name of patch.tags) {
-        if (existing.has(name))
-          continue
-        await KbService.createTag({
-          kbId: row.kbId,
-          name,
-          ...(owner != null ? { owner } : {}),
-        }).catch(() => {})
-        existing.add(name)
-      }
+    if (patch.tagIds !== undefined && row.owner) {
+      await TagsService.setDocTagIds(id, row.owner, patch.tagIds)
+      if (row.indexingStatus === 'completed')
+        await TagsService.syncQdrantTagIds(row.kbId, id)
     }
 
-    return docFull(row)
+    return attachTagIdsToDoc(docFull(row))
   }
 
   static async removeDoc(id: string): Promise<boolean> {
@@ -696,203 +700,6 @@ export class KbService {
     return deleted.length > 0
   }
 
-  static async listTags(kbId: string, owner?: string): Promise<KbTagRow[]> {
-    const rows = await db
-      .select()
-      .from(kbTags)
-      .where(and(eq(kbTags.kbId, kbId), ...(owner != null ? [eq(kbTags.owner, owner)] : [])))
-      .orderBy(kbTags.name)
-    return rows.map((r): KbTagRow => ({
-      id: r.id,
-      kbId: r.kbId,
-      name: r.name,
-      color: r.color,
-      owner: r.owner,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-    }))
-  }
-
-  /** 新建标签。同名（同 kb+owner）→ KbConflictError(409) */
-  static async createTag(args: {
-    kbId: string
-    name: string
-    color?: string
-    owner?: string
-  }): Promise<KbTagRow> {
-    const id = randomUUID()
-    const ts = now()
-    try {
-      await db.insert(kbTags).values({
-        id,
-        kbId: args.kbId,
-        name: args.name,
-        color: args.color ?? null,
-        owner: args.owner ?? null,
-        createdAt: ts,
-        updatedAt: ts,
-      })
-    }
-    catch (err) {
-      if (isUniqueViolation(err))
-        throw new KbConflictError('tag with the same name already exists')
-      throw err
-    }
-    const row = await db.select().from(kbTags).where(eq(kbTags.id, id)).limit(1)
-    const r = row[0]!
-    return {
-      id: r.id,
-      kbId: r.kbId,
-      name: r.name,
-      color: r.color,
-      owner: r.owner,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-    }
-  }
-
-  /**
-   * 重命名标签：刷所有引用旧 name 的文档 kb_documents.tags → 新 name + 已提交文档 Qdrant payload tags；
-   * 再改 kb_tags.name。同名冲突→409。返回受影响文档数。
-   */
-  static async renameTag(
-    tagId: string,
-    name: string,
-    owner: string,
-  ): Promise<{ affectedDocs: number } | null> {
-    const tag = (await db.select().from(kbTags).where(eq(kbTags.id, tagId)).limit(1))[0]
-    if (!tag || tag.owner !== owner)
-      return null
-    if (tag.name === name)
-      return { affectedDocs: 0 }
-
-    // 同 kb+owner 下同名（排除自己）→ 409
-    const dup = await db
-      .select({ id: kbTags.id })
-      .from(kbTags)
-      .where(and(
-        eq(kbTags.kbId, tag.kbId),
-        eq(kbTags.name, name),
-        not(eq(kbTags.id, tagId)),
-        ...(tag.owner != null
-          ? [eq(kbTags.owner, tag.owner)]
-          : [isNull(kbTags.owner)]),
-      ))
-      .limit(1)
-    if (dup[0])
-      throw new KbConflictError('tag with the same name already exists')
-
-    // 刷文档 tags 数组：old name → new name
-    const affected = await db.execute<{ id: string }>(sql`
-      UPDATE kb_documents
-      SET tags = ARRAY(SELECT DISTINCT CASE WHEN x = ${tag.name} THEN ${name} ELSE x END FROM unnest(tags) AS x),
-          updated_at = ${now()}
-      WHERE kb_id = ${tag.kbId} AND tags @> ARRAY[${tag.name}]::text[]
-      RETURNING id
-    `)
-    const affectedIds = (affected.rows ?? []).map(r => r.id)
-
-    // 已提交文档同步 Qdrant payload tags（已刷成新 name，查出当前 tags 再 setPayload）
-    if (affectedIds.length) {
-      const docs = await db.select({ id: kbDocuments.id })
-        .from(kbDocuments)
-        .where(and(
-          inArray(kbDocuments.id, affectedIds),
-          eq(kbDocuments.indexingStatus, 'completed'),
-        ))
-      for (const d of docs) {
-        const r = (await db
-          .select({ tags: kbDocuments.tags })
-          .from(kbDocuments)
-          .where(eq(kbDocuments.id, d.id))
-          .limit(1))[0]
-        await setPayloadByDocId(tag.kbId, d.id, { tags: r?.tags ?? [] })
-      }
-    }
-
-    await db.update(kbTags).set({ name, updatedAt: now() }).where(eq(kbTags.id, tagId))
-    return { affectedDocs: affectedIds.length }
-  }
-
-  /**
-   * 删除标签：从所有引用文档的 kb_documents.tags 移除该 name + 已提交文档 Qdrant payload 同步；
-   * 再删 kb_tags 行。**文档保留**（只去标签）。返回受影响文档数。
-   */
-  static async deleteTag(
-    tagId: string,
-    owner: string,
-    dryRun = false,
-  ): Promise<{ affectedDocs: number } | null> {
-    const tag = (await db.select().from(kbTags).where(eq(kbTags.id, tagId)).limit(1))[0]
-    if (!tag || tag.owner !== owner)
-      return null
-
-    // dryRun：只查影响数，不删
-    if (dryRun) {
-      const res = await db.execute<{ id: string }>(sql`
-        SELECT id FROM kb_documents WHERE kb_id = ${tag.kbId} AND tags @> ARRAY[${tag.name}]::text[]
-      `)
-      return { affectedDocs: (res.rows ?? []).length }
-    }
-
-    const affected = await db.execute<{ id: string }>(sql`
-      UPDATE kb_documents
-      SET tags = ARRAY(SELECT x FROM unnest(tags) AS x WHERE x <> ${tag.name}),
-          updated_at = ${now()}
-      WHERE kb_id = ${tag.kbId} AND tags @> ARRAY[${tag.name}]::text[]
-      RETURNING id
-    `)
-    const affectedIds = (affected.rows ?? []).map(r => r.id)
-
-    if (affectedIds.length) {
-      const docs = await db.select({ id: kbDocuments.id })
-        .from(kbDocuments)
-        .where(and(
-          inArray(kbDocuments.id, affectedIds),
-          eq(kbDocuments.indexingStatus, 'completed'),
-        ))
-      for (const d of docs) {
-        const r = (await db
-          .select({ tags: kbDocuments.tags })
-          .from(kbDocuments)
-          .where(eq(kbDocuments.id, d.id))
-          .limit(1))[0]
-        await setPayloadByDocId(tag.kbId, d.id, { tags: r?.tags ?? [] })
-      }
-    }
-
-    await db.delete(kbTags).where(eq(kbTags.id, tagId))
-    return { affectedDocs: affectedIds.length }
-  }
-
-  /** 改标签颜色（仅元数据，不触文档/Qdrant） */
-  static async updateTagColor(
-    tagId: string,
-    color: string | null,
-    owner: string,
-  ): Promise<KbTagRow | null> {
-    const tag = (await db.select().from(kbTags).where(eq(kbTags.id, tagId)).limit(1))[0]
-    if (!tag || tag.owner !== owner)
-      return null
-    const updated = await db
-      .update(kbTags)
-      .set({ color, updatedAt: now() })
-      .where(eq(kbTags.id, tagId))
-      .returning()
-    if (!updated[0])
-      return null
-    const r = updated[0]
-    return {
-      id: r.id,
-      kbId: r.kbId,
-      name: r.name,
-      color: r.color,
-      owner: r.owner,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-    }
-  }
-
   // ---------- 提交（异步预处理，整文档重建） ----------
 
   /**
@@ -915,7 +722,7 @@ export class KbService {
     try {
       await KbService.runCommit(claimed[0], opts.skipEnrich)
       const row = await db.select().from(kbDocuments).where(eq(kbDocuments.id, id)).limit(1)
-      return docFull(row[0]!)
+      return attachTagIdsToDoc(docFull(row[0]!))
     }
     catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -965,7 +772,7 @@ export class KbService {
     const pointIds = chunks.map(() => randomUUID())
 
     // 2. enrich（可选）
-    const tags = doc.tags ?? []
+    const tagIds = await TagsService.getDocTagIds(id)
     let summary: string | null = null
     let keywords: string[] = []
     let toc: string[] = []
@@ -975,7 +782,6 @@ export class KbService {
         filename: doc.filename ?? doc.name,
         content_hash: doc.draftHash ?? '',
         markdown: cleaned,
-        ...(tags.length ? { tags } : {}),
         ...(doc.vdir ? { vdir: doc.vdir } : {}),
         ...(doc.owner ? { owner: doc.owner } : {}),
       })
@@ -993,14 +799,14 @@ export class KbService {
       await deleteByPointIds(kbId, oldChunks.map(c => c.id))
     await db.delete(kbChunks).where(eq(kbChunks.docId, id))
 
-    // 4. embed + upsert（point id = chunk uuid，payload 含当前 vdir/owner/tags）
+    // 4. embed + upsert（point id = chunk uuid，payload 含当前 vdir/owner/tag_ids）
     if (chunks.length) {
       await embedAndUpsert({
         kbId,
         docId: id,
         ...(doc.vdir != null ? { vdir: doc.vdir } : {}),
         ...(doc.owner != null ? { owner: doc.owner } : {}),
-        ...(tags.length ? { tags } : {}),
+        ...(tagIds.length ? { tagIds } : {}),
         chunks,
         pointIds,
       })

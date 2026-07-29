@@ -4,9 +4,9 @@ import { fail } from './docker'
 import { E2E_RUNNER_TS, REPO_ROOT } from './paths'
 
 /**
- * e2e 编排：seed / vitest / agent flow 的执行入口。
+ * e2e 编排：seed / vitest / 真实 HTTP/SSE flow 的执行入口。
  *
- * 注意：agent flow 的测试实现已迁入 packages/e2e/src/flows/，经 runner.ts 调度；
+ * 注意：真实 HTTP/SSE flow 的测试实现位于 packages/e2e/src/flows/，经 runner.ts 调度；
  * 本文件只负责 spawn（pnpm vitest / server seed tsx / e2e runner），不含任何 flow 逻辑与业务断言。
  */
 
@@ -33,10 +33,16 @@ export function e2eKbSeed(): void {
   runInRepo('pnpm', ['--filter', 'server', 'exec', 'tsx', 'scripts/seed-kb.ts'])
 }
 
-/** kb 管线 e2e（apps/server vitest，E2E=1，需 infra up kb + postgres） */
-export function e2eKb(): void {
+/** KB 内部管线集成测试（不是 HTTP E2E）。 */
+export function e2eKbPipeline(): void {
   console.log('[devops] e2e kb pipeline (vitest)')
   runInRepo('pnpm', ['exec', 'vitest', 'run', 'apps/server/src/kb.e2e.test.ts'], { E2E: '1' })
+}
+
+/** shared tags 真实 HTTP flow（需 pnpm dev + e2e auth）。 */
+export function e2eTags(): void {
+  console.log('[devops] e2e shared tags HTTP flow (需要 server: pnpm dev)')
+  runInRepo('pnpm', ['exec', 'tsx', E2E_RUNNER_TS, 'tags'])
 }
 
 /** kb agent SSE flow（需 pnpm dev + e2e seed + infra up kb） */
@@ -63,14 +69,17 @@ export function e2eHitlAgent(): void {
   runInRepo('pnpm', ['exec', 'tsx', E2E_RUNNER_TS, 'hitl-agent'])
 }
 
-/** e2e all：seed → kb vitest → hitl vitest（不含 agent SSE，需另起 dev） */
+/** 全部 E2E：完成 seed 后依次执行集成、HTTP/SSE 与浏览器流程。 */
 export function e2eAll(): void {
-  console.log('[devops] e2e all: seed → kb vitest → hitl vitest\n')
+  console.log('[devops] e2e all: seed → kb pipeline → tags → hitl graph → kb agent → hitl agent → ui\n')
   e2eAuthSeed()
   e2eKbSeed()
-  e2eKb()
+  e2eKbPipeline()
+  e2eTags()
   e2eHitl()
-  console.log('\n[devops] 跳过 agent SSE（需另开终端 `pnpm dev` 后执行 `pnpm devops e2e agent` 或 `hitl-agent`）')
+  e2eKbAgent()
+  e2eHitlAgent()
+  e2eUi()
 }
 
 /** 清空知识库可见数据（按 email/owner，或 --all 整库） */
@@ -96,7 +105,17 @@ export function e2eClearKb(opts: {
   runInRepo('pnpm', args)
 }
 
-export type E2eTarget = 'all' | 'seed' | 'auth' | 'kb' | 'hitl' | 'agent' | 'hitl-agent' | 'ui' | 'clear-kb'
+export type E2eTarget
+  = | 'all'
+    | 'seed'
+    | 'auth'
+    | 'kb-pipeline'
+    | 'tags'
+    | 'hitl'
+    | 'agent'
+    | 'hitl-agent'
+    | 'ui'
+    | 'clear-kb'
 
 export function runE2e(
   target: E2eTarget,
@@ -119,8 +138,11 @@ export function runE2e(
     case 'auth':
       e2eAuthSeed()
       break
-    case 'kb':
-      e2eKb()
+    case 'kb-pipeline':
+      e2eKbPipeline()
+      break
+    case 'tags':
+      e2eTags()
       break
     case 'hitl':
       e2eHitl()

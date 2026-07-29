@@ -138,21 +138,6 @@ export function validateInvariants(rowStore: RowStore): InvariantViolation[] {
     }
   }
 
-  const tagParentOf = new Map(tags.map(t => [t.id, t.data.parentId]))
-  for (const tag of tags) {
-    if (tag.data.parentId && !tagIds.has(tag.data.parentId)) {
-      violations.push({
-        code: 'broken_reference',
-        message: `Tag ${tag.id} parentId 悬空`,
-        entityId: tag.id,
-      })
-    }
-    const cycle = detectCycle(tag.id, tagParentOf, 'Tag')
-    if (cycle) {
-      violations.push(cycle)
-    }
-  }
-
   const orderKeys = new Set<string>()
   for (const t of tasks) {
     const key = `${t.data.projectId ?? ''}|${t.data.parentId ?? ''}|${t.data.order}`

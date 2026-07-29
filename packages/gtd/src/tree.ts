@@ -24,17 +24,6 @@ export interface FolderTree {
   byId: Map<string, FolderNode>
 }
 
-export interface TagNode {
-  tag: EntityRowOf<'tag'>
-  parent: TagNode | null
-  children: TagNode[]
-}
-
-export interface TagTree {
-  roots: TagNode[]
-  byId: Map<string, TagNode>
-}
-
 const byOrder = (a: { order: number }, b: { order: number }) => a.order - b.order
 
 /** 由扁平 tasks 按 parentId 构建树（根为 parentId 为 null 或悬空的顶层 action） */
@@ -87,29 +76,9 @@ export function buildFolderTree(folders: EntityRowOf<'folder'>[]): FolderTree {
   return { roots, byId }
 }
 
-/** 由扁平 tags 按 parentId 构建 Tag 树 */
-export function buildTagTree(tags: EntityRowOf<'tag'>[]): TagTree {
-  const byId = new Map<string, TagNode>()
-  for (const tag of tags)
-    byId.set(tag.id, { tag, parent: null, children: [] })
-  const roots: TagNode[] = []
-  for (const tag of tags) {
-    const node = byId.get(tag.id)!
-    const parentId = tag.data.parentId
-    if (parentId && byId.has(parentId)) {
-      const parent = byId.get(parentId)!
-      node.parent = parent
-      parent.children.push(node)
-    }
-    else {
-      roots.push(node)
-    }
-  }
-  const sortNode = (a: TagNode, b: TagNode) => byOrder(a.tag.data, b.tag.data)
-  roots.sort(sortNode)
-  for (const node of byId.values())
-    node.children.sort(sortNode)
-  return { roots, byId }
+/** 扁平 tag 列表，按 name 排序 */
+export function sortTags(tags: EntityRowOf<'tag'>[]): EntityRowOf<'tag'>[] {
+  return [...tags].sort((a, b) => a.data.name.localeCompare(b.data.name))
 }
 
 /** 返回 taskId 的全部祖先 Task（从父到根） */

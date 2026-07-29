@@ -29,7 +29,7 @@ const baseContext = {
     { id: 'p-dup-b', name: '重复' },
   ],
   folders: [{ id: 'f1', name: '家庭', parentId: null }],
-  tags: [{ id: 't1', name: '紧急', parentId: null }],
+  tags: [{ id: 't1', name: '紧急' }],
   builtinPerspectiveIds: ['inbox'],
 }
 

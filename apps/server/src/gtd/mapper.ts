@@ -13,8 +13,8 @@ import type {
   gtdFolders,
   gtdPerspectives,
   gtdProjects,
-  gtdTags,
   gtdTasks,
+  tags,
 } from '../db/schema'
 import {
   AttachmentSchema,
@@ -27,14 +27,14 @@ import {
 } from '@agent/gtd'
 
 type FolderRow = typeof gtdFolders.$inferSelect
-type TagRow = typeof gtdTags.$inferSelect
+type TagRow = typeof tags.$inferSelect
 type ProjectRow = typeof gtdProjects.$inferSelect
 type TaskRow = typeof gtdTasks.$inferSelect
 type PerspectiveRow = typeof gtdPerspectives.$inferSelect
 type AttachmentRow = typeof gtdAttachments.$inferSelect
 
 type FolderInsert = typeof gtdFolders.$inferInsert
-type TagInsert = typeof gtdTags.$inferInsert
+type TagInsert = typeof tags.$inferInsert
 type ProjectInsert = typeof gtdProjects.$inferInsert
 type TaskInsert = typeof gtdTasks.$inferInsert
 type PerspectiveInsert = typeof gtdPerspectives.$inferInsert
@@ -75,8 +75,6 @@ export function rowToTag(row: TagRow): Tag {
   return TagSchema.parse({
     id: row.id,
     name: row.name,
-    parentId: row.parentId,
-    order: row.sortOrder,
     color: row.color,
     createdAt: row.createdAt.toISOString(),
     updatedAt: toISO(row.updatedAt),
@@ -87,10 +85,9 @@ export function tagToRow(tag: Tag, userId: string): TagInsert {
   return {
     id: tag.id,
     userId,
-    parentId: tag.parentId,
     name: tag.name,
     color: tag.color,
-    sortOrder: tag.order,
+    deleted: false,
     createdAt: new Date(tag.createdAt),
     updatedAt: toDate(tag.updatedAt),
   }

@@ -23,7 +23,8 @@ Agent 执行启停、健康检查、E2E 时**必须**走此入口，不要直接
 | 启动全部 infra | `pnpm devops infra up all` |
 | 健康检查 | `pnpm devops infra status kb` |
 | 停止知识库 infra | `pnpm devops infra down kb` |
-| E2E 账号 + kb 数据 + vitest | `pnpm devops e2e all` |
+| 所有 E2E | `pnpm e2e`（等同 `pnpm devops e2e all`） |
+| Shared tags 真实 HTTP 全流程 | `pnpm devops e2e tags` |
 | 清空某用户可见知识库（便于重导入） | `pnpm devops e2e clear-kb --email <addr>` |
 | kb agent SSE（需 server） | `pnpm devops e2e agent` |
 | hitl 图 vitest | `pnpm devops e2e hitl` |
@@ -45,11 +46,12 @@ Agent 执行启停、健康检查、E2E 时**必须**走此入口，不要直接
 | `all` | postgres + qdrant + markitdown + qlib + redis |
 
 ```bash
-pnpm devops infra up kb [--build]   # --build 强制 rebuild 镜像
+pnpm devops infra up kb [--build]   # 已健康则跳过；--build 强制 rebuild 本地镜像
 pnpm devops infra down all
 pnpm devops infra status all
 ```
 
+`up`：容器已 running 且健康则跳过；本地 Dockerfile 服务（markitdown / qlib）仅在镜像缺失或显式 `--build` 时构建。  
 `status` 会检查 Docker 容器是否 running，并对 HTTP `/health(z)` 探活；postgres / redis 用容器内命令（`pg_isready` / `redis-cli ping`）。
 
 ## e2e
@@ -62,14 +64,17 @@ pnpm devops infra status all
 > 前置：`pnpm devops infra up postgres`（E2E 账号 + server 持久化都落库于此）。
 
 ```bash
-pnpm devops e2e all          # auth seed → kb seed → kb/hitl vitest（不含 agent SSE）
+pnpm e2e                     # 默认 all：seed → kb pipeline → tags → hitl → agents → ui
+pnpm e2e tags                # 也可直接传子命令；完整列表见 `pnpm devops e2e --help` / 下方
+pnpm devops e2e all          # 同上 all
 pnpm devops e2e seed         # auth seed + kb seed
 pnpm devops e2e auth         # 写入 E2E 测试账号到 postgres（需 infra up postgres）
 pnpm devops e2e clear-kb --email you@example.com   # 清空该用户可见 KB（PG+Qdrant）
 pnpm devops e2e clear-kb --owner <userId>          # 同上，按 user id
 pnpm devops e2e clear-kb --all                     # 清空整库 env.KB_COLLECTION（重建 Qdrant collection）
 pnpm devops e2e clear-kb --email x --dry-run       # 只打印将删数量
-pnpm devops e2e kb           # apps/server kb.e2e（E2E=1，需 infra up kb + postgres）
+pnpm devops e2e kb-pipeline  # apps/server KB 内部管线测试（非 HTTP）
+pnpm devops e2e tags         # KB + GTD + shared tags 真实 HTTP（需 pnpm dev）
 pnpm devops e2e hitl         # packages/graph hitlGraph vitest（不需 server）
 pnpm devops e2e agent        # kb CopilotKit SSE（需 pnpm dev + infra up kb + e2e seed）
 pnpm devops e2e hitl-agent   # hitl 4 步 interrupt + resume SSE（需 pnpm dev + e2e auth）
@@ -82,7 +87,8 @@ pnpm devops e2e ui           # playwright UI（需 pnpm dev + e2e auth）
 
 推荐顺序：
 
-- **kb**：`infra up kb` → `e2e seed` → `e2e kb` → `dev` → `e2e agent`
+- **kb**：`infra up kb` → `e2e seed` → `e2e kb-pipeline` → `dev` → `e2e agent`
+- **tags**：`infra up postgres` → `e2e auth` → `dev` → `e2e tags`
 - **hitl**：`e2e auth` → `e2e hitl`（图级）→ `dev` → `e2e hitl-agent`（SSE 全链路）
 
 ## qlib

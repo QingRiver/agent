@@ -37,7 +37,7 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
   }
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col border-l border-border bg-card">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 border-b border-border p-3">
         <Search className="size-4 text-muted-foreground" />
         <span className="flex-1 text-sm font-medium text-foreground">召回测试</span>
@@ -144,6 +144,6 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
           <p className="text-sm text-muted-foreground">提交文档后在此试检索。</p>
         )}
       </div>
-    </aside>
+    </div>
   )
 }

@@ -147,7 +147,7 @@ function perspectiveValidationContext(store: RowStore) {
     timeZone: new Intl.DateTimeFormat().resolvedOptions().timeZone,
     projects: store.liveProjects().map(p => ({ id: p.id, name: p.data.name })),
     folders: store.liveFolders().map(f => ({ id: f.id, name: f.data.name, parentId: f.data.parentId })),
-    tags: store.liveTags().map(t => ({ id: t.id, name: t.data.name, parentId: t.data.parentId })),
+    tags: store.liveTags().map(t => ({ id: t.id, name: t.data.name })),
     builtinPerspectiveIds: builtinPerspectives().map(p => p.id),
   }
 }
@@ -928,17 +928,15 @@ export class GtdStore {
 
   // ---------- Tags ----------
 
-  static addTag(name: string, parentId: string | null = null): void {
+  static addTag(name: string): void {
     const trimmed = name.trim()
     if (!trimmed)
       return
-    GtdStore.applyLocal((store) => {
+    GtdStore.applyLocal(() => {
       const now = nowIso()
       const id = newId()
       const data = {
         name: trimmed,
-        parentId,
-        order: nextOrder(store.liveTags().filter(t => t.data.parentId === parentId).map(t => ({ id: t.id, order: t.data.order }))),
         color: null,
         createdAt: now,
         updatedAt: null,
@@ -956,46 +954,12 @@ export class GtdStore {
 
   static removeTag(tagId: string): void {
     GtdStore.applyLocal((store) => {
-      // 收集 tag 及其子孙（递归）
-      const removeIds = new Set<string>()
-      const collect = (id: string) => {
-        removeIds.add(id)
-        for (const t of store.liveTags()) {
-          if (t.data.parentId === id)
-            collect(t.id)
-        }
-      }
-      collect(tagId)
-      const items: Array<GtdMutation | GtdCommand> = [...removeIds].map(id => cmd({ type: 'delete_tag', payload: { tagId: id } }))
-      // 清理 project.defaultTagIds（行模型 defaultTagIds 在 project.data，未清不影响 invariant 但保持一致）
+      const items: Array<GtdMutation | GtdCommand> = [cmd({ type: 'delete_tag', payload: { tagId } })]
       const now = nowIso()
       for (const p of store.liveProjects()) {
-        if (p.data.defaultTagIds.some(t => removeIds.has(t))) {
-          items.push(upsertMut('project', p.id, { defaultTagIds: p.data.defaultTagIds.filter(t => !removeIds.has(t)), updatedAt: now }))
+        if (p.data.defaultTagIds.includes(tagId)) {
+          items.push(upsertMut('project', p.id, { defaultTagIds: p.data.defaultTagIds.filter(t => t !== tagId), updatedAt: now }))
         }
-      }
-      return items
-    })
-  }
-
-  static reorderTag(
-    tagId: string,
-    target: { beforeId: string | null, afterId: string | null },
-  ): void {
-    GtdStore.applyLocal((store) => {
-      const tag = store.findLive('tag', tagId)
-      if (!tag)
-        throw new Error('标签不存在')
-      const siblings = store.liveTags().filter(t =>
-        t.id !== tagId && t.data.parentId === tag.data.parentId,
-      ).map(t => ({ id: t.id, order: t.data.order }))
-      const result = targetOrder(siblings, target.beforeId, target.afterId)
-      const now = nowIso()
-      const items: GtdMutation[] = [upsertMut('tag', tagId, { order: result.order, updatedAt: now })]
-      for (const sib of siblings) {
-        const order = result.reindexed.get(sib.id)
-        if (order != null)
-          items.push(upsertMut('tag', sib.id, { order, updatedAt: now }))
       }
       return items
     })
@@ -1113,7 +1077,7 @@ function remapDocIds(doc: GtdDocument): GtdDocument {
 
   const folders = doc.folders.map(f => ({ ...f, id: remap(f.id), parentId: remapOpt(f.parentId) }))
   const projects = doc.projects.map(p => ({ ...p, id: remap(p.id), folderId: remapOpt(p.folderId) }))
-  const tags = doc.tags.map(t => ({ ...t, id: remap(t.id), parentId: remapOpt(t.parentId) }))
+  const tags = doc.tags.map(t => ({ ...t, id: remap(t.id) }))
   const repeatRules = doc.repeatRules.map(r => ({ ...r, id: remap(r.id) }))
   const tasks = doc.tasks.map(t => ({
     ...t,

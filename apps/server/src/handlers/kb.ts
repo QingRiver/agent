@@ -4,19 +4,15 @@ import type {
   KbCommit,
   KbCreateDoc,
   KbCreateNode,
-  KbCreateTag,
-  KbDeleteTag,
   KbDraftUpdate,
+  KbGetDocByVdir,
   KbIngestText,
   KbListDocsRequest,
   KbListNodesRequest,
-  KbListTagsRequest,
   KbMetaUpdate,
   KbMoveNode,
   KbQueryRequest,
   KbRenameNode,
-  KbRenameTag,
-  KbUpdateTagColor,
 } from '../../shared/kb'
 import type { AppEnv, AuthUser } from '../types'
 import { Buffer } from 'node:buffer'
@@ -81,7 +77,7 @@ export class KbHandlers {
     const docs = await KbService.listDocs({
       kbId: KbService.resolveKbId(q.kbId),
       owner,
-      ...(q.tag != null ? { tag: q.tag } : {}),
+      ...(q.tagId != null ? { tagId: q.tagId } : {}),
       ...(q.vdirPrefix != null ? { vdirPrefix: q.vdirPrefix } : {}),
       ...(q.parentNodeId !== undefined ? { parentNodeId: q.parentNodeId } : {}),
     })
@@ -93,6 +89,18 @@ export class KbHandlers {
     return c.json({ doc })
   }
 
+  static async getDocByVdir(c: Context<AppEnv>, user: AuthUser, req: KbGetDocByVdir) {
+    const doc = requireOwned(
+      await KbService.getDocByVdir({
+        kbId: KbService.resolveKbId(req.kbId),
+        vdir: req.vdir,
+        owner: user.id,
+      }),
+      user.id,
+    )
+    return c.json({ doc })
+  }
+
   static async createDoc(c: Context<AppEnv>, user: AuthUser, req: KbCreateDoc) {
     const doc = await KbService.createDraft({
       kbId: KbService.resolveKbId(req.kbId),
@@ -100,7 +108,7 @@ export class KbHandlers {
       name: req.name,
       ...(req.content != null ? { content: req.content } : {}),
       owner: user.id,
-      tags: req.tags,
+      tagIds: req.tagIds,
     })
     return c.json({ doc })
   }
@@ -139,47 +147,6 @@ export class KbHandlers {
     if (!(await KbService.removeDoc(id)))
       notFound()
     return c.json({ ok: true })
-  }
-
-  static async listTags(c: Context<AppEnv>, user: AuthUser, req: KbListTagsRequest) {
-    const tags = await KbService.listTags(KbService.resolveKbId(req.kbId), user.id)
-    return c.json({ tags })
-  }
-
-  static async createTag(c: Context<AppEnv>, user: AuthUser, req: KbCreateTag) {
-    const tag = await KbService.createTag({
-      kbId: KbService.resolveKbId(req.kbId),
-      name: req.name,
-      ...(req.color != null ? { color: req.color } : {}),
-      owner: user.id,
-    })
-    return c.json({ tag })
-  }
-
-  static async renameTag(c: Context<AppEnv>, user: AuthUser, id: string, req: KbRenameTag) {
-    const result = await KbService.renameTag(id, req.name, user.id)
-    if (!result)
-      notFound()
-    return c.json({ affectedDocs: result.affectedDocs })
-  }
-
-  static async deleteTag(c: Context<AppEnv>, user: AuthUser, id: string, req: KbDeleteTag) {
-    const result = await KbService.deleteTag(id, user.id, req.dryRun === true)
-    if (!result)
-      notFound()
-    return c.json({ affectedDocs: result.affectedDocs })
-  }
-
-  static async updateTagColor(
-    c: Context<AppEnv>,
-    user: AuthUser,
-    id: string,
-    req: KbUpdateTagColor,
-  ) {
-    const tag = await KbService.updateTagColor(id, req.color, user.id)
-    if (!tag)
-      notFound()
-    return c.json({ tag })
   }
 
   // ---------- 引入（markitdown → 草稿） ----------

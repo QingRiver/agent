@@ -25,7 +25,7 @@ export const PROMPT_FIXTURE_CONTEXT = {
     { id: 'folder-home', name: '家庭', parentId: null },
   ],
   tags: [
-    { id: 'tag-urgent', name: '紧急', parentId: null },
+    { id: 'tag-urgent', name: '紧急' },
   ],
   builtinPerspectiveIds: ['inbox', 'projects', 'tags', 'forecast', 'flagged', 'review', 'completed', 'predicted'],
 }

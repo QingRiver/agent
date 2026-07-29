@@ -10,7 +10,9 @@
     "tc": "pnpm -w run tsc-go --noEmit",
     "e2e:ui": "playwright test"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@agent/gtd": "workspace:*"
+  },
   "devDependencies": {
     "@playwright/test": "catalog:",
     "@types/node": "catalog:"

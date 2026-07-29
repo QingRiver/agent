@@ -21,11 +21,12 @@ infra — Docker 基础设施
   down [postgres|qdrant|markitdown|qlib|kb|test|all]            停止
   status [postgres|qdrant|markitdown|qlib|kb|test|all]          容器 + 健康检查
 
-e2e — 端到端测试与种子数据
-  all              auth seed + kb seed + kb/hitl vitest（不含 agent SSE）
+e2e — 真实 HTTP/SSE 流程、集成测试与种子数据
+  all              所有 E2E：kb pipeline、tags、hitl、agent、hitl-agent、ui
   seed             auth seed + kb seed
   auth             写入 E2E 测试账号到 postgres（需 infra up postgres）
-  kb               kb 管线 vitest（需 infra up kb）
+  kb-pipeline       KB 内部管线 vitest（非 HTTP，需 infra up kb）
+  tags             shared tags 真实 HTTP 全流程（需 pnpm dev + e2e auth）
   hitl             hitl 图 vitest（不需 server）
   agent            kb agent CopilotKit SSE（需 pnpm dev + e2e seed）
   hitl-agent       hitl agent SSE 全链路（需 pnpm dev + e2e auth）
@@ -40,6 +41,8 @@ qlib — 行情数据（委托 scripts/qlib-*.ts）
   unpack [opts]    解包 source
 
 示例:
+  pnpm e2e                  # 默认跑所有 E2E
+  pnpm e2e tags
   pnpm devops infra up kb
   pnpm devops infra status all
   pnpm devops e2e all

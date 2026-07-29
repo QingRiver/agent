@@ -15,9 +15,6 @@ export type KbDocSummary = KbDocsResponse['docs'][number]
 export type KbDocResponse = InferResponseType<Kb['documents'][':id']['get']['$post'], 200>
 export type KbDoc = KbDocResponse['doc']
 
-export type KbTagsResponse = InferResponseType<Kb['tags']['list']['$post'], 200>
-export type KbTagRow = KbTagsResponse['tags'][number]
-
 export type KbIngestResponse = InferResponseType<Kb['ingest']['files']['$post'], 200>
 export type KbIngestResultItem = KbIngestResponse['items'][number]
 
@@ -71,12 +68,17 @@ export class KbApi {
     return (await successData(res)).doc
   }
 
+  static async getDocByVdir(kbId: string, vdir: string) {
+    const res = await api.kb.documents['by-vdir'].$post({ json: { kbId, vdir } })
+    return (await successData(res)).doc
+  }
+
   static async createDoc(
     kbId: string,
     body: {
       name: string
       content?: string
-      tags?: string[]
+      tagIds?: string[]
       parentNodeId?: string | null
     },
   ) {
@@ -92,7 +94,7 @@ export class KbApi {
   static async updateMeta(
     id: string,
     body: {
-      tags?: string[]
+      tagIds?: string[]
       parentNodeId?: string | null
       name?: string
       visibility?: string
@@ -116,33 +118,6 @@ export class KbApi {
   static async deleteDoc(id: string) {
     const res = await api.kb.documents[':id'].delete.$post({ param: { id } })
     await successData(res)
-  }
-
-  // ---------- 标签 ----------
-
-  static async listTags(kbId: string) {
-    const res = await api.kb.tags.list.$post({ json: { kbId } })
-    return (await successData(res)).tags
-  }
-
-  static async createTag(kbId: string, body: { name: string, color?: string }) {
-    const res = await api.kb.tags.create.$post({ json: { kbId, ...body } })
-    return (await successData(res)).tag
-  }
-
-  static async renameTag(id: string, name: string) {
-    const res = await api.kb.tags[':id'].rename.$post({ param: { id }, json: { name } })
-    return (await successData(res)).affectedDocs
-  }
-
-  static async deleteTag(id: string, dryRun = false) {
-    const res = await api.kb.tags[':id'].delete.$post({ param: { id }, json: { dryRun } })
-    return (await successData(res)).affectedDocs
-  }
-
-  static async updateTagColor(id: string, color: string | null) {
-    const res = await api.kb.tags[':id']['update-color'].$post({ param: { id }, json: { color } })
-    return (await successData(res)).tag
   }
 
   // ---------- 引入 ----------

@@ -175,7 +175,8 @@ pnpm --filter server db:studio    # Drizzle Studio
 pnpm run lint                     # ESLint
 pnpm tc                           # 类型检查
 pnpm test                         # Vitest（含 kb.e2e.test.ts）
-pnpm devops e2e kb                # 知识库 E2E
+pnpm devops e2e kb-pipeline       # 知识库内部管线测试（非 HTTP）
+pnpm devops e2e tags              # KB + GTD + shared tags 真实 HTTP E2E
 ```
 
 ## 相关文档

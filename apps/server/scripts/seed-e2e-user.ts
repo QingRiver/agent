@@ -23,8 +23,6 @@ async function main() {
       body: E2E_USER,
     })
     console.log('[devops/e2e/auth] created user', created.user.id, created.user.email)
-    if ('token' in created && created.token)
-      console.log('[devops/e2e/auth] bearer token (dev only):', created.token)
     return
   }
   catch (error) {
@@ -35,8 +33,6 @@ async function main() {
 
   const signedIn = await signIn()
   console.log('[devops/e2e/auth] user already exists:', signedIn.user.id, signedIn.user.email)
-  if ('token' in signedIn && signedIn.token)
-    console.log('[devops/e2e/auth] bearer token (dev only):', signedIn.token)
 }
 
 main().catch((error: unknown) => {

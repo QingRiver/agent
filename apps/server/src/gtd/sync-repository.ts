@@ -24,9 +24,9 @@ import {
   gtdProjects,
   gtdSyncClocks,
   gtdSyncMutations,
-  gtdTags,
   gtdTasks,
   gtdTaskTags,
+  tags,
 } from '../db/schema'
 
 /** ISO 字符串 → Date（drizzle timestamptz mode:'date' 期望 Date 对象） */
@@ -128,8 +128,6 @@ function rowToTagEntity(row: TagRow): EntityRow {
     deleted: row.deleted,
     data: {
       name: row.name,
-      parentId: row.parentId,
-      order: row.sortOrder,
       color: row.color,
       createdAt: row.createdAt.toISOString(),
       updatedAt: toISO(row.updatedAt),
@@ -336,26 +334,22 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
     }
     case 'tag': {
       const d = row.data
-      await tx.insert(gtdTags)
+      await tx.insert(tags)
         .values({
           id: row.id,
           userId: row.userId,
-          parentId: d.parentId,
           name: d.name,
           color: d.color,
-          sortOrder: d.order,
           syncId: row.syncId,
           deleted: row.deleted,
           createdAt: toDate(d.createdAt),
           updatedAt: toDate(d.updatedAt),
         })
         .onConflictDoUpdate({
-          target: gtdTags.id,
+          target: tags.id,
           set: {
-            parentId: d.parentId,
             name: d.name,
             color: d.color,
-            sortOrder: d.order,
             syncId: row.syncId,
             deleted: row.deleted,
             updatedAt: toDate(d.updatedAt),
@@ -438,9 +432,9 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
 
 /** 拉取增量：各表 sync_id > lastSyncId（含软删）→ EntityRow[]。 */
 export async function pullFromPg(userId: string, lastSyncId: number): Promise<PullResponse> {
-  const [folders, tags, projects, perspectives, tasks, taskTags, attachments, clockRow] = await Promise.all([
+  const [folders, tagRows, projects, perspectives, tasks, taskTags, attachments, clockRow] = await Promise.all([
     db.select().from(gtdFolders).where(and(eq(gtdFolders.userId, userId), gt(gtdFolders.syncId, lastSyncId))),
-    db.select().from(gtdTags).where(and(eq(gtdTags.userId, userId), gt(gtdTags.syncId, lastSyncId))),
+    db.select().from(tags).where(and(eq(tags.userId, userId), gt(tags.syncId, lastSyncId))),
     db.select().from(gtdProjects).where(and(eq(gtdProjects.userId, userId), gt(gtdProjects.syncId, lastSyncId))),
     db.select().from(gtdPerspectives).where(and(eq(gtdPerspectives.userId, userId), gt(gtdPerspectives.syncId, lastSyncId))),
     db.select().from(gtdTasks).where(and(eq(gtdTasks.userId, userId), gt(gtdTasks.syncId, lastSyncId))),
@@ -451,7 +445,7 @@ export async function pullFromPg(userId: string, lastSyncId: number): Promise<Pu
 
   const changes: EntityRow[] = [
     ...folders.map(rowToFolderEntity),
-    ...tags.map(rowToTagEntity),
+    ...tagRows.map(rowToTagEntity),
     ...projects.map(rowToProjectEntity),
     ...perspectives.map(rowToPerspectiveEntity),
     ...tasks.map(rowToTaskEntity),
@@ -524,7 +518,7 @@ export async function applyPushToPg(userId: string, req: PushRequest): Promise<P
  */
 async function loadSyncStateInTx(tx: Tx, userId: string, reqIds: string[]): Promise<SyncState> {
   const folders = await tx.select().from(gtdFolders).where(eq(gtdFolders.userId, userId))
-  const tags = await tx.select().from(gtdTags).where(eq(gtdTags.userId, userId))
+  const tagsRows = await tx.select().from(tags).where(eq(tags.userId, userId))
   const projects = await tx.select().from(gtdProjects).where(eq(gtdProjects.userId, userId))
   const perspectives = await tx.select().from(gtdPerspectives).where(eq(gtdPerspectives.userId, userId))
   const tasks = await tx.select().from(gtdTasks).where(eq(gtdTasks.userId, userId))
@@ -534,7 +528,7 @@ async function loadSyncStateInTx(tx: Tx, userId: string, reqIds: string[]): Prom
 
   const rows: EntityRow[] = [
     ...folders.map(rowToFolderEntity),
-    ...tags.map(rowToTagEntity),
+    ...tagsRows.map(rowToTagEntity),
     ...projects.map(rowToProjectEntity),
     ...perspectives.map(rowToPerspectiveEntity),
     ...tasks.map(rowToTaskEntity),

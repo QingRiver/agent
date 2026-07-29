@@ -74,16 +74,26 @@ export function e2eHeaders(token: string, extra?: HeadersInit): Headers {
 }
 
 /**
- * 认证 JSON fetch：自动注入 bearer/Origin/Content-Type，非 2xx 抛错并带响应体。
- * @example const list = await e2eFetch<{ conversations: T[] }>(token, '/conversations/list')
+ * 认证 HTTP 请求：保留原始 Response，供 e2e 断言 404/409 等状态码。
  */
-export async function e2eFetch<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
+export async function e2eRequest(
+  token: string,
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
   configureE2ETls()
   const headers = e2eHeaders(token, init.headers)
   if (init.body && !headers.has('Content-Type'))
     headers.set('Content-Type', 'application/json')
+  return fetch(`${E2E_BASE_URL}${path}`, { ...init, headers })
+}
 
-  const res = await fetch(`${E2E_BASE_URL}${path}`, { ...init, headers })
+/**
+ * 认证 JSON fetch：自动注入 bearer/Origin/Content-Type，非 2xx 抛错并带响应体。
+ * @example const list = await e2eFetch<{ conversations: T[] }>(token, '/conversations/list')
+ */
+export async function e2eFetch<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
+  const res = await e2eRequest(token, path, init)
   const text = await res.text()
   if (!res.ok)
     throw new Error(`${init.method ?? 'GET'} ${path} → ${res.status}: ${text.slice(0, 500)}`)

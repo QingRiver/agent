@@ -12,7 +12,7 @@ export async function embedAndUpsert(args: {
   docId: string
   vdir?: string
   owner?: string
-  tags?: string[]
+  tagIds?: string[]
   chunks: KbChunk[]
   pointIds: string[]
 }): Promise<void> {
@@ -29,7 +29,7 @@ export async function embedAndUpsert(args: {
       docId,
       ...(meta.vdir !== undefined ? { vdir: meta.vdir } : {}),
       ...(meta.owner !== undefined ? { owner: meta.owner } : {}),
-      ...(meta.tags ? { tags: meta.tags } : {}),
+      ...(meta.tagIds ? { tagIds: meta.tagIds } : {}),
       denseVector: vectors[index] ?? [],
     })),
   )

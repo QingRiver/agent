@@ -57,6 +57,18 @@ describe('citation', () => {
     expect(md).not.toMatch(/\[\^1\]:/)
   })
 
+  it('answerWithMarkdownLinks uses path when vdir present', () => {
+    const chunks: RetrievedChunk[] = [{
+      ...sampleChunks[0]!,
+      vdir: 'folder/doc.md',
+    }]
+    const answer = '旗舰产品编号为 SKU-9001 [1]。'
+    const { citations } = validateCitations(answer, chunks)
+    const md = answerWithMarkdownLinks(answer, citations)
+    expect(md).toContain('[1](/kb?path=folder%2Fdoc.md&chunk=a%231)')
+    expect(md).not.toContain('doc=a')
+  })
+
   it('answerWithMarkdownLinks skips already-linked [n](...)', () => {
     const linked = '见 [1](/kb?doc=a&chunk=a%231) 与裸引用 [2]。'
     const { citations } = validateCitations('见 [1] 与裸引用 [2]。', sampleChunks)
@@ -64,7 +76,19 @@ describe('citation', () => {
     expect(md).toBe('见 [1](/kb?doc=a&chunk=a%231) 与裸引用 [2](/kb?doc=b&chunk=b%231)。')
   })
 
-  it('kbCitationHref encodes doc/chunk query', () => {
+  it('kbCitationHref prefers path over doc when vdir set', () => {
+    expect(kbCitationHref({
+      index: 1,
+      chunk_id: 'c/1',
+      source_doc_id: 'doc',
+      heading_path: [],
+      excerpt: 'x',
+      page_number: 3,
+      vdir: 'notes/a.md',
+    })).toBe('/kb?path=notes%2Fa.md&chunk=c%2F1&p=3')
+  })
+
+  it('kbCitationHref encodes doc/chunk query without vdir', () => {
     expect(kbCitationHref({
       index: 1,
       chunk_id: 'c/1',

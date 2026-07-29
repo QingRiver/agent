@@ -29,6 +29,9 @@
     "@radix-ui/react-popover": "catalog:",
     "@radix-ui/react-slot": "catalog:",
     "@tanstack/react-router": "catalog:",
+    "@tiptap/pm": "catalog:",
+    "@tiptap/react": "catalog:",
+    "@tiptap/starter-kit": "catalog:",
     "better-auth": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
@@ -44,6 +47,7 @@
     "react-day-picker": "catalog:",
     "react-dom": "catalog:",
     "tailwind-merge": "catalog:",
+    "tiptap-markdown": "catalog:",
     "y-codemirror.next": "catalog:",
     "yjs": "catalog:",
     "zod": "catalog:"

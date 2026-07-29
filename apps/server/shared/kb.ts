@@ -39,12 +39,18 @@ export const KbDocIdParamSchema = z.object({ id: z.uuid() })
 
 export const KbListDocsRequestSchema = z.object({
   kbId: z.string().min(1),
-  tag: z.string().optional(),
+  tagId: z.string().optional(),
   owner: z.string().optional(),
   vdirPrefix: z.string().optional(),
   parentNodeId: z.uuid().nullable().optional(),
 })
 export type KbListDocsRequest = z.infer<typeof KbListDocsRequestSchema>
+
+export const KbGetDocByVdirSchema = z.object({
+  kbId: z.string().min(1),
+  vdir: z.string().min(1),
+})
+export type KbGetDocByVdir = z.infer<typeof KbGetDocByVdirSchema>
 
 export const KbCreateDocSchema = z.object({
   kbId: z.string().min(1),
@@ -52,7 +58,7 @@ export const KbCreateDocSchema = z.object({
   name: z.string().min(1),
   content: z.string().optional(),
   owner: z.string().optional(),
-  tags: z.array(z.string()).default([]),
+  tagIds: z.array(z.string()).default([]),
 })
 export type KbCreateDoc = z.infer<typeof KbCreateDocSchema>
 
@@ -63,7 +69,7 @@ export const KbDraftUpdateSchema = z.object({
 export type KbDraftUpdate = z.infer<typeof KbDraftUpdateSchema>
 
 export const KbMetaUpdateSchema = z.object({
-  tags: z.array(z.string()).optional(),
+  tagIds: z.array(z.string()).optional(),
   parentNodeId: z.uuid().nullable().optional(),
   name: z.string().min(1).optional(),
   owner: z.string().optional(),
@@ -82,27 +88,6 @@ export const KbCommitSchema = z.object({
   skipEnrich: z.boolean().optional(),
 })
 export type KbCommit = z.infer<typeof KbCommitSchema>
-
-export const KbListTagsRequestSchema = z.object({ kbId: z.string().min(1) })
-export type KbListTagsRequest = z.infer<typeof KbListTagsRequestSchema>
-
-export const KbTagIdParamSchema = z.object({ id: z.uuid() })
-
-export const KbCreateTagSchema = z.object({
-  kbId: z.string().min(1),
-  name: z.string().min(1),
-  color: z.string().optional(),
-})
-export type KbCreateTag = z.infer<typeof KbCreateTagSchema>
-
-export const KbRenameTagSchema = z.object({ name: z.string().min(1) })
-export type KbRenameTag = z.infer<typeof KbRenameTagSchema>
-
-export const KbUpdateTagColorSchema = z.object({ color: z.string().nullable() })
-export type KbUpdateTagColor = z.infer<typeof KbUpdateTagColorSchema>
-
-export const KbDeleteTagSchema = z.object({ dryRun: z.boolean().optional() })
-export type KbDeleteTag = z.infer<typeof KbDeleteTagSchema>
 
 // ---------- 引入（文本） ----------
 

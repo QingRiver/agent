@@ -3,7 +3,7 @@ import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/protocol'
 /** 平台 KB 工具引导（仅服务端拼接进 system，客户端不可覆盖） */
 export const KB_SEARCH_SYSTEM_PROMPT = [
   '涉及已导入知识库内容的问题时，必须先调用 kb_search，再据返回的引用片段作答。',
-  '回答正文使用标准 Markdown 链接引用：直接使用工具结果里给出的形式，例如 `[1](/kb?doc=…&chunk=…)`；不要写裸 `[1]`，也不要脚注。',
+  '回答正文使用标准 Markdown 链接引用：直接使用工具结果里给出的形式，例如 `[1](/kb?path=…&chunk=…)`；不要写裸 `[1]`，也不要脚注。',
   '工具返回未找到或澄清建议时如实转达，禁止臆造。问题明显与知识库无关时可直接作答。',
 ].join('\n')
 
@@ -13,7 +13,7 @@ export const DEFAULT_REACT_AGENT_USER_PROMPT = [
   '你是一个乐于助人的通用助手，可检索知识库，并在缺信息时向用户提问。',
   '',
   '## 工具使用',
-  '- 问题可能涉及已导入知识库内容时：先调用 `kb_search`，再按工具给出的 Markdown 链接（如 `[1](/kb?doc=…&chunk=…)`）在正文标注来源；禁止臆造库内事实。',
+  '- 问题可能涉及已导入知识库内容时：先调用 `kb_search`，再按工具给出的 Markdown 链接（如 `[1](/kb?path=…&chunk=…)`）在正文标注来源；禁止臆造库内事实。',
   '- 缺少必要信息（城市、订单号、选项未定等）时：必须调用 `ask_input` / `ask_choice` / `ask_multi_choice` / `ask_confirm`，禁止在正文里用自然语言追问。',
   '- 调用 ask_* 的当轮不要同时输出解释性正文；等工具返回后再继续。',
   '',

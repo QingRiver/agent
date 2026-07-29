@@ -1,9 +1,9 @@
+import { TagManager } from '@components/tags/TagManager'
 import { useKbDocuments } from '@hooks/useKbDocuments'
-import { Plus, RefreshCw, Search, Settings2, Trash2 } from 'lucide-react'
+import { Plus, RefreshCw, Search, Settings2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { KbFileTree } from './KbFileTree'
 import { KbImportDialog } from './KbImportDialog'
-import { KbTagManager } from './KbTagManager'
 import { buildKbTree } from './kbTree'
 
 const LS_EXPANDED = 'kb.expandedFolders'
@@ -41,14 +41,13 @@ export function KbSidebar({
     nodes,
     filteredDocs,
     tags,
-    selectedTags,
+    selectedTagIds,
     activeId,
     isLoading,
     error,
     refresh,
     select,
     toggleTag,
-    remove,
     createFolder,
     renameFolder,
     moveFolder,
@@ -66,7 +65,6 @@ export function KbSidebar({
     const raw = readLsExpanded()
     return raw ? new Set(raw) : new Set(rootFolderIds)
   })
-  const [pendingDelete, setPendingDelete] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [tagManagerOpen, setTagManagerOpen] = useState(false)
 
@@ -93,18 +91,6 @@ export function KbSidebar({
     })
   }
 
-  async function onDeleteConfirmed() {
-    if (!activeId)
-      return
-    setPendingDelete(false)
-    try {
-      await remove(activeId)
-    }
-    catch {
-      // error 已写入 store
-    }
-  }
-
   async function onCreateFolder(parentId: string | null, name: string) {
     const node = await createFolder(name, parentId)
     if (parentId)
@@ -114,7 +100,7 @@ export function KbSidebar({
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-border bg-card">
-      <div className="flex items-center gap-1 border-b border-border p-2">
+      <div className="flex items-center gap-1 border-b border-border p-2 pr-8">
         <span className="flex-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           知识库
         </span>
@@ -146,48 +132,17 @@ export function KbSidebar({
         >
           <RefreshCw className="size-3.5" />
         </button>
-        <button
-          type="button"
-          title="删除当前文档"
-          disabled={!activeId}
-          onClick={() => setPendingDelete(true)}
-          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive disabled:opacity-40"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
       </div>
-
-      {pendingDelete && activeId && (
-        <div className="space-y-2 border-b border-border bg-muted p-2 text-xs text-foreground">
-          <p>确定删除当前文档？不可恢复。</p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="rounded bg-red-600/80 px-2 py-1 text-white hover:bg-red-600"
-              onClick={() => void onDeleteConfirmed()}
-            >
-              删除
-            </button>
-            <button
-              type="button"
-              className="rounded bg-muted px-2 py-1 hover:bg-accent"
-              onClick={() => setPendingDelete(false)}
-            >
-              取消
-            </button>
-          </div>
-        </div>
-      )}
 
       {tags.length > 0 && (
         <div className="flex flex-wrap items-center gap-1 border-b border-border p-2">
           {tags.map((tag) => {
-            const on = selectedTags.includes(tag.name)
+            const on = selectedTagIds.includes(tag.id)
             return (
               <button
                 key={tag.id}
                 type="button"
-                onClick={() => toggleTag(tag.name)}
+                onClick={() => toggleTag(tag.id)}
                 className={`rounded-full px-2 py-0.5 text-xs ring-1 ring-inset ${
                   on ? 'ring-2 ring-sky-400' : 'ring-border'
                 }`}
@@ -235,7 +190,7 @@ export function KbSidebar({
         onMoveDoc={moveDoc}
       />
       <KbImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
-      <KbTagManager open={tagManagerOpen} onClose={() => setTagManagerOpen(false)} />
+      <TagManager open={tagManagerOpen} onClose={() => setTagManagerOpen(false)} />
     </aside>
   )
 }

@@ -12,6 +12,7 @@ import { migrateAppSchema } from './db/migrate'
 import { kbChunks, kbDocuments, kbNodes } from './db/schema'
 import { kbRoutes } from './routes/kb'
 import { KbConflictError, KbService } from './service/kb'
+import { TagsService } from './service/tags'
 
 const TEST_USER: AuthUser = { id: 'kb-test-user', email: 'kb@t', name: 'kb' }
 const OTHER_USER: AuthUser = { id: 'kb-other-user', email: 'other@t', name: 'other' }
@@ -120,7 +121,7 @@ describe('kb PG 逻辑', () => {
     await db.update(kbDocuments).set({ indexingStatus: 'draft' }).where(eq(kbDocuments.id, docId))
   })
 
-  it('listDocs vdir 前缀过滤（不误伤 notes2）+ tag 过滤', async () => {
+  it('listDocs vdir 前缀过滤（不误伤 notes2）+ tagId 过滤', async () => {
     await KbService.createDraft({ kbId, name: 'orphan', content: 'x', owner: TEST_USER.id })
     // 造一条 notes2/... 不应被 notes 前缀命中
     const n2 = await KbService.createFolder({ kbId, name: 'notes2', owner: TEST_USER.id })
@@ -130,9 +131,10 @@ describe('kb PG 逻辑', () => {
     expect(byVdir.some(d => d.id === docId)).toBe(true)
     expect(byVdir.some(d => d.id === d2.id)).toBe(false)
 
-    const byTag = await KbService.listDocs({ kbId, tag: 't1' })
+    const t1Id = (await TagsService.ensureByNames(TEST_USER.id, ['t1'])).get('t1')!
+    const byTag = await KbService.listDocs({ kbId, tagId: t1Id })
     expect(byTag.some(d => d.id === docId)).toBe(true)
-    const noMatch = await KbService.listDocs({ kbId, tag: 'nope' })
+    const noMatch = await KbService.listDocs({ kbId, tagId: randomUUID() })
     expect(noMatch.length).toBe(0)
   })
 
@@ -154,8 +156,8 @@ describe('kb PG 逻辑', () => {
     await expect(KbService.moveNode(kbId, a.id, a.id)).rejects.toBeInstanceOf(KbConflictError)
   })
 
-  it('listTags 聚合（可按 owner）', async () => {
-    const tags = await KbService.listTags(kbId, TEST_USER.id)
+  it('tagsService.list 含 ingest/createDraft 自动建标签', async () => {
+    const tags = await TagsService.list(TEST_USER.id)
     expect(tags.map(t => t.name)).toContain('t1')
   })
 

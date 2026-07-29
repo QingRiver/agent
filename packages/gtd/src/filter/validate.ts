@@ -68,9 +68,7 @@ export interface PerspectiveFolderRef extends PerspectiveEntityRef {
   parentId: string | null
 }
 
-export interface PerspectiveTagRef extends PerspectiveEntityRef {
-  parentId: string | null
-}
+export type PerspectiveTagRef = PerspectiveEntityRef
 
 export interface PerspectiveResolutionContext {
   now: Date

@@ -60,7 +60,6 @@ export function useGtd() {
     addTag: GtdStore.addTag,
     patchTag: GtdStore.patchTag,
     removeTag: GtdStore.removeTag,
-    reorderTag: GtdStore.reorderTag,
     addFolder: GtdStore.addFolder,
     removeFolder: GtdStore.removeFolder,
     reorderFolder: GtdStore.reorderFolder,

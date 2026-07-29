@@ -57,7 +57,7 @@ export interface UpsertChunkInput {
   docId: string
   vdir?: string
   owner?: string
-  tags?: string[]
+  tagIds?: string[]
   denseVector: number[]
 }
 
@@ -71,7 +71,7 @@ export async function upsertChunks(
   const client = getQdrantClient()
   const collectionName = await ensureCollection(kbId)
 
-  const points = items.map(({ pointId, chunk, docId, vdir, owner, tags, denseVector }) => ({
+  const points = items.map(({ pointId, chunk, docId, vdir, owner, tagIds, denseVector }) => ({
     id: pointId,
     vector: {
       [DENSE_VECTOR_NAME]: denseVector,
@@ -89,7 +89,7 @@ export async function upsertChunks(
       ...(chunk.page_number !== undefined ? { page_number: chunk.page_number } : {}),
       ...(vdir !== undefined ? { vdir } : {}),
       ...(owner !== undefined ? { owner } : {}),
-      ...(tags ? { tags } : {}),
+      ...(tagIds ? { tag_ids: tagIds } : {}),
     },
   }))
 
@@ -147,6 +147,9 @@ export function payloadToRetrievedChunk(
   rank?: number,
 ): import('../types').RetrievedChunk {
   const pageNumber = typeof payload.page_number === 'number' ? payload.page_number : undefined
+  const vdir = typeof payload.vdir === 'string' && payload.vdir.length > 0
+    ? payload.vdir
+    : undefined
   return {
     chunk_id: String(payload.chunk_id ?? ''),
     source_doc_id: String(payload.source_doc_id ?? ''),
@@ -154,6 +157,7 @@ export function payloadToRetrievedChunk(
     raw_text: String(payload.raw_text ?? ''),
     score,
     ...(pageNumber !== undefined ? { page_number: pageNumber } : {}),
+    ...(vdir !== undefined ? { vdir } : {}),
     ...(rank !== undefined ? { rank } : {}),
   }
 }

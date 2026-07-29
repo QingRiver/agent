@@ -1,10 +1,11 @@
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { bigint, boolean, check, doublePrecision, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import { tags } from './tags'
 
 // ───────────────────────────── gtd_* ─────────────────────────────
-// 行级统一模型：EntityRow 贯通 Client/wire/PG（同形）。七表加 sync_id/deleted；
-// task_tags/attachments 冗余 user_id 便于按用户 pull；clock/幂等表辅助。
+// 行级统一模型：EntityRow 贯通 Client/wire/PG（同形）。六业务表 + sync 辅助；
+// 标签目录迁至公共 tags 表；task_tags/attachments 冗余 user_id 便于按用户 pull。
 // 1:1 复刻 OmniFocus。日期列 timestamptz（defer/due 业务核心）；sort_order float8 + fractional indexing。
 // 自/互引用 FK 在迁移中 DEFERRABLE INITIALLY DEFERRED。sync_id 每用户单调（mode:'number' <2^53）。
 
@@ -26,24 +27,6 @@ export const gtdFolders = pgTable('gtd_folders', {
   index('idx_gtd_folders_user_syncid').on(table.userId, table.syncId),
   // 同级不重名 (user_id, COALESCE(parent_id,''), name) 见迁移 uniq_gtd_folders_parent_name
   // parent_id 自引用 FK DEFERRABLE INITIALLY DEFERRED 见迁移
-])
-
-/** 标签树（支持层级）。parent_id 自引用。 */
-export const gtdTags = pgTable('gtd_tags', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  parentId: text('parent_id').references((): AnyPgColumn => gtdTags.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  color: text('color'),
-  sortOrder: doublePrecision('sort_order').notNull(),
-  syncId: bigint('sync_id', { mode: 'number' }),
-  deleted: boolean('deleted').notNull().default(false),
-  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }),
-}, table => [
-  index('idx_gtd_tags_user_parent').on(table.userId, table.parentId),
-  index('idx_gtd_tags_user_syncid').on(table.userId, table.syncId),
-  // 同级不重名 (user_id, COALESCE(parent_id,''), name) 见迁移 uniq_gtd_tags_parent_name
 ])
 
 /**
@@ -116,10 +99,10 @@ export const gtdTasks = pgTable('gtd_tasks', {
   check('ck_gtd_tasks_inbox', sql`((project_id IS NULL AND parent_id IS NULL) OR project_id IS NOT NULL)`),
 ])
 
-/** 任务-标签多对多。复合主键 (task_id, tag_id)；冗余 user_id 便于按用户 pull；自有 sync_id/deleted。 */
+/** 任务-标签多对多。tag_id → 公共 tags；冗余 user_id 便于按用户 pull；自有 sync_id/deleted。 */
 export const gtdTaskTags = pgTable('gtd_task_tags', {
   taskId: text('task_id').notNull().references(() => gtdTasks.id, { onDelete: 'cascade' }),
-  tagId: text('tag_id').notNull().references(() => gtdTags.id, { onDelete: 'cascade' }),
+  tagId: text('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull(),
   syncId: bigint('sync_id', { mode: 'number' }),
   deleted: boolean('deleted').notNull().default(false),
@@ -198,6 +181,6 @@ export const gtdSyncMutations = pgTable('gtd_sync_mutations', {
 export type TaskRow = typeof gtdTasks.$inferSelect
 export type FolderRow = typeof gtdFolders.$inferSelect
 export type ProjectRow = typeof gtdProjects.$inferSelect
-export type TagRow = typeof gtdTags.$inferSelect
+export type TagRow = typeof tags.$inferSelect
 export type PerspectiveRow = typeof gtdPerspectives.$inferSelect
 export type AttachmentRow = typeof gtdAttachments.$inferSelect

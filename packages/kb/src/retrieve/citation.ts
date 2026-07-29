@@ -38,12 +38,16 @@ function parseCitationIndices(answer: string): number[] {
   return [...indices].sort((a, b) => a - b)
 }
 
-/** KB 引文深链：客户端 /kb 可按 query 打开对应文档片段 */
+/** KB 引文深链：优先 path=vdir，无 vdir 时回退 doc= */
 export function kbCitationHref(citation: KbCitation): string {
-  const q = new URLSearchParams({
-    doc: citation.source_doc_id,
-    chunk: citation.chunk_id,
-  })
+  const q = new URLSearchParams()
+  if (citation.vdir) {
+    q.set('path', citation.vdir)
+  }
+  else {
+    q.set('doc', citation.source_doc_id)
+  }
+  q.set('chunk', citation.chunk_id)
   if (citation.page_number != null)
     q.set('p', String(citation.page_number))
   return `/kb?${q.toString()}`
@@ -77,6 +81,7 @@ export function validateCitations(
       heading_path: chunk.heading_path,
       excerpt: excerpt || chunk.raw_text.slice(0, 200),
       ...(chunk.page_number !== undefined ? { page_number: chunk.page_number } : {}),
+      ...(chunk.vdir !== undefined ? { vdir: chunk.vdir } : {}),
     })
   }
 
@@ -88,7 +93,7 @@ export function validateCitations(
       correctionPrompt: [
         '你上一版答案中的引用编号无效或与检索片段不符。',
         `无效引用：${invalidIndices.map(i => `[${i}]`).join(', ')}`,
-        '请仅基于给定 context 重答；引用须写成片段给出的 Markdown 链接，如 `[n](/kb?doc=…&chunk=…)`。',
+        '请仅基于给定 context 重答；引用须写成片段给出的 Markdown 链接，如 `[n](/kb?path=…&chunk=…)`。',
       ].join('\n'),
     }
   }
@@ -97,7 +102,7 @@ export function validateCitations(
 }
 
 /**
- * 将正文 `[n]` / `[^n]` 转为 Markdown 链接 `[n](/kb?doc=…&chunk=…)`。
+ * 将正文 `[n]` / `[^n]` 转为 Markdown 链接 `[n](/kb?path=…&chunk=…)`（无 vdir 时为 doc=）。
  * 已是 `[n](...)` 的不再改写；不在文末追加脚注定义。
  */
 export function answerWithMarkdownLinks(

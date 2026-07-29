@@ -99,8 +99,6 @@ export function makeTag(overrides: Partial<Tag> = {}): Tag {
   return {
     id: randomUUID(),
     name: 'tag',
-    parentId: null,
-    order: 0,
     color: null,
     createdAt: NOW_ISO,
     updatedAt: null,

@@ -9,9 +9,9 @@ import {
   gtdProjects,
   gtdSyncClocks,
   gtdSyncMutations,
-  gtdTags,
   gtdTasks,
   gtdTaskTags,
+  tags,
 } from '../db/schema'
 import { applyPushToPg, pullFromPg } from './sync-repository'
 
@@ -24,7 +24,7 @@ async function cleanup(): Promise<void> {
   await db.delete(gtdTasks).where(eq(gtdTasks.userId, USER_ID))
   await db.delete(gtdPerspectives).where(eq(gtdPerspectives.userId, USER_ID))
   await db.delete(gtdProjects).where(eq(gtdProjects.userId, USER_ID))
-  await db.delete(gtdTags).where(eq(gtdTags.userId, USER_ID))
+  await db.delete(tags).where(eq(tags.userId, USER_ID))
   await db.delete(gtdFolders).where(eq(gtdFolders.userId, USER_ID))
   await db.delete(gtdSyncMutations).where(eq(gtdSyncMutations.userId, USER_ID))
   await db.delete(gtdSyncClocks).where(eq(gtdSyncClocks.userId, USER_ID))
@@ -43,7 +43,7 @@ async function cleanupLeaked(): Promise<void> {
   await db.delete(gtdTasks).where(like(gtdTasks.userId, pattern))
   await db.delete(gtdPerspectives).where(like(gtdPerspectives.userId, pattern))
   await db.delete(gtdProjects).where(like(gtdProjects.userId, pattern))
-  await db.delete(gtdTags).where(like(gtdTags.userId, pattern))
+  await db.delete(tags).where(like(tags.userId, pattern))
   await db.delete(gtdFolders).where(like(gtdFolders.userId, pattern))
   await db.delete(gtdSyncMutations).where(like(gtdSyncMutations.userId, pattern))
   await db.delete(gtdSyncClocks).where(like(gtdSyncClocks.userId, pattern))
@@ -190,8 +190,6 @@ describe('sync-repository e2e (push/pull 落库)', () => {
           op: 'upsert',
           patch: {
             name: '重要',
-            parentId: null,
-            order: 0,
             color: null,
             createdAt: NOW,
             updatedAt: null,

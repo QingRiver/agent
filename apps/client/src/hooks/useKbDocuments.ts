@@ -6,7 +6,7 @@ export function useKbDocuments() {
   const docs = useAtomValue(KbStore.docsAtom)
   const filteredDocs = useAtomValue(KbStore.filteredDocsAtom)
   const tags = useAtomValue(KbStore.tagsAtom)
-  const selectedTags = useAtomValue(KbStore.selectedTagsAtom)
+  const selectedTagIds = useAtomValue(KbStore.selectedTagIdsAtom)
   const activeId = useAtomValue(KbStore.activeIdAtom)
   const activeDoc = useAtomValue(KbStore.activeDocAtom)
   const isLoading = useAtomValue(KbStore.isLoadingAtom)
@@ -20,7 +20,7 @@ export function useKbDocuments() {
     docs,
     filteredDocs,
     tags,
-    selectedTags,
+    selectedTagIds,
     activeId,
     activeDoc,
     isLoading,
@@ -31,7 +31,7 @@ export function useKbDocuments() {
     refresh: KbStore.refresh,
     select: KbStore.select,
     toggleTag: KbStore.toggleTag,
-    setSelectedTags: KbStore.setSelectedTags,
+    setSelectedTagIds: KbStore.setSelectedTagIds,
     updateLocalContent: KbStore.updateLocalContent,
     updateLocalName: KbStore.updateLocalName,
     saveDraft: KbStore.saveDraft,

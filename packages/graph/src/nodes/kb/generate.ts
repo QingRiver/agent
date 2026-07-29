@@ -21,7 +21,7 @@ const llm = new ChatOpenAI({
 function buildGenerateSystemPrompt(context: string): string {
   return [
     '你是企业知识库问答助手。仅根据下方检索片段回答用户问题。',
-    '回答中对关键事实使用标准 Markdown 链接引用，格式为片段给出的 `[n](/kb?doc=…&chunk=…)`；不要只用裸 `[n]`。',
+    '回答中对关键事实使用标准 Markdown 链接引用，格式为片段给出的 `[n](/kb?path=…&chunk=…)`；不要只用裸 `[n]`。',
     '不要编造检索片段中不存在的信息。',
     '',
     '检索片段：',
@@ -41,6 +41,7 @@ function buildLinkedContext(state: KbStateType): string {
         heading_path: c.heading_path,
         excerpt: '',
         ...(c.page_number !== undefined ? { page_number: c.page_number } : {}),
+        ...(c.vdir !== undefined ? { vdir: c.vdir } : {}),
       })
       const heading = c.heading_path.length ? c.heading_path.join(' > ') : '正文'
       return `[${index}] (${heading}) 引用请写 \`${`[${index}](${href})`}\`\n${c.raw_text}`

@@ -6,22 +6,17 @@ import {
   KbCommitSchema,
   KbCreateDocSchema,
   KbCreateNodeSchema,
-  KbCreateTagSchema,
-  KbDeleteTagSchema,
   KbDocIdParamSchema,
   KbDraftUpdateSchema,
+  KbGetDocByVdirSchema,
   KbIngestTextSchema,
   KbListDocsRequestSchema,
   KbListNodesRequestSchema,
-  KbListTagsRequestSchema,
   KbMetaUpdateSchema,
   KbMoveNodeSchema,
   KbNodeIdParamSchema,
   KbQueryRequestSchema,
   KbRenameNodeSchema,
-  KbRenameTagSchema,
-  KbTagIdParamSchema,
-  KbUpdateTagColorSchema,
 } from '../../shared/kb'
 import { KbHandlers } from '../handlers/kb'
 import { handleAppError } from '../http/errors'
@@ -59,6 +54,7 @@ export const kbRoutes = new Hono<AppEnv>()
 
   // ---------- 文档草稿 ----------
   .post('/documents/list', zValidator('json', KbListDocsRequestSchema), c => KbHandlers.listDocs(c, c.get('user')!, c.req.valid('json')))
+  .post('/documents/by-vdir', zValidator('json', KbGetDocByVdirSchema), c => KbHandlers.getDocByVdir(c, c.get('user')!, c.req.valid('json')))
   .post(
     '/documents/:id/get',
     zValidator('param', KbDocIdParamSchema),
@@ -88,26 +84,6 @@ export const kbRoutes = new Hono<AppEnv>()
     '/documents/:id/delete',
     zValidator('param', KbDocIdParamSchema),
     c => KbHandlers.deleteDoc(c, c.get('user')!, c.req.valid('param').id),
-  )
-  .post('/tags/list', zValidator('json', KbListTagsRequestSchema), c => KbHandlers.listTags(c, c.get('user')!, c.req.valid('json')))
-  .post('/tags/create', zValidator('json', KbCreateTagSchema), c => KbHandlers.createTag(c, c.get('user')!, c.req.valid('json')))
-  .post(
-    '/tags/:id/rename',
-    zValidator('param', KbTagIdParamSchema),
-    zValidator('json', KbRenameTagSchema),
-    c => KbHandlers.renameTag(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
-  )
-  .post(
-    '/tags/:id/delete',
-    zValidator('param', KbTagIdParamSchema),
-    zValidator('json', KbDeleteTagSchema.optional().default({})),
-    c => KbHandlers.deleteTag(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
-  )
-  .post(
-    '/tags/:id/update-color',
-    zValidator('param', KbTagIdParamSchema),
-    zValidator('json', KbUpdateTagColorSchema),
-    c => KbHandlers.updateTagColor(c, c.get('user')!, c.req.valid('param').id, c.req.valid('json')),
   )
 
   // ---------- 引入（markitdown → 草稿） ----------

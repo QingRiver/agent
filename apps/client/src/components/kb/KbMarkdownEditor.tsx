@@ -1,9 +1,10 @@
+import type { Ref } from 'react'
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { ThemeStore } from '@stores/theme-store'
 import { useAtomValue } from 'jotai'
-import { useEffect, useRef } from 'react'
+import { useEffect, useImperativeHandle, useRef } from 'react'
 
 function createEditorTheme(isDark: boolean) {
   return EditorView.theme({
@@ -37,20 +38,62 @@ function createEditorTheme(isDark: boolean) {
   }, { dark: isDark })
 }
 
+/** 解析 Markdown ATX 标题行正文（避免正则回溯告警） */
+function markdownHeadingTitle(line: string): string | null {
+  if (!line.startsWith('#'))
+    return null
+  let i = 0
+  while (i < line.length && i < 6 && line[i] === '#')
+    i += 1
+  if (i === 0)
+    return null
+  const after = line.slice(i)
+  if (!after.startsWith(' ') && !after.startsWith('\t'))
+    return null
+  const title = after.trim()
+  return title.length > 0 ? title : null
+}
+
 interface KbMarkdownEditorProps {
   value: string
   onChange: (value: string) => void
   /** 换文档时由父组件 key=docId remount，本组件只在挂载时读一次初始正文 */
   docId: string
+  ref?: Ref<KbMarkdownEditorHandle>
 }
 
-export function KbMarkdownEditor({ value, onChange, docId }: KbMarkdownEditorProps) {
+export interface KbMarkdownEditorHandle {
+  scrollToHeading: (headingText: string) => void
+}
+
+export function KbMarkdownEditor({ value, onChange, docId, ref }: KbMarkdownEditorProps) {
   const mountRef = useRef<HTMLDivElement>(null)
+  const viewRef = useRef<EditorView | null>(null)
   const initialDoc = useRef(value).current
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
   const mode = useAtomValue(ThemeStore.modeAtom)
   const isDark = mode === 'dark'
+
+  useImperativeHandle(ref, () => ({
+    scrollToHeading(headingText: string) {
+      const view = viewRef.current
+      if (!view)
+        return
+      const needle = headingText.trim()
+      const doc = view.state.doc
+      for (let i = 1; i <= doc.lines; i++) {
+        const line = doc.line(i)
+        const title = markdownHeadingTitle(line.text)
+        if (title === needle) {
+          view.dispatch({
+            effects: EditorView.scrollIntoView(line.from, { y: 'start' }),
+          })
+          return
+        }
+      }
+    },
+  }))
 
   useEffect(() => {
     const mount = mountRef.current
@@ -72,11 +115,25 @@ export function KbMarkdownEditor({ value, onChange, docId }: KbMarkdownEditorPro
       }),
       parent: mount,
     })
+    viewRef.current = view
 
     return () => {
+      viewRef.current = null
       view.destroy()
     }
   }, [docId, initialDoc, isDark])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view)
+      return
+    const current = view.state.doc.toString()
+    if (current === value)
+      return
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: value },
+    })
+  }, [value])
 
   return (
     <div

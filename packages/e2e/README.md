@@ -1,6 +1,6 @@
 # @agent/e2e
 
-E2E 测试统一工具包与场景库。按 Playwright `support / fixtures / tests` 的分离惯例分层，让「连接、机械操作、业务断言」各归其位。
+E2E 测试统一工具包与场景库。真实 HTTP/SSE 流程都放在本包；`apps/server` 的 Vitest 只算进程内集成测试，不算 HTTP E2E。
 
 ## 分层
 
@@ -13,9 +13,10 @@ src/
     assert.ts     fail() — 断言失败即 exit 1
     thread.ts     createThread(token, agentId)
     sse.ts        drainSse() + runAgentRun() — 统一 SSE 读流 + RUN_ERROR 兜底
-  flows/        场景层：各 agent 的端到端 flow（业务断言在此）
+  flows/        场景层：真实 HTTP/SSE 端到端 flow（业务断言在此）
     hitl-agent.ts 4 步 interrupt + resume，校验「已批准执行」
     kb-agent.ts   单轮 RAG，echo SSE
+    tags.ts       KB + GTD + shared tags CRUD/删除全流程
     index.ts      FLOWS 注册表 + runFlow(name)
   ui/          Playwright 浏览器层：驱动真实前端 UI 验证 AG-UI 交互（错误条渲染/展开等）
     kb-error.spec.ts  停 qdrant 后断言可展开错误条出现
@@ -24,12 +25,13 @@ src/
   playwright.config.ts  Playwright 配置（ignoreHTTPSErrors 放行自签证书，复用已在跑的 pnpm dev）
 ```
 
-**职责边界**：`client` 只管连接，`support` 只管机械操作（建会话/读流/断言退出），`flows` 只管 SSE 原始流断言，`ui` 驱动真实浏览器验证前端交互。新增 agent flow 只动 `flows/`，新增 UI 断言只动 `ui/`，互不影响。
+**职责边界**：`client` 只管认证与 HTTP 连接，`support` 只管机械操作，`flows` 通过真实 server API/SSE 完成业务场景与断言，`ui` 驱动真实浏览器。失败由 runner 统一转为退出码 1，flow 用 `finally` 清理测试资源。
 
 ## 前置
 
 - server 已启动：`pnpm dev`
 - E2E 账号已写入（server postgres）：`pnpm devops e2e auth`
+- shared tags flow 不依赖 seed：自行创建并经 API 清理文档、GTD、标签
 - 知识库 flow 另需：`pnpm devops infra up kb` + `pnpm devops e2e seed`
 - 清空某用户知识库后重导入：`pnpm devops e2e clear-kb --email <addr>`（需 postgres + qdrant）
 
@@ -38,20 +40,35 @@ src/
 经 devops（推荐，会自动指向 dev server）：
 
 ```bash
+pnpm e2e                         # seed 后运行下列全部 E2E
 pnpm devops e2e hitl-agent
 pnpm devops e2e agent          # kb agent SSE
+pnpm devops e2e tags           # shared tags 真实 HTTP 全流程
 pnpm devops e2e ui             # playwright 前端 UI（停 qdrant 验证错误条）
 pnpm devops e2e clear-kb --email you@example.com
 ```
+
+`pnpm e2e` 的 `all` 不划分测试范围：依次执行 KB pipeline、shared tags HTTP、HITL graph、KB agent SSE、HITL agent SSE 和 Playwright UI。需提前启动测试 infra 与 `pnpm dev`。
 
 直接调 runner：
 
 ```bash
 pnpm exec tsx packages/e2e/src/runner.ts hitl-agent
 pnpm exec tsx packages/e2e/src/runner.ts kb-agent
+pnpm exec tsx packages/e2e/src/runner.ts tags
 ```
 
 退出码 0 通过 / 1 失败（CI 据此判定）。
+
+### `tags` flow 覆盖
+
+1. 通过 `/tags/create` 新建公共标签
+2. 通过 `/kb/documents/create` 新建两篇文档并绑定 `tagIds`
+3. 通过 `/gtd/sync/push` 新建两个 task + `task_tag`
+4. `untag`：dryRun 返回文档/GTD 列表；执行后资源保留、绑定消失
+5. `delete_entities` 部分删除：选中一篇文档和一个 task 删除，其余资源保留并解绑
+6. `delete_entities` 全部删除：使用 dryRun 返回的完整列表删除全部关联资源
+7. 通过 KB get、GTD pull、tags list 真实读接口验证结果
 
 ## 作为客户端复用（其他服务）
 

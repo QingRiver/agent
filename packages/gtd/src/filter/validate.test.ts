@@ -10,7 +10,7 @@ const context: PerspectiveResolutionContext = {
   timeZone: 'UTC',
   projects: [{ id: 'p1', name: 'Proj' }],
   folders: [{ id: 'f1', name: 'Folder', parentId: null }],
-  tags: [{ id: 't1', name: 'Tag1', parentId: null }, { id: 't2', name: 'Tag1', parentId: null }],
+  tags: [{ id: 't1', name: 'Tag1' }, { id: 't2', name: 'Tag1' }],
 }
 
 function leaf(field: string, op: string, value?: unknown): FilterNode {

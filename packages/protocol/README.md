@@ -9,7 +9,7 @@
 | HITL | `InterruptRequest` / `InterruptResponse`、`PendingInterrupt`、`ThreadState`、`toResponse` |
 | Writer | `WRITER_CHANGE_SUMMARIES_EVENT`、`computeHunks`、`Hunk`、`WriterChangeSummary*` |
 
-> KB 引文已改为答案内 Markdown 链接（如 `[n](/kb?doc=…&chunk=…)`）；不再在本包导出 `KbCitation*` / 自定义事件。
+> KB 引文已改为答案内 Markdown 链接（如 `[n](/kb?path=…&chunk=…)`）；不再在本包导出 `KbCitation*` / 自定义事件。
 
 ## 设计要点
 

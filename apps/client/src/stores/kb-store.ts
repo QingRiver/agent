@@ -1,9 +1,10 @@
-import type { KbDoc, KbDocSummary, KbNodeRow, KbTagRow } from '@apis/kb-api'
+import type { KbDoc, KbDocSummary, KbNodeRow } from '@apis/kb-api'
 import { KB_DEFAULT_ID, KbApi } from '@apis/kb-api'
+import { TagsStore } from '@stores/tags-store'
 import { atom, getDefaultStore } from 'jotai'
 
 const LS_ACTIVE = 'kb.activeId'
-const LS_TAGS = 'kb.selectedTags'
+const LS_TAGS = 'kb.selectedTagIds'
 
 function readLs(key: string): string | null {
   try {
@@ -26,7 +27,7 @@ function writeLs(key: string, value: string | null): void {
   }
 }
 
-function readSelectedTags(): string[] {
+function readSelectedTagIds(): string[] {
   const raw = readLs(LS_TAGS)
   if (!raw)
     return []
@@ -54,8 +55,8 @@ export class KbStore {
   static readonly userIdAtom = atom<string | undefined>(undefined)
   static readonly nodesAtom = atom<KbNodeRow[]>([])
   static readonly docsAtom = atom<KbDocSummary[]>([])
-  static readonly tagsAtom = atom<KbTagRow[]>([])
-  static readonly selectedTagsAtom = atom<string[]>(readSelectedTags())
+  static readonly tagsAtom = TagsStore.tagsAtom
+  static readonly selectedTagIdsAtom = atom<string[]>(readSelectedTagIds())
   static readonly activeIdAtom = atom<string | null>(readLs(LS_ACTIVE))
   static readonly activeDocAtom = atom<KbDoc | null>(null)
   static readonly isLoadingAtom = atom(false)
@@ -66,10 +67,10 @@ export class KbStore {
 
   static readonly filteredDocsAtom = atom((get) => {
     const docs = get(KbStore.docsAtom)
-    const tags = get(KbStore.selectedTagsAtom)
-    if (!tags.length)
+    const tagIds = get(KbStore.selectedTagIdsAtom)
+    if (!tagIds.length)
       return docs
-    return docs.filter(d => tags.every(t => (d.tags ?? []).includes(t)))
+    return docs.filter(d => tagIds.every(id => (d.tagIds ?? []).includes(id)))
   })
 
   private static loadGeneration = 0
@@ -82,7 +83,7 @@ export class KbStore {
     const store = KbStore.store()
     store.set(KbStore.nodesAtom, [])
     store.set(KbStore.docsAtom, [])
-    store.set(KbStore.tagsAtom, [])
+    TagsStore.reset()
     store.set(KbStore.activeIdAtom, null)
     store.set(KbStore.activeDocAtom, null)
     store.set(KbStore.isLoadingAtom, false)
@@ -107,16 +108,16 @@ export class KbStore {
     void KbStore.refresh()
   }
 
-  static setSelectedTags(tags: string[]): void {
-    KbStore.store().set(KbStore.selectedTagsAtom, tags)
-    writeLs(LS_TAGS, JSON.stringify(tags))
+  static setSelectedTagIds(tagIds: string[]): void {
+    KbStore.store().set(KbStore.selectedTagIdsAtom, tagIds)
+    writeLs(LS_TAGS, JSON.stringify(tagIds))
   }
 
-  static toggleTag(tag: string): void {
+  static toggleTag(tagId: string): void {
     const store = KbStore.store()
-    const cur = store.get(KbStore.selectedTagsAtom)
-    const next = cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag]
-    KbStore.setSelectedTags(next)
+    const cur = store.get(KbStore.selectedTagIdsAtom)
+    const next = cur.includes(tagId) ? cur.filter(t => t !== tagId) : [...cur, tagId]
+    KbStore.setSelectedTagIds(next)
   }
 
   static async refresh(): Promise<void> {
@@ -128,14 +129,13 @@ export class KbStore {
     store.set(KbStore.isLoadingAtom, true)
     store.set(KbStore.errorAtom, null)
     try {
-      const [nodes, docs, tags] = await Promise.all([
+      const [nodes, docs] = await Promise.all([
         KbApi.listNodes(KB_DEFAULT_ID),
         KbApi.listDocs(KB_DEFAULT_ID),
-        KbApi.listTags(KB_DEFAULT_ID),
+        TagsStore.refreshTags(),
       ])
       store.set(KbStore.nodesAtom, nodes)
       store.set(KbStore.docsAtom, docs)
-      store.set(KbStore.tagsAtom, tags)
 
       const prevActive = store.get(KbStore.activeIdAtom)
       if (prevActive && docs.some(d => d.id === prevActive)) {
@@ -161,6 +161,18 @@ export class KbStore {
     store.set(KbStore.localDirtyAtom, false)
     writeLs(LS_ACTIVE, id)
     void KbStore.loadDoc(id)
+  }
+
+  /** 按虚拟路径打开文档（引文深链 path=） */
+  static async selectByVdir(vdir: string): Promise<boolean> {
+    try {
+      const doc = await KbApi.getDocByVdir(KB_DEFAULT_ID, vdir)
+      KbStore.select(doc.id)
+      return true
+    }
+    catch {
+      return false
+    }
   }
 
   static async loadDoc(id: string): Promise<void> {
@@ -227,11 +239,11 @@ export class KbStore {
     }
   }
 
-  /** 更新元数据（tags/parentNodeId/name/visibility/pinned）。加 tag 时后端自动建标签 */
+  /** 更新元数据（tagIds/parentNodeId/name/visibility/pinned） */
   static async updateMeta(
     id: string,
     patch: {
-      tags?: string[]
+      tagIds?: string[]
       parentNodeId?: string | null
       name?: string
       visibility?: string
@@ -248,9 +260,8 @@ export class KbStore {
         KbStore.docsAtom,
         prev => prev.map(d => d.id === updated.id ? toSummary(updated) : d),
       )
-      // tags 变了 → 标签列表可能新增（后端自动建），刷新 tags
-      if (patch.tags != null)
-        void KbStore.refreshTags()
+      if (patch.tagIds != null)
+        void TagsStore.refreshTags()
       return updated
     }
     catch (e) {
@@ -259,19 +270,8 @@ export class KbStore {
     }
   }
 
-  /** 仅刷新标签列表（add tag 后端自动建标签，左栏 chips 要同步） */
   static async refreshTags(): Promise<void> {
-    const store = KbStore.store()
-    const userId = store.get(KbStore.userIdAtom)
-    if (!userId)
-      return
-    try {
-      const tags = await KbApi.listTags(KB_DEFAULT_ID)
-      store.set(KbStore.tagsAtom, tags)
-    }
-    catch {
-      // 标签刷新失败不阻断主流程
-    }
+    return TagsStore.refreshTags()
   }
 
   static async commit(): Promise<void> {

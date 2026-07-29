@@ -94,6 +94,7 @@ export async function runAgentRun(
       tools: [],
       context: [],
       forwardedProps: {},
+      messages: [],
       ...body,
     }),
   })

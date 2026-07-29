@@ -16,9 +16,9 @@ import {
   gtdFolders,
   gtdPerspectives,
   gtdProjects,
-  gtdTags,
   gtdTasks,
   gtdTaskTags,
+  tags,
 } from '../db/schema'
 import {
   attachmentToRow,
@@ -93,9 +93,9 @@ function collectDocTimestamps(
  */
 export class DrizzleGtdRepository implements GtdRepository {
   async loadDocument(userId: string): Promise<GtdDocument> {
-    const [folders, tags, projects, perspectives, tasks] = await Promise.all([
+    const [folders, tagRows, projects, perspectives, tasks] = await Promise.all([
       db.select().from(gtdFolders).where(eq(gtdFolders.userId, userId)),
-      db.select().from(gtdTags).where(eq(gtdTags.userId, userId)),
+      db.select().from(tags).where(and(eq(tags.userId, userId), eq(tags.deleted, false))),
       db.select().from(gtdProjects).where(eq(gtdProjects.userId, userId)),
       db.select().from(gtdPerspectives).where(eq(gtdPerspectives.userId, userId)),
       db.select().from(gtdTasks).where(eq(gtdTasks.userId, userId)),
@@ -137,7 +137,7 @@ export class DrizzleGtdRepository implements GtdRepository {
     )
 
     const folderEntities = folders.map(rowToFolder)
-    const tagEntities = tags.map(rowToTag)
+    const tagEntities = tagRows.map(rowToTag)
     const projectEntities = projects.map(rowToProject)
     const perspectiveEntities = perspectives.map(rowToPerspective)
     const meta = aggregateDocMeta(collectDocTimestamps(
@@ -169,13 +169,24 @@ export class DrizzleGtdRepository implements GtdRepository {
       await tx.delete(gtdTasks).where(eq(gtdTasks.userId, userId))
       await tx.delete(gtdPerspectives).where(eq(gtdPerspectives.userId, userId))
       await tx.delete(gtdProjects).where(eq(gtdProjects.userId, userId))
-      await tx.delete(gtdTags).where(eq(gtdTags.userId, userId))
       await tx.delete(gtdFolders).where(eq(gtdFolders.userId, userId))
-      // upsert 全部（DEFERRABLE 允许任意顺序）
+      // tags 为跨域共享表：仅 upsert doc 中的标签，不整表删除
       if (doc.folders.length)
         await tx.insert(gtdFolders).values(doc.folders.map(f => folderToRow(f, userId)))
-      if (doc.tags.length)
-        await tx.insert(gtdTags).values(doc.tags.map(t => tagToRow(t, userId)))
+      if (doc.tags.length) {
+        for (const tag of doc.tags) {
+          const row = tagToRow(tag, userId)
+          await tx.insert(tags).values(row).onConflictDoUpdate({
+            target: tags.id,
+            set: {
+              name: row.name,
+              color: row.color,
+              updatedAt: row.updatedAt,
+              deleted: false,
+            },
+          })
+        }
+      }
       if (doc.projects.length)
         await tx.insert(gtdProjects).values(doc.projects.map(p => projectToRow(p, userId)))
       if (doc.tasks.length) {
@@ -334,24 +345,24 @@ export class DrizzleGtdRepository implements GtdRepository {
   async saveTag(userId: string, tag: Tag): Promise<void> {
     const row = tagToRow(tag, userId)
     await db
-      .insert(gtdTags)
+      .insert(tags)
       .values(row)
       .onConflictDoUpdate({
-        target: gtdTags.id,
+        target: tags.id,
         set: {
-          parentId: row.parentId,
           name: row.name,
           color: row.color,
-          sortOrder: row.sortOrder,
           updatedAt: row.updatedAt,
+          deleted: false,
         },
       })
   }
 
   async deleteTag(userId: string, tagId: string): Promise<void> {
     await db
-      .delete(gtdTags)
-      .where(and(eq(gtdTags.userId, userId), eq(gtdTags.id, tagId)))
+      .update(tags)
+      .set({ deleted: true, updatedAt: new Date() })
+      .where(and(eq(tags.userId, userId), eq(tags.id, tagId)))
   }
 
   async savePerspective(userId: string, perspective: Perspective): Promise<void> {

@@ -33,6 +33,7 @@ function formatChunks(chunks: RetrievedChunk[]): string {
         heading_path: c.heading_path,
         excerpt: '',
         ...(c.page_number !== undefined ? { page_number: c.page_number } : {}),
+        ...(c.vdir !== undefined ? { vdir: c.vdir } : {}),
       })
       const mdLink = `[${index}](${href})`
       return `[${index}] 引用请写 \`${mdLink}\`\n${c.raw_text}`
@@ -92,7 +93,7 @@ export const kbSearchTool = tool(
     description:
       '在知识库中检索与用户问题相关的文档片段（内部含 query 改写、混合召回、rerank）。'
       + '当需要回答涉及已导入知识库内容的问题时调用。'
-      + '返回带编号的上下文；作答时在正文用工具给出的 Markdown 链接（如 [1](/kb?doc=…&chunk=…)）标注来源。',
+      + '返回带编号的上下文；作答时在正文用工具给出的 Markdown 链接（如 [1](/kb?path=…&chunk=…)）标注来源。',
     schema: z.object({
       query: z.string().describe('用于检索的自然语言问题或关键词'),
     }),

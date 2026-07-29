@@ -93,13 +93,11 @@ export const TagSchema = z
   .object({
     id: uuid,
     name: z.string().min(1).describe('标签名'),
-    parentId: uuid.nullable().describe('父 tag id；null=顶层（OmniFocus 3 tag 树）'),
-    order: fractionalOrder,
     color: z.string().nullable().describe('CSS 颜色字符串，如 #3b82f6'),
     createdAt: datetime,
     updatedAt: datetime.nullable(),
   })
-  .describe('标签，可嵌套；一个 Task 可挂多个 Tag（经 Task.tagIds 多对多）')
+  .describe('扁平标签；一个 Task 可挂多个 Tag（经 Task.tagIds 多对多）')
 
 // ---------- RepeatRule ----------
 

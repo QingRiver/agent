@@ -5,6 +5,8 @@ import { INFRA } from './paths'
 /**
  * infra 容器生命周期：up / down / status。
  * 每个服务一个独立 compose 目录（仿 qlib/qdrant 模式），互不耦合。
+ *
+ * up 策略：已 running 且健康 → 跳过；仅缺失启动，或显式 `--build` 时才构建本地镜像。
  */
 
 interface ServiceDef {
@@ -15,7 +17,8 @@ interface ServiceDef {
   healthUrl?: string
   /** 容器内健康检查命令（无 HTTP 端口的服务，如 postgres） */
   healthExec?: string[]
-  buildOnUp?: boolean
+  /** 本地 Dockerfile 构建的服务（Hub 镜像为 false）；仅在镜像缺失或 --build 时 build */
+  localBuild?: boolean
 }
 
 const SERVICES: Record<Exclude<InfraTarget, 'kb' | 'test' | 'all'>, ServiceDef> = {
@@ -36,14 +39,14 @@ const SERVICES: Record<Exclude<InfraTarget, 'kb' | 'test' | 'all'>, ServiceDef> 
     composeDir: INFRA.markitdown,
     container: 'markitdown',
     healthUrl: 'http://localhost:8200/health',
-    buildOnUp: true,
+    localBuild: true,
   },
   qlib: {
     name: 'qlib',
     composeDir: INFRA.qlib,
     container: 'qlib-api',
     healthUrl: 'http://localhost:8000/health',
-    buildOnUp: true,
+    localBuild: true,
   },
   redis: {
     name: 'redis',
@@ -80,10 +83,38 @@ function checkHealthExec(container: string, cmd: string[]): boolean {
   return run('docker', ['exec', container, ...cmd], { inherit: false }).ok
 }
 
-function composeUp(service: ServiceDef, build: boolean): void {
+async function isHealthy(service: ServiceDef): Promise<boolean> {
+  if (!containerRunning(service.container))
+    return false
+  if (service.healthUrl)
+    return checkHealth(service.healthUrl)
+  if (service.healthExec)
+    return checkHealthExec(service.container, service.healthExec)
+  return true
+}
+
+/** compose 项目是否已有本地镜像（用于 localBuild 首次启动判定） */
+function hasComposeImage(service: ServiceDef): boolean {
+  const { ok, stdout } = run(
+    'docker',
+    ['compose', 'images', '-q'],
+    { cwd: service.composeDir, inherit: false },
+  )
+  return ok && stdout.trim().length > 0
+}
+
+async function composeUp(service: ServiceDef, forceBuild: boolean): Promise<void> {
+  if (!forceBuild && await isHealthy(service)) {
+    console.log(`  ${service.name}: already healthy, skip`)
+    return
+  }
+
   const args = ['compose', 'up', '-d']
-  if (build || service.buildOnUp)
+  const needBuild = forceBuild || (service.localBuild === true && !hasComposeImage(service))
+  if (needBuild)
     args.push('--build')
+
+  console.log(`  ${service.name}: ${needBuild ? 'up --build' : 'up'}`)
   const result = run('docker', args, { cwd: service.composeDir })
   if (!result.ok)
     fail(`${service.name} 启动失败，请检查: cd ${service.composeDir} && docker compose logs`)
@@ -98,9 +129,10 @@ function composeDown(service: ServiceDef): void {
 export async function infraUp(target: InfraTarget, options?: { build?: boolean }): Promise<void> {
   ensureDocker()
   const targets = resolveTargets(target)
-  console.log(`[devops] infra up: ${targets.join(', ')}`)
+  const forceBuild = options?.build ?? false
+  console.log(`[devops] infra up: ${targets.join(', ')}${forceBuild ? ' (--build)' : ''}`)
   for (const key of targets)
-    composeUp(SERVICES[key], options?.build ?? false)
+    await composeUp(SERVICES[key], forceBuild)
   console.log('[devops] infra up 完成')
 }
 

@@ -1,7 +1,7 @@
-import type { FolderTree, PerspectiveInput, TagTree } from '@agent/gtd'
+import type { FolderTree, PerspectiveInput } from '@agent/gtd'
 import type { GtdSelection } from '@stores/gtd-store'
 import type { ReactNode } from 'react'
-import { buildFolderTree, buildTagTree, builtinPerspectives, EXPLICIT_STATUS } from '@agent/gtd'
+import { buildFolderTree, builtinPerspectives, EXPLICIT_STATUS, sortTags } from '@agent/gtd'
 import { GtdPerspectiveEditor } from '@components/gtd/GtdPerspectiveEditor'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
@@ -181,46 +181,6 @@ function FolderNodes({
   )
 }
 
-function TagNodes({
-  nodes,
-  depth,
-  selection,
-  onSelect,
-}: {
-  nodes: TagTree['roots']
-  depth: number
-  selection: GtdSelection
-  onSelect: (sel: GtdSelection) => void
-}) {
-  return (
-    <>
-      <SortableContext
-        items={nodes.map(node => `tag:${node.tag.id}`)}
-        strategy={verticalListSortingStrategy}
-      >
-        {nodes.map(node => (
-          <div key={node.tag.id}>
-            <SortableNavItem
-              sortableId={`tag:${node.tag.id}`}
-              active={selection.kind === 'tag' && selection.id === node.tag.id}
-              icon={Tag}
-              label={node.tag.data.name}
-              indent={depth}
-              onClick={() => onSelect({ kind: 'tag', id: node.tag.id })}
-            />
-            <TagNodes
-              nodes={node.children}
-              depth={depth + 1}
-              selection={selection}
-              onSelect={onSelect}
-            />
-          </div>
-        ))}
-      </SortableContext>
-    </>
-  )
-}
-
 export function GtdSidebar() {
   const {
     rowStore,
@@ -233,7 +193,6 @@ export function GtdSidebar() {
     patchPerspective,
     removePerspective,
     reorderProject,
-    reorderTag,
     reorderFolder,
     syncStatus,
     error,
@@ -261,15 +220,7 @@ export function GtdSidebar() {
     })),
     [rowStore],
   )
-  const tags = useMemo(
-    () => rowStore.liveTags().map(t => ({
-      id: t.id,
-      name: t.data.name,
-      parentId: t.data.parentId,
-      order: t.data.order,
-    })),
-    [rowStore],
-  )
+  const flatTags = useMemo(() => sortTags(rowStore.liveTags()), [rowStore])
   const folders = useMemo(
     () => rowStore.liveFolders().map(f => ({
       id: f.id,
@@ -280,7 +231,6 @@ export function GtdSidebar() {
     [rowStore],
   )
   const folderTree = useMemo(() => buildFolderTree(rowStore.liveFolders()), [rowStore])
-  const tagTree = useMemo(() => buildTagTree(rowStore.liveTags()), [rowStore])
   const rootProjects = useMemo(
     () => projects
       .filter(p => p.folderId == null && p.status !== EXPLICIT_STATUS.DELETED)
@@ -325,9 +275,7 @@ export function GtdSidebar() {
           return
         const source = kind === 'project'
           ? projects
-          : kind === 'tag'
-            ? tags
-            : folders
+          : folders
         const entity = source.find(item => item.id === id)
         const overEntity = source.find(item => item.id === overId)
         if (!entity || !overEntity)
@@ -354,8 +302,6 @@ export function GtdSidebar() {
         }
         if (kind === 'project')
           reorderProject(id, target)
-        else if (kind === 'tag')
-          reorderTag(id, target)
         else
           reorderFolder(id, target)
       }}
@@ -557,12 +503,15 @@ export function GtdSidebar() {
             标签
           </div>
           <div className="space-y-0.5">
-            <TagNodes
-              nodes={tagTree.roots}
-              depth={0}
-              selection={selection}
-              onSelect={setSelection}
-            />
+            {flatTags.map(tag => (
+              <NavItem
+                key={tag.id}
+                active={selection.kind === 'tag' && selection.id === tag.id}
+                icon={Tag}
+                label={tag.data.name}
+                onClick={() => setSelection({ kind: 'tag', id: tag.id })}
+              />
+            ))}
             <div className="flex gap-1 px-1 pt-1">
               <Input
                 value={tagName}

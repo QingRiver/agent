@@ -1,18 +1,20 @@
 import { fail } from '../support/assert'
 import { runHitlAgentE2E } from './hitl-agent'
 import { runKbAgentE2E } from './kb-agent'
+import { runTagsE2E } from './tags'
 
 /**
  * Flow 注册表。
  *
- * 新增 agent flow：实现一个 `() => Promise<void>`（通过/失败以 exit code 表达），
+ * 新增 HTTP/SSE flow：实现一个 `() => Promise<void>`（通过/失败以 exit code 表达），
  * 在此注册即可被 runner / devops 调用，无需改 skill。
  */
-export type E2eFlowName = 'hitl-agent' | 'kb-agent'
+export type E2eFlowName = 'hitl-agent' | 'kb-agent' | 'tags'
 
 export const FLOWS: Record<E2eFlowName, () => Promise<void>> = {
   'hitl-agent': runHitlAgentE2E,
   'kb-agent': runKbAgentE2E,
+  'tags': runTagsE2E,
 }
 
 /** 按名称运行 flow；未知名称直接 fail 列出可用项。 */
