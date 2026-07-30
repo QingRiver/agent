@@ -25,9 +25,12 @@ describe('devGraph hitlDemo + AguiTransformer', () => {
       input,
       { version: 'v3', configurable: { thread_id: threadId } },
     )
-    const protocolDone = (async () => {
+
+    async function drainProtocol() {
       for await (const _ of stream) { /* drain protocol */ }
-    })()
+    }
+
+    const protocolDone = drainProtocol()
     const events: AguiMappedEvent[] = await Array.fromAsync(stream.extensions.aguiEvents)
     await protocolDone
 

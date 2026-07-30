@@ -21,6 +21,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useGtd } from '@hooks/useGtd'
+import { downloadFile } from '@lib/downloadFile'
 import { cn } from '@lib/utils'
 import {
   CalendarDays,
@@ -38,7 +39,7 @@ import {
   Telescope,
   Upload,
 } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 
 const PERSPECTIVE_ICONS: Record<string, typeof Inbox> = {
   inbox: Inbox,
@@ -209,44 +210,29 @@ export function GtdSidebar() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  const perspectives = useMemo(() => builtinPerspectives(), [])
-  const projects = useMemo(
-    () => rowStore.liveProjects().map(p => ({
-      id: p.id,
-      name: p.data.name,
-      folderId: p.data.folderId,
-      status: p.data.status,
-      order: p.data.order,
-    })),
-    [rowStore],
-  )
-  const flatTags = useMemo(() => sortTags(rowStore.liveTags()), [rowStore])
-  const folders = useMemo(
-    () => rowStore.liveFolders().map(f => ({
-      id: f.id,
-      name: f.data.name,
-      parentId: f.data.parentId,
-      order: f.data.order,
-    })),
-    [rowStore],
-  )
-  const folderTree = useMemo(() => buildFolderTree(rowStore.liveFolders()), [rowStore])
-  const rootProjects = useMemo(
-    () => projects
-      .filter(p => p.folderId == null && p.status !== EXPLICIT_STATUS.DELETED)
-      .sort((a, b) => a.order - b.order),
-    [projects],
-  )
-  const activeProjects = useMemo(
-    () => projects
-      .filter(p => p.status !== EXPLICIT_STATUS.DELETED)
-      .sort((a, b) => a.order - b.order),
-    [projects],
-  )
-  const customPerspectives = useMemo(
-    () => rowStore.livePerspectives().map(p => ({ id: p.id, name: p.data.name })),
-    [rowStore],
-  )
+  const perspectives = builtinPerspectives()
+  const projects = rowStore.liveProjects().map(p => ({
+    id: p.id,
+    name: p.data.name,
+    folderId: p.data.folderId,
+    status: p.data.status,
+    order: p.data.order,
+  }))
+  const flatTags = sortTags(rowStore.liveTags())
+  const folders = rowStore.liveFolders().map(f => ({
+    id: f.id,
+    name: f.data.name,
+    parentId: f.data.parentId,
+    order: f.data.order,
+  }))
+  const folderTree = buildFolderTree(rowStore.liveFolders())
+  const rootProjects = projects
+    .filter(p => p.folderId == null && p.status !== EXPLICIT_STATUS.DELETED)
+    .sort((a, b) => a.order - b.order)
+  const activeProjects = projects
+    .filter(p => p.status !== EXPLICIT_STATUS.DELETED)
+    .sort((a, b) => a.order - b.order)
+  const customPerspectives = rowStore.livePerspectives().map(p => ({ id: p.id, name: p.data.name }))
 
   const syncLabel = syncStatus === 'syncing'
     ? '同步中…'
@@ -256,12 +242,13 @@ export function GtdSidebar() {
         ? '同步错误'
         : null
 
-  const editingPerspective = useMemo(() => {
+  function resolveEditingPerspective() {
     if (!perspectiveEditorId || perspectiveEditorId === 'new')
       return undefined
     const r = rowStore.livePerspectives().find(p => p.id === perspectiveEditorId)
     return r ? { id: r.id, ...r.data } : undefined
-  }, [perspectiveEditorId, rowStore])
+  }
+  const editingPerspective = resolveEditingPerspective()
 
   return (
     <DndContext
@@ -317,13 +304,11 @@ export function GtdSidebar() {
               title="导出 JSON"
               onClick={() => {
                 const json = exportDocument()
-                const blob = new Blob([json], { type: 'application/json' })
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `gtd-export-${new Date().toISOString().slice(0, 10)}.json`
-                a.click()
-                URL.revokeObjectURL(url)
+                downloadFile(
+                  json,
+                  `gtd-export-${new Date().toISOString().slice(0, 10)}.json`,
+                  'application/json',
+                )
               }}
             >
               <Download className="size-3.5" />

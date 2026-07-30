@@ -2,15 +2,14 @@ import type { EditorWriteProposal } from '@components/text-editor/EditorChatPane
 import { EditorChatPanel } from '@components/text-editor/EditorChatPanel'
 import { KbStore } from '@stores/kb-store'
 import { getDefaultStore } from 'jotai'
-import { useCallback } from 'react'
 
 /** 知识库源码模式右侧 AI：复用 editorChat，读写 KbStore 正文 */
 export function KbSourceChatPanel() {
-  const getDocument = useCallback(() => {
+  function getDocument() {
     return getDefaultStore().get(KbStore.activeDocAtom)?.content ?? ''
-  }, [])
+  }
 
-  const onApplyProposal = useCallback((proposal: EditorWriteProposal) => {
+  function onApplyProposal(proposal: EditorWriteProposal) {
     const store = getDefaultStore()
     const doc = store.get(KbStore.activeDocAtom)
     if (!doc)
@@ -22,7 +21,7 @@ export function KbSourceChatPanel() {
       return false
     KbStore.updateLocalContent(proposal.polished)
     return true
-  }, [])
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">

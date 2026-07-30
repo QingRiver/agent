@@ -1,4 +1,6 @@
 import antfu from '@antfu/eslint-config'
+import reactCompiler from 'eslint-plugin-react-compiler'
+import reactHooks from 'eslint-plugin-react-hooks'
 
 export default antfu({
   react: true,
@@ -9,13 +11,13 @@ export default antfu({
       formatter: 'prettier',
       options: {
         printWidth: 40,
-      }
+      },
     },
     javascript: {
       formatter: 'prettier',
       options: {
         printWidth: 40,
-      }
+      },
     },
   },
   ignores: [
@@ -45,6 +47,17 @@ export default antfu({
         message: 'Re-export paths must not include a .js extension.',
       },
     ],
+  },
+}, {
+  files: ['apps/client/src/**/*.{tsx,ts}'],
+  plugins: {
+    'react-compiler': reactCompiler,
+    'react-hooks': reactHooks,
+  },
+  rules: {
+    'react-compiler/react-compiler': 'error',
+    'react-hooks/exhaustive-deps': 'error',
+    'react-hooks/rules-of-hooks': 'error',
   },
 }, {
   files: ['apps/client/src/routes/**/*.{tsx,ts}', 'apps/client/src/contexts/**/*.{tsx,ts}'],

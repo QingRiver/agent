@@ -55,11 +55,17 @@ function extractToc(html: string): TocItem[] {
 
 /**
  * 将 Markdown 渲染为 HTML，并提取与标题 id 对齐的目录。
+ * 解析失败时返回默认提示，不向外抛错。
  */
 export function renderMarkdown(md: string): { html: string, toc: TocItem[] } {
-  const html = marked.parse(md || '', { async: false }) as string
-  return {
-    html,
-    toc: extractToc(html),
+  try {
+    const html = marked.parse(md || '', { async: false }) as string
+    return {
+      html,
+      toc: extractToc(html),
+    }
+  }
+  catch {
+    return { html: '<p>解析异常</p>', toc: [] }
   }
 }

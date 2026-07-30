@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { CopilotKitProvider } from '@copilotkit/react-core/v2'
 import { useAuth } from '@hooks/useAuth'
+import { ReactAgentRuntimeStore } from '@stores/react-agent-runtime-store'
+import { useAtomValue } from 'jotai'
 import '@copilotkit/react-core/v2/styles.css'
 
 interface CopilotKitAppProviderProps {
@@ -9,6 +11,7 @@ interface CopilotKitAppProviderProps {
 
 export function CopilotKitAppProvider({ children }: CopilotKitAppProviderProps) {
   const { token } = useAuth()
+  const properties = useAtomValue(ReactAgentRuntimeStore.propertiesAtom)
 
   if (!token)
     return <>{children}</>
@@ -18,6 +21,7 @@ export function CopilotKitAppProvider({ children }: CopilotKitAppProviderProps) 
       key={token}
       runtimeUrl="/api/copilotkit"
       headers={{ Authorization: `Bearer ${token}` }}
+      properties={properties}
     >
       {children}
     </CopilotKitProvider>

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { authClient, getStoredToken, setStoredToken } from '@apis/auth-client'
-import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
+import { createContext, useEffect, useState } from 'react'
 
 export interface AuthUser {
   id: string
@@ -25,7 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => getStoredToken())
   const [isLoading, setIsLoading] = useState(true)
 
-  const refreshSession = useCallback(async () => {
+  async function refreshSession() {
     const stored = getStoredToken()
     setToken(stored)
     if (!stored) {
@@ -37,43 +37,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data?.user ?? null)
     if (!data?.user)
       setStoredToken(null)
-  }, [])
+  }
 
   useEffect(() => {
     refreshSession().finally(() => setIsLoading(false))
-  }, [refreshSession])
+  }, [])
 
-  const signIn = useCallback(async (email: string, password: string) => {
+  async function signIn(email: string, password: string) {
     const { error } = await authClient.signIn.email({ email, password })
     if (error)
       throw new Error(error.message ?? '登录失败')
     await refreshSession()
     setToken(getStoredToken())
-  }, [refreshSession])
+  }
 
-  const signUp = useCallback(async (email: string, password: string, name: string) => {
+  async function signUp(email: string, password: string, name: string) {
     const { error } = await authClient.signUp.email({ email, password, name })
     if (error)
       throw new Error(error.message ?? '注册失败')
     await refreshSession()
     setToken(getStoredToken())
-  }, [refreshSession])
+  }
 
-  const signOut = useCallback(async () => {
+  async function signOut() {
     await authClient.signOut()
     setStoredToken(null)
     setToken(null)
     setUser(null)
-  }, [])
+  }
 
-  const value = useMemo<AuthContextValue>(() => ({
+  const value: AuthContextValue = {
     user,
     token,
     isLoading,
     signIn,
     signUp,
     signOut,
-  }), [user, token, isLoading, signIn, signUp, signOut])
+  }
 
   return (
     <AuthContext value={value}>

@@ -83,27 +83,27 @@ export function TagManager({ open, onClose }: TagManagerProps) {
     catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-    finally {
-      setBusy(false)
-    }
+    setBusy(false)
   }
 
   async function onSaveEdit(tag: TagRow) {
     setBusy(true)
     setError(null)
+    const trimmedName = editName.trim()
+    const shouldRename = trimmedName !== '' && trimmedName !== tag.name
+    const shouldUpdateColor = editColor !== undefined
+    const nextColor = editColor ?? null
     try {
-      if (editName.trim() && editName.trim() !== tag.name)
-        await TagsStore.rename(tag.id, editName.trim())
-      if (editColor !== undefined)
-        await TagsStore.updateColor(tag.id, editColor ?? null)
+      if (shouldRename)
+        await TagsStore.rename(tag.id, trimmedName)
+      if (shouldUpdateColor)
+        await TagsStore.updateColor(tag.id, nextColor)
       setEditingId(null)
     }
     catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-    finally {
-      setBusy(false)
-    }
+    setBusy(false)
   }
 
   async function fetchDryRun(tagId: string, mode: DeleteMode): Promise<TagDeleteDryRunResult> {
@@ -127,9 +127,7 @@ export function TagManager({ open, onClose }: TagManagerProps) {
     catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-    finally {
-      setBusy(false)
-    }
+    setBusy(false)
   }
 
   async function onDeleteModeChange(mode: DeleteMode) {
@@ -148,9 +146,7 @@ export function TagManager({ open, onClose }: TagManagerProps) {
       catch (e) {
         setError(e instanceof Error ? e.message : String(e))
       }
-      finally {
-        setBusy(false)
-      }
+      setBusy(false)
     }
   }
 
@@ -170,33 +166,31 @@ export function TagManager({ open, onClose }: TagManagerProps) {
     catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-    finally {
-      setBusy(false)
-    }
+    setBusy(false)
   }
 
   async function onConfirmUntagDelete() {
     if (!pendingDelete)
       return
+    const hadTasks = (dryRunResult?.tasks.length ?? 0) > 0
     setBusy(true)
     setError(null)
     try {
       await TagsStore.deleteTag(pendingDelete.id, { mode: 'untag' })
-      const hadTasks = (dryRunResult?.tasks.length ?? 0) > 0
       resetDeleteFlow()
       await afterDeleteRefresh(hadTasks)
     }
     catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-    finally {
-      setBusy(false)
-    }
+    setBusy(false)
   }
 
   async function onConfirmEntityDelete() {
     if (!pendingDelete)
       return
+    const hadTasks = selectedTaskIds.size > 0
+      || (dryRunResult?.tasks.some(t => !selectedTaskIds.has(t.id)) ?? false)
     setBusy(true)
     setError(null)
     try {
@@ -205,17 +199,13 @@ export function TagManager({ open, onClose }: TagManagerProps) {
         docIds: [...selectedDocIds],
         taskIds: [...selectedTaskIds],
       })
-      const hadTasks = selectedTaskIds.size > 0
-        || (dryRunResult?.tasks.some(t => !selectedTaskIds.has(t.id)) ?? false)
       resetDeleteFlow()
       await afterDeleteRefresh(hadTasks)
     }
     catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-    finally {
-      setBusy(false)
-    }
+    setBusy(false)
   }
 
   function startEdit(tag: TagRow) {

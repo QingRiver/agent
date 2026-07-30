@@ -6,7 +6,7 @@ import { KbSync } from '@components/kb/KbSync'
 import { KbLayout } from '@layouts/KbLayout'
 import { KbStore } from '@stores/kb-store'
 import { createFileRoute } from '@tanstack/react-router'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { z } from 'zod'
 
 const LS_SIDEBAR_COLLAPSED = 'kb.sidebarCollapsed'
@@ -46,26 +46,29 @@ function KbPage() {
 
   useEffect(() => {
     let cancelled = false
-    void (async () => {
+
+    async function selectRouteDocument() {
       if (path) {
         await KbStore.selectByVdir(path)
         return
       }
       if (doc && !cancelled)
         KbStore.select(doc)
-    })()
+    }
+
+    void selectRouteDocument()
     return () => {
       cancelled = true
     }
   }, [path, doc])
 
-  const onToggleSidebar = useCallback(() => {
+  function onToggleSidebar() {
     setSidebarCollapsed((prev) => {
       const next = !prev
       writeSidebarCollapsed(next)
       return next
     })
-  }, [])
+  }
 
   const rightRail = sourceMode
     ? <KbSourceChatPanel />

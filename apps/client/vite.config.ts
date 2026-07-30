@@ -1,9 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
-import react from '@vitejs/plugin-react'
+import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
@@ -39,6 +40,14 @@ export default defineConfig({
   plugins: [
     tanstackRouter({ target: 'react', autoCodeSplitting: true }),
     react(),
+    babel({
+      presets: [
+        reactCompilerPreset({
+          target: '19',
+          panicThreshold: 'all_errors',
+        }),
+      ],
+    }),
     tailwindcss(),
   ],
   server: {

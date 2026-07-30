@@ -5,7 +5,7 @@ import { cn } from '@lib/utils'
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { CalendarIcon, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { zhCN as dayPickerZhCN } from 'react-day-picker/locale'
 
 function pad(n: number): string {
@@ -35,7 +35,7 @@ interface GtdDateTimeFieldProps {
 
 export function GtdDateTimeField({ label, value, onChange, className }: GtdDateTimeFieldProps) {
   const [open, setOpen] = useState(false)
-  const selected = useMemo(() => parseIso(value), [value])
+  const selected = parseIso(value)
   const timeValue = selected
     ? `${pad(selected.getHours())}:${pad(selected.getMinutes())}`
     : '09:00'

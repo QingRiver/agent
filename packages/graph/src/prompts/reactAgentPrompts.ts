@@ -1,4 +1,9 @@
+import type { RunAgentInput } from '@ag-ui/core'
 import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/protocol'
+import { z } from 'zod'
+
+/** CopilotKit `properties` / `RunAgentInput.forwardedProps` 上的 reactAgent 命名空间 */
+export const REACT_AGENT_FORWARDED_PROPS_KEY = 'reactAgent' as const
 
 /** 平台 KB 工具引导（仅服务端拼接进 system，客户端不可覆盖） */
 export const KB_SEARCH_SYSTEM_PROMPT = [
@@ -26,6 +31,16 @@ export const REACT_AGENT_USER_PROMPT_MAX = 32_000
 export const REACT_AGENT_MAX_STEPS_DEFAULT = 50
 export const REACT_AGENT_MAX_STEPS_MIN = 1
 export const REACT_AGENT_MAX_STEPS_MAX = 200
+
+/** 请求级运行配置（不含 Lab UI 元数据） */
+export const ReactAgentRuntimeConfigSchema = z.object({
+  userPrompt: z.string().max(REACT_AGENT_USER_PROMPT_MAX),
+  kbId: z.string().min(1).max(128),
+  /** 图节点转移上限（= LangGraph recursionLimit） */
+  maxSteps: z.number().int().min(REACT_AGENT_MAX_STEPS_MIN).max(REACT_AGENT_MAX_STEPS_MAX),
+})
+
+export type ReactAgentRuntimeConfig = z.infer<typeof ReactAgentRuntimeConfigSchema>
 
 /** 与服务端一致的最终 system 拼接（配置页预览用） */
 export function composeReactAgentSystemPrompt(userPrompt: string): string {
@@ -57,4 +72,28 @@ export function sanitizeKbId(raw: unknown, fallback = 'kb_default'): string {
   if (typeof raw === 'string' && raw.trim())
     return raw.trim().slice(0, 128)
   return fallback
+}
+
+/**
+ * 从 RunAgentInput.forwardedProps.reactAgent 读取运行配置（partial）。
+ * 非法结构返回空对象，由调用方回退到 state / 默认值。
+ */
+export function readReactAgentForwardedProps(
+  input: Pick<RunAgentInput, 'forwardedProps'>,
+): Partial<ReactAgentRuntimeConfig> {
+  const props = input.forwardedProps
+  if (props == null || typeof props !== 'object' || Array.isArray(props))
+    return {}
+  const raw = (props as Record<string, unknown>)[REACT_AGENT_FORWARDED_PROPS_KEY]
+  const parsed = ReactAgentRuntimeConfigSchema.partial().safeParse(raw)
+  if (!parsed.success)
+    return {}
+  const out: Partial<ReactAgentRuntimeConfig> = {}
+  if (parsed.data.userPrompt !== undefined)
+    out.userPrompt = parsed.data.userPrompt
+  if (parsed.data.kbId !== undefined)
+    out.kbId = parsed.data.kbId
+  if (parsed.data.maxSteps !== undefined)
+    out.maxSteps = parsed.data.maxSteps
+  return out
 }

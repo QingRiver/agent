@@ -1,9 +1,10 @@
 import { renderMarkdown } from '@agent/markdown'
+import { useLatest } from '@hooks/useLatest'
 import { ThemeStore } from '@stores/theme-store'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { useAtomValue } from 'jotai'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Markdown } from 'tiptap-markdown'
 import { KbMarkdownToc } from './KbMarkdownToc'
 
@@ -15,8 +16,7 @@ interface KbRichEditorProps {
 
 export function KbRichEditor({ value, onChange, docId }: KbRichEditorProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const onChangeRef = useRef(onChange)
-  onChangeRef.current = onChange
+  const onChangeRef = useLatest(onChange)
   const skipNextExternalRef = useRef(false)
   const mode = useAtomValue(ThemeStore.modeAtom)
   const isDark = mode === 'dark'
@@ -59,15 +59,7 @@ export function KbRichEditor({ value, onChange, docId }: KbRichEditorProps) {
     editor.commands.setContent(value)
   }, [editor, value])
 
-  const toc = useMemo(() => {
-    try {
-      return renderMarkdown(value || '').toc
-    }
-    catch {
-      return []
-    }
-  }, [value])
-
+  const { toc } = renderMarkdown(value)
   const hasToc = toc.length > 0
 
   return (

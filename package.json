@@ -32,6 +32,8 @@
     "@types/node": "catalog:",
     "eslint": "catalog:",
     "eslint-plugin-format": "catalog:",
+    "eslint-plugin-react-compiler": "catalog:",
+    "eslint-plugin-react-hooks": "catalog:",
     "ts-pattern": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",

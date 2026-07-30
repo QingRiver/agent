@@ -30,9 +30,7 @@ function RegisterPage() {
     catch (err) {
       setError(err instanceof Error ? err.message : '注册失败')
     }
-    finally {
-      setPending(false)
-    }
+    setPending(false)
   }
 
   return (

@@ -1,7 +1,7 @@
 import type { TocItem } from '@agent/markdown'
 import type { KbMarkdownEditorHandle } from './KbMarkdownEditor'
 import { renderMarkdown } from '@agent/markdown'
-import { useMemo, useRef } from 'react'
+import { useRef } from 'react'
 import { KbMarkdownEditor } from './KbMarkdownEditor'
 import { KbMarkdownToc } from './KbMarkdownToc'
 
@@ -15,15 +15,7 @@ interface KbSourceEditorProps {
 export function KbSourceEditor({ value, onChange, docId }: KbSourceEditorProps) {
   const editorRef = useRef<KbMarkdownEditorHandle>(null)
 
-  const toc = useMemo(() => {
-    try {
-      return renderMarkdown(value || '').toc
-    }
-    catch {
-      return []
-    }
-  }, [value])
-
+  const { toc } = renderMarkdown(value)
   const hasToc = toc.length > 0
 
   function onNavigateHeading(item: TocItem) {

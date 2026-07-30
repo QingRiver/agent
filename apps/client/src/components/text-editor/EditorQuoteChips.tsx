@@ -18,7 +18,7 @@ export function EditorQuoteChips({ quotes, onRemove }: EditorQuoteChipsProps) {
           key={q.id}
           className="group flex max-w-full items-start gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-xs text-sky-800 dark:text-sky-200"
         >
-          <span className="line-clamp-2 min-w-0 flex-1 whitespace-pre-wrap break-words">
+          <span className="line-clamp-2 min-w-0 flex-1 whitespace-pre-wrap wrap-break-word">
             {q.text}
           </span>
           <button

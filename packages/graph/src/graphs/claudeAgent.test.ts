@@ -56,9 +56,12 @@ describe('claudeAgentGraph + AguiTransformer', () => {
       { messages: [new HumanMessage(userText)] },
       { version: 'v3', configurable: { thread_id: threadId } },
     )
-    const protocolDone = (async () => {
+
+    async function drainProtocol() {
       for await (const _ of stream) { /* drain */ }
-    })()
+    }
+
+    const protocolDone = drainProtocol()
     const events = await Array.fromAsync(stream.extensions.aguiEvents)
     await protocolDone
 

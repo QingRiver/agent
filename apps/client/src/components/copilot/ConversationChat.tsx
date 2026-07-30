@@ -5,7 +5,7 @@ import {
   CopilotChatConfigurationProvider,
   useAgent,
 } from '@copilotkit/react-core/v2'
-import { useRef } from 'react'
+import { useLatest } from '@hooks/useLatest'
 import { CopilotRuntimeReady } from './CopilotRuntimeReady'
 import { ErrorAssistantMessage } from './ErrorAssistantMessage'
 import { buildErrorMessage, readErrorFields } from './errorMessage'
@@ -41,8 +41,7 @@ export function ConversationChat({
   children,
 }: ConversationChatProps) {
   const { agent } = useAgent({ agentId: graphsName })
-  const agentRef = useRef(agent)
-  agentRef.current = agent
+  const agentRef = useLatest(agent)
 
   // threadId 切换时父级 ChatPanel key={active.id} 会重挂本组件,错误 state 自然重置,无需 effect 清空
 

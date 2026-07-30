@@ -1,38 +1,15 @@
 import { Button } from '@components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@components/ui/popover'
-import { useKbDocuments } from '@hooks/useKbDocuments'
-import { validateKbDocName } from '@lib/validateMarkdownFileName'
-import { isDocDirty } from '@stores/kb-store'
+import { useKbEditorController } from '@hooks/useKbEditorController'
 import { FilePlus, Loader2 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
 import { KbDocTagsBar } from './KbDocTagsBar'
 import { KbMarkdownEditor } from './KbMarkdownEditor'
 import { KbMarkdownPreview } from './KbMarkdownPreview'
 import { KbRichEditor } from './KbRichEditor'
 import { KbSourceEditor } from './KbSourceEditor'
+import { KB_VIEW_MODE_LABEL } from './kbViewMode'
 
-export type KbViewMode = 'rich' | 'source' | 'split' | 'read'
-
-const MODE_LABEL: Record<KbViewMode, string> = {
-  rich: '编辑',
-  source: '源码',
-  split: '分屏',
-  read: '阅读',
-}
-
-function readInitialMode(): KbViewMode {
-  try {
-    const raw = localStorage.getItem('kb.editorMode')
-    if (raw === 'edit' || raw === 'source')
-      return 'source'
-    if (raw === 'preview' || raw === 'read')
-      return 'read'
-    if (raw === 'rich' || raw === 'split')
-      return raw
-  }
-  catch { /* ignore */ }
-  return 'source'
-}
+export type { KbViewMode } from './kbViewMode'
 
 interface KbEditorProps {
   /** 源码模式时通知父级打开右侧 AI 轨 */
@@ -40,147 +17,36 @@ interface KbEditorProps {
 }
 
 export function KbEditor({ onSourceModeChange }: KbEditorProps) {
+  const editor = useKbEditorController({ onSourceModeChange })
   const {
     activeDoc,
     tags: allTags,
     saving,
     committing,
+    mutating,
+    mutation,
     error,
-    localDirty,
-    updateLocalContent,
-    updateLocalName,
-    saveDraft,
-    updateMeta,
-    commit,
     createBlank,
-    remove,
-  } = useKbDocuments()
-
-  const [mode, setMode] = useState<KbViewMode>(readInitialMode)
-  const [busy, setBusy] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [nameEditingId, setNameEditingId] = useState<string | null>(null)
-  const [nameDraft, setNameDraft] = useState('')
-  const [nameError, setNameError] = useState<string | null>(null)
-
-  function changeMode(m: KbViewMode) {
-    setMode(m)
-    try {
-      localStorage.setItem('kb.editorMode', m)
-    }
-    catch { /* ignore */ }
-  }
-
-  function applyNameDraft(): boolean {
-    const result = validateKbDocName(nameDraft)
-    if (!result.isValid) {
-      setNameError(result.message ?? '文件名不合法')
-      return false
-    }
-    updateLocalName(nameDraft)
-    setNameError(null)
-    setNameEditingId(null)
-    return true
-  }
-
-  useEffect(() => {
-    onSourceModeChange?.(mode === 'source')
-  }, [mode, onSourceModeChange])
-
-  const dirty = activeDoc
-    ? localDirty || isDocDirty(activeDoc)
-    : false
-
-  const onSave = useCallback(async () => {
-    if (!activeDoc || saving || committing)
-      return
-    const result = validateKbDocName(activeDoc.name)
-    if (!result.isValid) {
-      setNameError(result.message ?? '文件名不合法')
-      setNameDraft(activeDoc.name)
-      setNameEditingId(activeDoc.id)
-      return
-    }
-    setNameError(null)
-    setBusy(true)
-    try {
-      await saveDraft()
-    }
-    catch {
-      // store 已记 error
-    }
-    finally {
-      setBusy(false)
-    }
-  }, [activeDoc, saving, committing, saveDraft])
-
-  const onCommit = useCallback(async () => {
-    if (!activeDoc || saving || committing)
-      return
-    const result = validateKbDocName(activeDoc.name)
-    if (!result.isValid) {
-      setNameError(result.message ?? '文件名不合法')
-      setNameDraft(activeDoc.name)
-      setNameEditingId(activeDoc.id)
-      return
-    }
-    setNameError(null)
-    setBusy(true)
-    try {
-      await commit()
-    }
-    catch {
-      // store 已记 error
-    }
-    finally {
-      setBusy(false)
-    }
-  }, [activeDoc, saving, committing, commit])
-
-  const onDelete = useCallback(async () => {
-    if (!activeDoc || saving || committing || busy)
-      return
-    setBusy(true)
-    setDeleteOpen(false)
-    try {
-      await remove(activeDoc.id)
-    }
-    catch {
-      // store 已记 error
-    }
-    finally {
-      setBusy(false)
-    }
-  }, [activeDoc, saving, committing, busy, remove])
-
-  const onChangeTagIds = useCallback(async (next: string[]) => {
-    if (!activeDoc)
-      return
-    try {
-      await updateMeta(activeDoc.id, { tagIds: next })
-    }
-    catch {
-      // store 已记 error
-    }
-  }, [activeDoc, updateMeta])
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const meta = e.metaKey || e.ctrlKey
-      if (!meta)
-        return
-      if (e.key === 's') {
-        e.preventDefault()
-        void onSave()
-      }
-      else if (e.key === 'Enter') {
-        e.preventDefault()
-        void onCommit()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onSave, onCommit])
+    updateLocalContent,
+    mode,
+    changeMode,
+    deleteOpen,
+    setDeleteOpen,
+    nameEditingId,
+    nameDraft,
+    setNameDraft,
+    nameError,
+    setNameError,
+    beginNameEdit,
+    cancelNameEdit,
+    applyNameDraft,
+    dirty,
+    statusLabel,
+    save,
+    submit,
+    deleteActive,
+    changeTagIds,
+  } = editor
 
   if (!activeDoc) {
     return (
@@ -198,22 +64,6 @@ export function KbEditor({ onSourceModeChange }: KbEditorProps) {
       </div>
     )
   }
-
-  const statusLabel = (() => {
-    if (committing)
-      return '提交中…'
-    if (saving)
-      return '保存中…'
-    if (activeDoc.indexingStatus === 'error')
-      return `错误：${activeDoc.error ?? '提交失败'}`
-    if (activeDoc.indexingStatus === 'indexing')
-      return '索引中…'
-    if (dirty)
-      return '未提交'
-    if (activeDoc.indexingStatus === 'completed')
-      return '已提交'
-    return '草稿'
-  })()
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -238,12 +88,11 @@ export function KbEditor({ onSourceModeChange }: KbEditorProps) {
                   }
                   else if (e.key === 'Escape') {
                     e.preventDefault()
-                    setNameError(null)
-                    setNameEditingId(null)
+                    cancelNameEdit()
                   }
                 }}
                 aria-invalid={nameError != null}
-                className={`min-w-[8rem] flex-1 rounded-md border bg-background px-2 py-1.5 text-base font-medium text-foreground outline-none ${
+                className={`min-w-32 flex-1 rounded-md border bg-background px-2 py-1.5 text-base font-medium text-foreground outline-none ${
                   nameError ? 'border-destructive focus:border-destructive' : 'border-border focus:border-border'
                 }`}
               />
@@ -252,12 +101,8 @@ export function KbEditor({ onSourceModeChange }: KbEditorProps) {
               <button
                 type="button"
                 title="双击编辑标题"
-                onDoubleClick={() => {
-                  setNameDraft(activeDoc.name)
-                  setNameError(null)
-                  setNameEditingId(activeDoc.id)
-                }}
-                className="min-w-[8rem] flex-1 truncate rounded-md px-2 py-1.5 text-left text-base font-medium text-foreground hover:bg-accent/40"
+                onDoubleClick={beginNameEdit}
+                className="min-w-32 flex-1 truncate rounded-md px-2 py-1.5 text-left text-base font-medium text-foreground hover:bg-accent/40"
               >
                 {activeDoc.name || '未命名'}
               </button>
@@ -274,7 +119,7 @@ export function KbEditor({ onSourceModeChange }: KbEditorProps) {
           <PopoverTrigger asChild>
             <button
               type="button"
-              disabled={saving || committing || busy}
+              disabled={mutating}
               className="text-xs text-destructive hover:text-destructive/80 disabled:opacity-40"
             >
               删除
@@ -285,7 +130,7 @@ export function KbEditor({ onSourceModeChange }: KbEditorProps) {
             <div className="mt-3 flex justify-end gap-2">
               <button
                 type="button"
-                disabled={busy}
+                disabled={mutating}
                 onClick={() => setDeleteOpen(false)}
                 className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
               >
@@ -293,11 +138,11 @@ export function KbEditor({ onSourceModeChange }: KbEditorProps) {
               </button>
               <button
                 type="button"
-                disabled={busy}
-                onClick={() => void onDelete()}
+                disabled={mutating}
+                onClick={() => void deleteActive()}
                 className="rounded-md bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-600/90 disabled:opacity-40"
               >
-                {busy ? <Loader2 className="size-3 animate-spin" /> : '确认删除'}
+                {mutation === 'delete' ? <Loader2 className="size-3 animate-spin" /> : '确认删除'}
               </button>
             </div>
           </PopoverContent>
@@ -312,24 +157,24 @@ export function KbEditor({ onSourceModeChange }: KbEditorProps) {
                 mode === m ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {MODE_LABEL[m]}
+              {KB_VIEW_MODE_LABEL[m]}
             </button>
           ))}
         </div>
         <div className="inline-flex h-8 w-36 shrink-0 overflow-hidden rounded-md border border-border">
           <button
             type="button"
-            disabled={saving || committing || busy}
-            onClick={() => void onSave()}
+            disabled={mutating}
+            onClick={() => void save()}
             className="inline-flex flex-1 items-center justify-center gap-1 border-r border-border bg-background text-xs text-foreground hover:bg-accent disabled:opacity-40"
           >
-            {(saving || busy) && !committing ? <Loader2 className="size-3 animate-spin" /> : null}
+            {saving ? <Loader2 className="size-3 animate-spin" /> : null}
             保存
           </button>
           <button
             type="button"
-            disabled={saving || committing || busy}
-            onClick={() => void onCommit()}
+            disabled={mutating}
+            onClick={() => void submit()}
             className="inline-flex flex-1 items-center justify-center gap-1 bg-primary text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
           >
             {committing ? <Loader2 className="size-3 animate-spin" /> : null}
@@ -346,7 +191,7 @@ export function KbEditor({ onSourceModeChange }: KbEditorProps) {
         key={activeDoc.id}
         tagIds={activeDoc.tagIds ?? []}
         allTags={allTags}
-        onChangeTagIds={onChangeTagIds}
+        onChangeTagIds={changeTagIds}
       />
 
       {error && (

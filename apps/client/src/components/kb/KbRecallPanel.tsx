@@ -31,9 +31,7 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
       setResult(null)
       setError(err instanceof Error ? err.message : String(err))
     }
-    finally {
-      setLoading(false)
-    }
+    setLoading(false)
   }
 
   return (

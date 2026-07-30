@@ -18,7 +18,7 @@ import {
 import { useGtd } from '@hooks/useGtd'
 import { cn } from '@lib/utils'
 import { GtdStore, resolvePerspective } from '@stores/gtd-store'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { GtdTaskRow } from './GtdTaskRow'
 
 function isGroup(node: RenderGroup | RenderItem): node is RenderGroup {
@@ -104,11 +104,12 @@ export function GtdTaskList() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  const perspective = useMemo(() => resolvePerspective(rowStore, selection), [rowStore, selection])
+  const perspective = resolvePerspective(rowStore, selection)
   const selectedProject = selection.kind === 'project'
     ? rowStore.findLive('project', selection.id) ?? null
     : null
-  const title = useMemo(() => {
+
+  function resolveTitle() {
     if (selection.kind === 'perspective')
       return perspective.name
     if (selection.kind === 'project')
@@ -116,13 +117,15 @@ export function GtdTaskList() {
     if (selection.kind === 'tag')
       return rowStore.findLive('tag', selection.id)?.data.name ?? '标签'
     return rowStore.findLive('folder', selection.id)?.data.name ?? '文件夹'
-  }, [rowStore, selection, perspective.name, selectedProject?.data.name])
-  const liveTasks = useMemo(() => rowStore.liveTasks(), [rowStore])
+  }
+  const title = resolveTitle()
+  const liveTasks = rowStore.liveTasks()
 
-  const tree = useMemo(() => {
-    return renderPerspective(rowStore, perspective, new Date(), GtdStore.dueSoonMs)
-  }, [rowStore, perspective])
-  const visibleTaskIds = useMemo(() => {
+  // perspective 渲染需要墙钟「现在」；随 store 更新重算即可
+  // eslint-disable-next-line react/purity -- wall-clock now for due/soon grouping
+  const tree = renderPerspective(rowStore, perspective, new Date(), GtdStore.dueSoonMs)
+
+  function collectVisibleTaskIds() {
     const ids: string[] = []
     const visit = (nodes: Array<RenderGroup | RenderItem>) => {
       for (const node of nodes) {
@@ -134,12 +137,11 @@ export function GtdTaskList() {
     }
     visit(tree)
     return ids
-  }, [tree])
-  const parentTaskIds = useMemo(
-    () => new Set(liveTasks.flatMap(task => task.data.parentId ? [task.data.parentId] : [])),
-    [liveTasks],
-  )
-  const hiddenTaskIds = useMemo(() => {
+  }
+  const visibleTaskIds = collectVisibleTaskIds()
+  const parentTaskIds = new Set(liveTasks.flatMap(task => task.data.parentId ? [task.data.parentId] : []))
+
+  function collectHiddenTaskIds() {
     const hidden = new Set<string>()
     const byId = new Map(liveTasks.map(t => [t.id, t]))
     for (const task of liveTasks) {
@@ -153,7 +155,8 @@ export function GtdTaskList() {
       }
     }
     return hidden
-  }, [collapsed, liveTasks])
+  }
+  const hiddenTaskIds = collectHiddenTaskIds()
   const activeCount = liveTasks.filter(t => t.data.status === EXPLICIT_STATUS.ACTIVE).length
 
   const canQuickAdd

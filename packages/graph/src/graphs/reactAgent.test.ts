@@ -12,6 +12,7 @@ import {
   composeReactAgentSystemPrompt,
   DEFAULT_REACT_AGENT_USER_PROMPT,
   reactAgentGraph,
+  readReactAgentForwardedProps,
   sanitizeKbId,
   sanitizeUserPrompt,
 } from './reactAgent'
@@ -57,6 +58,28 @@ describe('reactAgent prompts / sanitizers', () => {
     expect(sanitizeKbId('  my_kb  ')).toBe('my_kb')
     expect(sanitizeKbId('', 'kb_default')).toBe('kb_default')
   })
+
+  it('readReactAgentForwardedProps prefers namespaced forwardedProps', () => {
+    expect(readReactAgentForwardedProps({
+      forwardedProps: {
+        reactAgent: {
+          userPrompt: 'from-props',
+          kbId: 'kb_lab',
+          maxSteps: 12,
+        },
+      },
+    })).toEqual({
+      userPrompt: 'from-props',
+      kbId: 'kb_lab',
+      maxSteps: 12,
+    })
+    expect(readReactAgentForwardedProps({
+      forwardedProps: { command: { resume: true } },
+    })).toEqual({})
+    expect(readReactAgentForwardedProps({
+      forwardedProps: { reactAgent: { maxSteps: 9999 } },
+    })).toEqual({})
+  })
 })
 
 describe('reactAgent kb citation links in AG-UI stream', () => {
@@ -99,9 +122,12 @@ describe('reactAgent kb citation links in AG-UI stream', () => {
         recursionLimit: 8,
       },
     )
-    const protocolDone = (async () => {
+
+    async function drainProtocol() {
       for await (const _ of stream) { /* drain */ }
-    })()
+    }
+
+    const protocolDone = drainProtocol()
     const events = await Array.fromAsync(
       stream.extensions.aguiEvents as AsyncIterable<AguiMappedEvent>,
     )

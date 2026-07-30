@@ -1,7 +1,7 @@
 import { TagManager } from '@components/tags/TagManager'
 import { useKbDocuments } from '@hooks/useKbDocuments'
 import { Plus, RefreshCw, Search, Settings2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { KbFileTree } from './KbFileTree'
 import { KbImportDialog } from './KbImportDialog'
 import { buildKbTree } from './kbTree'
@@ -55,11 +55,8 @@ export function KbSidebar({
     moveDoc,
   } = useKbDocuments()
 
-  const tree = useMemo(() => buildKbTree(nodes, filteredDocs), [nodes, filteredDocs])
-  const rootFolderIds = useMemo(
-    () => new Set(nodes.filter(n => n.parentId == null).map(n => n.id)),
-    [nodes],
-  )
+  const tree = buildKbTree(nodes, filteredDocs)
+  const rootFolderIds = new Set(nodes.filter(n => n.parentId == null).map(n => n.id))
   /** 展开/折叠持久化：localStorage 记用户展开的文件夹 id；首次（无记录）默认根展开 */
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     const raw = readLsExpanded()

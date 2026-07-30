@@ -156,6 +156,12 @@ export function KbFileTree({
     }
   }
 
+  function cancelDraft() {
+    setRenamingId(null)
+    setCreatingUnder(undefined)
+    setDraftName('')
+  }
+
   async function submitCreate(parentId: string | null) {
     const name = draftName.trim()
     if (!name) {
@@ -198,12 +204,6 @@ export function KbFileTree({
     catch {
       // error 已写入 store
     }
-  }
-
-  function cancelDraft() {
-    setRenamingId(null)
-    setCreatingUnder(undefined)
-    setDraftName('')
   }
 
   return (

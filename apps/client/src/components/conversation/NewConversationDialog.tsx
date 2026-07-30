@@ -2,6 +2,7 @@ import type { GraphAgentCatalogItem, GraphsName } from '@apis/api-types'
 import { Conversation } from '@apis/conversation-api'
 import { Button } from '@components/ui/button'
 import { useConversations } from '@hooks/useConversations'
+import { runWithCleanup } from '@lib/runWithCleanup'
 import { cn } from '@lib/utils'
 import { useEffect, useState } from 'react'
 
@@ -95,13 +96,10 @@ function NewConversationDialogBody({ onClose }: { onClose: () => void }) {
               if (graphsName == null)
                 return
               setPending(true)
-              try {
+              await runWithCleanup(async () => {
                 await create(graphsName)
                 onClose()
-              }
-              finally {
-                setPending(false)
-              }
+              }, () => setPending(false))
             }}
           >
             创建

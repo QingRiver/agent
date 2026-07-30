@@ -1,44 +1,21 @@
 import type { ReactAgentLabConfig } from './agentLabConfig'
-import { useAgent } from '@copilotkit/react-core/v2'
-import { useEffect, useRef } from 'react'
+import { ReactAgentRuntimeStore } from '@stores/react-agent-runtime-store'
+import { useEffect } from 'react'
 
 interface AgentLabStateBridgeProps {
   config: ReactAgentLabConfig
 }
 
-/** 将 Lab 配置注入 CopilotKit agent.state，供 reactAgent resolveConfigurable 使用 */
+/**
+ * 将 Lab 运行字段同步到 CopilotKit properties.reactAgent（→ forwardedProps）。
+ * 不再 monkey-patch agent.runAgent / 写 agent.state。
+ */
 export function AgentLabStateBridge({ config }: AgentLabStateBridgeProps) {
-  const { agent } = useAgent({ agentId: 'reactAgent' })
-  const configRef = useRef(config)
-  configRef.current = config
-  const patchedRef = useRef(false)
+  const { userPrompt, kbId, maxSteps } = config
 
   useEffect(() => {
-    if (!agent || patchedRef.current)
-      return
-
-    const originalRun = agent.runAgent.bind(agent)
-    agent.runAgent = async (args, options) => {
-      const c = configRef.current
-      const patch = {
-        userPrompt: c.userPrompt,
-        kbId: c.kbId,
-        maxSteps: c.maxSteps,
-      }
-      if (agent.state == null || typeof agent.state !== 'object')
-        agent.state = { ...patch }
-      else
-        Object.assign(agent.state as Record<string, unknown>, patch)
-
-      return originalRun(args, options)
-    }
-
-    patchedRef.current = true
-    return () => {
-      agent.runAgent = originalRun
-      patchedRef.current = false
-    }
-  }, [agent])
+    ReactAgentRuntimeStore.syncFromLabConfig({ userPrompt, kbId, maxSteps })
+  }, [userPrompt, kbId, maxSteps])
 
   return null
 }

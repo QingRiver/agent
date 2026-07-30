@@ -30,12 +30,10 @@ function statusDotClass(computed: ComputedStatus | null, explicit: string): stri
 function formatDue(due: string | null): string | null {
   if (!due)
     return null
-  try {
-    return new Date(due).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-  }
-  catch {
+  const d = new Date(due)
+  if (Number.isNaN(d.getTime()))
     return null
-  }
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 export function GtdTaskRow({

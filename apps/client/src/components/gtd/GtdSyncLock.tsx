@@ -1,5 +1,6 @@
 import { Button } from '@components/ui/button'
 import { useGtd } from '@hooks/useGtd'
+import { runWithCleanup } from '@lib/runWithCleanup'
 import { AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
 
@@ -15,12 +16,7 @@ export function GtdSyncLock() {
 
   const onRecover = async () => {
     setRecovering(true)
-    try {
-      await recoverFromReject()
-    }
-    finally {
-      setRecovering(false)
-    }
+    await runWithCleanup(recoverFromReject, () => setRecovering(false))
   }
 
   return (

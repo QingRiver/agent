@@ -27,6 +27,15 @@ export class CheckpointConnectRunner extends InMemoryAgentRunner {
 
     return new Observable<BaseEvent>((subscriber) => {
       let hasEvents = false
+
+      async function completeReplay() {
+        if (!hasEvents) {
+          for (const event of await buildCheckpointConnectEvents(request.threadId))
+            subscriber.next(event)
+        }
+        subscriber.complete()
+      }
+
       const sub = memoryReplay.subscribe({
         next: (event) => {
           hasEvents = true
@@ -34,13 +43,7 @@ export class CheckpointConnectRunner extends InMemoryAgentRunner {
         },
         error: err => subscriber.error(err),
         complete: () => {
-          void (async () => {
-            if (!hasEvents) {
-              for (const event of await buildCheckpointConnectEvents(request.threadId))
-                subscriber.next(event)
-            }
-            subscriber.complete()
-          })()
+          void completeReplay()
         },
       })
       return () => sub.unsubscribe()

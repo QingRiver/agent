@@ -51,6 +51,9 @@ function toSummary(doc: KbDoc): KbDocSummary {
   return rest
 }
 
+/** 文档编辑区互斥操作；同一时刻只跑一个 */
+export type KbMutationKind = 'save' | 'commit' | 'delete' | 'updateMeta'
+
 export class KbStore {
   static readonly userIdAtom = atom<string | undefined>(undefined)
   static readonly nodesAtom = atom<KbNodeRow[]>([])
@@ -60,8 +63,10 @@ export class KbStore {
   static readonly activeIdAtom = atom<string | null>(readLs(LS_ACTIVE))
   static readonly activeDocAtom = atom<KbDoc | null>(null)
   static readonly isLoadingAtom = atom(false)
-  static readonly savingAtom = atom(false)
-  static readonly committingAtom = atom(false)
+  static readonly mutationAtom = atom<KbMutationKind | null>(null)
+  static readonly savingAtom = atom(get => get(KbStore.mutationAtom) === 'save')
+  static readonly committingAtom = atom(get => get(KbStore.mutationAtom) === 'commit')
+  static readonly mutatingAtom = atom(get => get(KbStore.mutationAtom) != null)
   static readonly errorAtom = atom<string | null>(null)
   static readonly localDirtyAtom = atom(false)
 
@@ -79,6 +84,31 @@ export class KbStore {
     return getDefaultStore()
   }
 
+  /**
+   * 统一 mutation：互斥 + 记 error + 不向 UI 抛错。
+   * 已有 mutation 时直接返回 undefined（调用方不必再写 busy 锁）。
+   */
+  private static async mutate<T>(
+    kind: KbMutationKind,
+    fn: () => Promise<T>,
+  ): Promise<T | undefined> {
+    const store = KbStore.store()
+    if (store.get(KbStore.mutationAtom) != null)
+      return undefined
+    store.set(KbStore.mutationAtom, kind)
+    store.set(KbStore.errorAtom, null)
+    try {
+      return await fn()
+    }
+    catch (e) {
+      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
+      return undefined
+    }
+    finally {
+      store.set(KbStore.mutationAtom, null)
+    }
+  }
+
   static reset(): void {
     const store = KbStore.store()
     store.set(KbStore.nodesAtom, [])
@@ -87,8 +117,7 @@ export class KbStore {
     store.set(KbStore.activeIdAtom, null)
     store.set(KbStore.activeDocAtom, null)
     store.set(KbStore.isLoadingAtom, false)
-    store.set(KbStore.savingAtom, false)
-    store.set(KbStore.committingAtom, false)
+    store.set(KbStore.mutationAtom, null)
     store.set(KbStore.errorAtom, null)
     store.set(KbStore.localDirtyAtom, false)
     KbStore.loadGeneration += 1
@@ -214,29 +243,23 @@ export class KbStore {
     store.set(KbStore.localDirtyAtom, true)
   }
 
-  static async saveDraft(): Promise<void> {
+  /** 无锁保存正文；供 saveDraft / commit 内部复用 */
+  private static async saveDraftBody(): Promise<void> {
     const store = KbStore.store()
     const doc = store.get(KbStore.activeDocAtom)
     if (!doc)
       return
-    store.set(KbStore.savingAtom, true)
-    store.set(KbStore.errorAtom, null)
-    try {
-      const updated = await KbApi.saveDraft(doc.id, { content: doc.content, name: doc.name })
-      store.set(KbStore.activeDocAtom, updated)
-      store.set(KbStore.localDirtyAtom, false)
-      store.set(
-        KbStore.docsAtom,
-        prev => prev.map(d => d.id === updated.id ? toSummary(updated) : d),
-      )
-    }
-    catch (e) {
-      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
-      throw e
-    }
-    finally {
-      store.set(KbStore.savingAtom, false)
-    }
+    const updated = await KbApi.saveDraft(doc.id, { content: doc.content, name: doc.name })
+    store.set(KbStore.activeDocAtom, updated)
+    store.set(KbStore.localDirtyAtom, false)
+    store.set(
+      KbStore.docsAtom,
+      prev => prev.map(d => d.id === updated.id ? toSummary(updated) : d),
+    )
+  }
+
+  static async saveDraft(): Promise<void> {
+    await KbStore.mutate('save', () => KbStore.saveDraftBody())
   }
 
   /** 更新元数据（tagIds/parentNodeId/name/visibility/pinned） */
@@ -250,24 +273,20 @@ export class KbStore {
       pinned?: boolean
     },
   ): Promise<KbDoc | null> {
-    const store = KbStore.store()
-    store.set(KbStore.errorAtom, null)
-    try {
-      const updated = await KbApi.updateMeta(id, patch)
+    const updated = await KbStore.mutate('updateMeta', async () => {
+      const store = KbStore.store()
+      const next = await KbApi.updateMeta(id, patch)
       if (store.get(KbStore.activeIdAtom) === id)
-        store.set(KbStore.activeDocAtom, updated)
+        store.set(KbStore.activeDocAtom, next)
       store.set(
         KbStore.docsAtom,
-        prev => prev.map(d => d.id === updated.id ? toSummary(updated) : d),
+        prev => prev.map(d => d.id === next.id ? toSummary(next) : d),
       )
       if (patch.tagIds != null)
         void TagsStore.refreshTags()
-      return updated
-    }
-    catch (e) {
-      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
-      throw e
-    }
+      return next
+    })
+    return updated ?? null
   }
 
   static async refreshTags(): Promise<void> {
@@ -275,35 +294,30 @@ export class KbStore {
   }
 
   static async commit(): Promise<void> {
-    const store = KbStore.store()
-    const doc = store.get(KbStore.activeDocAtom)
-    if (!doc)
-      return
+    await KbStore.mutate('commit', async () => {
+      const store = KbStore.store()
+      const doc = store.get(KbStore.activeDocAtom)
+      if (!doc)
+        return
 
-    // 有本地未落库改动时先保存
-    if (store.get(KbStore.localDirtyAtom))
-      await KbStore.saveDraft()
+      // 有本地未落库改动时先保存（仍算 commit mutation，不另抢 save 锁）
+      if (store.get(KbStore.localDirtyAtom))
+        await KbStore.saveDraftBody()
 
-    store.set(KbStore.committingAtom, true)
-    store.set(KbStore.errorAtom, null)
-    try {
-      const updated = await KbApi.commit(doc.id, true)
-      store.set(KbStore.activeDocAtom, updated)
-      store.set(KbStore.localDirtyAtom, false)
-      store.set(
-        KbStore.docsAtom,
-        prev => prev.map(d => d.id === updated.id ? toSummary(updated) : d),
-      )
-    }
-    catch (e) {
-      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
-      // 提交失败后刷新拿到 error 状态
-      void KbStore.loadDoc(doc.id)
-      throw e
-    }
-    finally {
-      store.set(KbStore.committingAtom, false)
-    }
+      try {
+        const updated = await KbApi.commit(doc.id, true)
+        store.set(KbStore.activeDocAtom, updated)
+        store.set(KbStore.localDirtyAtom, false)
+        store.set(
+          KbStore.docsAtom,
+          prev => prev.map(d => d.id === updated.id ? toSummary(updated) : d),
+        )
+      }
+      catch (e) {
+        void KbStore.loadDoc(doc.id)
+        throw e
+      }
+    })
   }
 
   static async createBlank(): Promise<KbDoc> {
@@ -318,14 +332,16 @@ export class KbStore {
   }
 
   static async remove(id: string): Promise<void> {
-    const store = KbStore.store()
-    await KbApi.deleteDoc(id)
-    store.set(KbStore.docsAtom, prev => prev.filter(d => d.id !== id))
-    if (store.get(KbStore.activeIdAtom) === id) {
-      store.set(KbStore.activeIdAtom, null)
-      store.set(KbStore.activeDocAtom, null)
-      writeLs(LS_ACTIVE, null)
-    }
+    await KbStore.mutate('delete', async () => {
+      const store = KbStore.store()
+      await KbApi.deleteDoc(id)
+      store.set(KbStore.docsAtom, prev => prev.filter(d => d.id !== id))
+      if (store.get(KbStore.activeIdAtom) === id) {
+        store.set(KbStore.activeIdAtom, null)
+        store.set(KbStore.activeDocAtom, null)
+        writeLs(LS_ACTIVE, null)
+      }
+    })
   }
 
   // ---------- 文件夹节点 ----------

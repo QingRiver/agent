@@ -32,6 +32,7 @@
   "[json]": {
     "editor.defaultFormatter": "dbaeumer.vscode-eslint"
   },
+  "tailwindCSS.lint.suggestCanonicalClasses": "error",
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.patterns": {
     "*.ts": "${capture}.test.ts, ${capture}.spec.ts",

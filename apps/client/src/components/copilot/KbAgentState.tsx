@@ -1,5 +1,5 @@
 import { useAgent } from '@copilotkit/react-core/v2'
-import { useEffect, useRef } from 'react'
+import { useEffect, useEffectEvent } from 'react'
 
 interface KbAgentStateProps {
   kbId?: string
@@ -7,29 +7,34 @@ interface KbAgentStateProps {
 
 /** 将 kbId 注入 CopilotKit agent state，供 kb 图 configurable 使用 */
 export function KbAgentState({ kbId = 'kb_default' }: KbAgentStateProps) {
+  'use no memo'
+
   const { agent } = useAgent({ agentId: 'kb' })
-  const patchedRef = useRef(false)
+
+  const injectKbId = useEffectEvent(() => {
+    if (!agent)
+      return
+    const prev = agent.state != null && typeof agent.state === 'object'
+      ? agent.state
+      : {}
+    agent.setState({ ...prev, kbId })
+  })
 
   useEffect(() => {
-    if (!agent || patchedRef.current)
+    if (!agent)
       return
 
     const originalRun = agent.runAgent.bind(agent)
+    // eslint-disable-next-line react-compiler/react-compiler -- inject kbId at the AG-UI run boundary
     agent.runAgent = async (args, options) => {
-      if (agent.state == null || typeof agent.state !== 'object')
-        agent.state = { kbId }
-      else
-        (agent.state as { kbId?: string }).kbId = kbId
-
+      injectKbId()
       return originalRun(args, options)
     }
 
-    patchedRef.current = true
     return () => {
       agent.runAgent = originalRun
-      patchedRef.current = false
     }
-  }, [agent, kbId])
+  }, [agent])
 
   return null
 }

@@ -7,6 +7,7 @@ import {
   clampMaxSteps,
   Graphs,
   REACT_AGENT_MAX_STEPS_DEFAULT,
+  readReactAgentForwardedProps,
   resolveResumeFromRunAgentInput,
   sanitizeKbId,
   sanitizeUserPrompt,
@@ -44,20 +45,27 @@ const GRAPH_AGENT_DEFINITIONS = {
       return buildMessagesInput(userText)
     },
     resolveConfigurable: (input) => {
+      const forwarded = readReactAgentForwardedProps(input)
       const state = input.state as {
         userPrompt?: unknown
         kbId?: unknown
       } | undefined
       return {
-        userPrompt: sanitizeUserPrompt(state?.userPrompt),
-        kbId: sanitizeKbId(state?.kbId, env.KB_COLLECTION),
+        userPrompt: sanitizeUserPrompt(forwarded.userPrompt ?? state?.userPrompt),
+        kbId: sanitizeKbId(forwarded.kbId ?? state?.kbId, env.KB_COLLECTION),
       }
     },
     /** 唯一环控：配置 maxSteps ≡ LangGraph recursionLimit（节点转移上限） */
     resolveRecursionLimit: (input) => {
+      const forwarded = readReactAgentForwardedProps(input)
       const state = input.state as { maxSteps?: unknown, maxToolRounds?: unknown } | undefined
-      // maxToolRounds：兼容旧 Lab localStorage 字段名
-      return clampMaxSteps(state?.maxSteps ?? state?.maxToolRounds ?? REACT_AGENT_MAX_STEPS_DEFAULT)
+      // maxToolRounds：兼容旧 Lab localStorage / state 字段名
+      return clampMaxSteps(
+        forwarded.maxSteps
+        ?? state?.maxSteps
+        ?? state?.maxToolRounds
+        ?? REACT_AGENT_MAX_STEPS_DEFAULT,
+      )
     },
   },
   dev: {

@@ -4,7 +4,8 @@ import { WRITER_CHANGE_SUMMARIES_EVENT } from '@agent/protocol'
 import { Conversation } from '@apis/conversation-api'
 import { ConversationChat } from '@components/copilot/ConversationChat'
 import { useAgent, useCopilotKit } from '@copilotkit/react-core/v2'
-import { useEffect, useRef, useState } from 'react'
+import { runWithCleanup } from '@lib/runWithCleanup'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import {
   hideEditorChatPolishedText,
   setEditorChatSuppressDocumentDump,
@@ -27,7 +28,7 @@ interface CustomEventLike {
 
 interface EditorChatAgent {
   state?: Record<string, unknown> | null
-  setState?: (state: Record<string, unknown>) => void
+  setState: (state: Record<string, unknown>) => void
   addMessage: (message: unknown) => void
   subscribe?: (subscriber: {
     onCustomEvent?: (ctx: { event: CustomEventLike }) => void
@@ -43,10 +44,7 @@ interface EditorChatAgent {
 }
 
 function writeAgentState(agent: EditorChatAgent, state: Record<string, unknown>) {
-  if (typeof agent.setState === 'function')
-    agent.setState(state)
-  else
-    agent.state = state
+  agent.setState(state)
 }
 
 function proposalFromCustomValue(value: unknown): EditorWriteProposal | null {
@@ -105,22 +103,20 @@ export function EditorChatPanel({
   blockInput = false,
   blockInputHint,
 }: EditorChatPanelProps) {
+  'use no memo'
+
   const [threadId, setThreadId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
   const { agent: rawAgent } = useAgent({ agentId: 'editorChat' })
   const agent = rawAgent as unknown as EditorChatAgent | null
   const { copilotkit } = useCopilotKit()
-  const quotesRef = useRef(quotes)
-  quotesRef.current = quotes
-  const getDocumentRef = useRef(getDocument)
-  getDocumentRef.current = getDocument
-  const onApplyProposalRef = useRef(onApplyProposal)
-  onApplyProposalRef.current = onApplyProposal
   const proposalRef = useRef<EditorWriteProposal | null>(null)
   const lastAppliedKeyRef = useRef<string | null>(null)
 
-  function autoApplyProposal(p: EditorWriteProposal) {
+  const readDocument = useEffectEvent(() => getDocument())
+
+  function applyProposal(p: EditorWriteProposal) {
     const key = `${p.baseline}\0${p.polished}`
     if (lastAppliedKeyRef.current === key)
       return
@@ -128,16 +124,22 @@ export function EditorChatPanel({
     proposalRef.current = p
     hideEditorChatPolishedText(p.polished)
     setEditorChatSuppressDocumentDump(false)
-    const ok = onApplyProposalRef.current(p)
+    const ok = onApplyProposal(p)
     if (ok)
       setApplyError(null)
     else
       setApplyError('自动应用失败：文稿可能已改动，或行内改写尚未结束。')
   }
 
+  /** Effect 订阅回调：始终读到最新 applyProposal，且不因 props 重订 */
+  const onAgentProposal = useEffectEvent((p: EditorWriteProposal) => {
+    applyProposal(p)
+  })
+
   useEffect(() => {
     let cancelled = false
-    void (async () => {
+
+    async function initializeConversation() {
       try {
         const c = await Conversation.create('editorChat')
         if (!cancelled)
@@ -147,7 +149,9 @@ export function EditorChatPanel({
         if (!cancelled)
           setError(err instanceof Error ? err.message : String(err))
       }
-    })()
+    }
+
+    void initializeConversation()
     return () => {
       cancelled = true
     }
@@ -158,10 +162,10 @@ export function EditorChatPanel({
       return
     const { unsubscribe } = agent.subscribe({
       onCustomEvent: ({ event }) => {
-        ingestWriterCustomEvent(event, autoApplyProposal)
+        ingestWriterCustomEvent(event, onAgentProposal)
       },
       onEvent: ({ event }) => {
-        ingestWriterCustomEvent(event, autoApplyProposal)
+        ingestWriterCustomEvent(event, onAgentProposal)
       },
     })
     return unsubscribe
@@ -170,23 +174,26 @@ export function EditorChatPanel({
   useEffect(() => {
     if (!agent)
       return
-    const original = agent.runAgent.bind(agent)
+
+    const originalRun = agent.runAgent.bind(agent)
+    // eslint-disable-next-line react-compiler/react-compiler -- inject document state at the AG-UI run boundary
     agent.runAgent = async (input, subscriber) => {
       const prev = agent.state != null && typeof agent.state === 'object'
         ? { ...agent.state }
         : {}
       const baseline = typeof prev.documentBaseline === 'string' && prev.documentBaseline.trim()
         ? prev.documentBaseline
-        : getDocumentRef.current()
+        : readDocument()
       writeAgentState(agent, {
         ...prev,
         editCase: 'document',
         documentBaseline: baseline,
       })
-      return original(input ?? {}, subscriber)
+      return originalRun(input ?? {}, subscriber)
     }
+
     return () => {
-      agent.runAgent = original
+      agent.runAgent = originalRun
     }
   }, [agent])
 
@@ -201,8 +208,8 @@ export function EditorChatPanel({
       return
     }
 
-    const q = filterFreshQuotes(baseline, [...quotesRef.current])
-    if (quotesRef.current.length > 0)
+    const q = filterFreshQuotes(baseline, [...quotes])
+    if (quotes.length > 0)
       onConsumeQuotes()
 
     const content = formatQuotesForMessage(q, trimmed)
@@ -230,22 +237,23 @@ export function EditorChatPanel({
     setApplyError(null)
     const collect = {
       onCustomEvent: ({ event }: { event: CustomEventLike }) => {
-        ingestWriterCustomEvent(event, autoApplyProposal)
+        ingestWriterCustomEvent(event, applyProposal)
       },
       onEvent: ({ event }: { event: CustomEventLike }) => {
-        ingestWriterCustomEvent(event, autoApplyProposal)
+        ingestWriterCustomEvent(event, applyProposal)
       },
     }
-    try {
-      await agent.runAgent({}, collect)
-    }
-    catch {
-      await copilotkit.runAgent({ agent: rawAgent! })
-    }
-    finally {
+    await runWithCleanup(async () => {
+      try {
+        await agent.runAgent({}, collect)
+      }
+      catch {
+        await copilotkit.runAgent({ agent: rawAgent! })
+      }
+    }, () => {
       onChatBusyChange?.(false)
       setEditorChatSuppressDocumentDump(false)
-    }
+    })
   }
 
   if (error) {

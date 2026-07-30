@@ -3,7 +3,8 @@ import type { InterruptRequest } from '@lib/interruptContracts'
 import { useAgent, useCopilotKit, useInterrupt } from '@copilotkit/react-core/v2'
 import { useConversations } from '@hooks/useConversations'
 import { narrowInterruptRequest, narrowPendingInterrupt } from '@lib/interruptContracts'
-import { useCallback, useEffect, useState } from 'react'
+import { runWithCleanup } from '@lib/runWithCleanup'
+import { useEffect, useState } from 'react'
 import { InterruptCard } from './InterruptCards'
 import { useAgentInterruptResume } from './useAgentInterruptResume'
 
@@ -26,15 +27,13 @@ export function AgentInterruptUi({ agentId, threadId }: AgentInterruptUiProps) {
 
   const resumeInterrupt = useAgentInterruptResume(agent, threadId, reloadActiveThread)
 
-  const respond = useCallback(async (payload: unknown, interruptId?: string) => {
+  async function respond(payload: unknown, interruptId?: string) {
     setBusy(true)
-    try {
-      await resumeInterrupt(payload, interruptId)
-    }
-    finally {
-      setBusy(false)
-    }
-  }, [resumeInterrupt])
+    await runWithCleanup(
+      () => resumeInterrupt(payload, interruptId),
+      () => setBusy(false),
+    )
+  }
 
   const liveElement = useInterrupt({
     agentId,

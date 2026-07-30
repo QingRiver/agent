@@ -3,10 +3,27 @@ import { Conversation } from '@apis/conversation-api'
 import { ConversationChat } from '@components/copilot/ConversationChat'
 import { AgentInterruptUi } from '@components/hitl/AgentInterruptUi'
 import { useAgentHasPendingInterrupt } from '@components/hitl/useAgentHasPendingInterrupt'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { loadAgentLabConfig } from './agentLabConfig'
 import { AgentLabConfigPanel } from './AgentLabConfigPanel'
 import { AgentLabStateBridge } from './AgentLabStateBridge'
+
+type ThreadCreationResult
+  = | { ok: true, threadId: string }
+    | { ok: false, error: string }
+
+async function createAgentLabThread(): Promise<ThreadCreationResult> {
+  try {
+    const conversation = await Conversation.create('reactAgent')
+    return { ok: true, threadId: conversation.id }
+  }
+  catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : '创建测试线程失败',
+    }
+  }
+}
 
 function AgentLabChatPanel({
   threadId,
@@ -53,24 +70,38 @@ export function AgentLabPage() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const createThread = useCallback(async () => {
-    setCreating(true)
-    setError(null)
-    try {
-      const conversation = await Conversation.create('reactAgent')
-      setThreadId(conversation.id)
-    }
-    catch (err) {
-      setError(err instanceof Error ? err.message : '创建测试线程失败')
-    }
-    finally {
+  useEffect(() => {
+    let cancelled = false
+
+    async function initializeThread() {
+      setCreating(true)
+      setError(null)
+      const result = await createAgentLabThread()
+      if (cancelled)
+        return
+      if (!result.ok)
+        setError(result.error)
+      else
+        setThreadId(result.threadId)
       setCreating(false)
+    }
+
+    void initializeThread()
+    return () => {
+      cancelled = true
     }
   }, [])
 
-  useEffect(() => {
-    void createThread()
-  }, [createThread])
+  async function createThread() {
+    setCreating(true)
+    setError(null)
+    const result = await createAgentLabThread()
+    if (!result.ok)
+      setError(result.error)
+    else
+      setThreadId(result.threadId)
+    setCreating(false)
+  }
 
   return (
     <div className="mx-auto flex h-[calc(100vh-5rem)] max-w-7xl gap-0 border-x border-border">

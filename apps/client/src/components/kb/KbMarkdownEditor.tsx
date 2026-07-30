@@ -4,7 +4,7 @@ import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { ThemeStore } from '@stores/theme-store'
 import { useAtomValue } from 'jotai'
-import { useEffect, useImperativeHandle, useRef } from 'react'
+import { useEffect, useEffectEvent, useImperativeHandle, useRef, useState } from 'react'
 
 function createEditorTheme(isDark: boolean) {
   return EditorView.theme({
@@ -69,11 +69,13 @@ export interface KbMarkdownEditorHandle {
 export function KbMarkdownEditor({ value, onChange, docId, ref }: KbMarkdownEditorProps) {
   const mountRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
-  const initialDoc = useRef(value).current
-  const onChangeRef = useRef(onChange)
-  onChangeRef.current = onChange
+  const [initialDoc] = useState(value)
   const mode = useAtomValue(ThemeStore.modeAtom)
   const isDark = mode === 'dark'
+
+  const emitChange = useEffectEvent((next: string) => {
+    onChange(next)
+  })
 
   useImperativeHandle(ref, () => ({
     scrollToHeading(headingText: string) {
@@ -109,7 +111,7 @@ export function KbMarkdownEditor({ value, onChange, docId, ref }: KbMarkdownEdit
           createEditorTheme(isDark),
           EditorView.updateListener.of((update) => {
             if (update.docChanged)
-              onChangeRef.current(update.state.doc.toString())
+              emitChange(update.state.doc.toString())
           }),
         ],
       }),

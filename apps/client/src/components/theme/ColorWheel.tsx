@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { getHueFromPosition, hslToString, isInRing } from '../../theme/color'
 
 interface ColorWheelProps {
@@ -18,7 +18,7 @@ export function ColorWheel({ hue, onHueChange, size = 220 }: ColorWheelProps) {
   const outerRadius = size / 2 - 4
   const innerRadius = outerRadius * (1 - RING_WIDTH_RATIO)
 
-  const drawWheel = useCallback(() => {
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas)
       return
@@ -61,52 +61,39 @@ export function ColorWheel({ hue, onHueChange, size = 220 }: ColorWheelProps) {
     ctx.fill()
   }, [hue, size, center, outerRadius, innerRadius])
 
-  useEffect(() => {
-    drawWheel()
-  }, [drawWheel])
+  function handlePointerEvent(e: ReactPointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current
+    if (!canvas)
+      return
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    onHueChange(Math.round(getHueFromPosition(x, y, center, center)))
+  }
 
-  const handlePointerEvent = useCallback(
-    (e: ReactPointerEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current
-      if (!canvas)
-        return
-      const rect = canvas.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const y = e.clientY - rect.top
-      onHueChange(Math.round(getHueFromPosition(x, y, center, center)))
-    },
-    [center, onHueChange],
-  )
-
-  const handlePointerDown = useCallback(
-    (e: ReactPointerEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current
-      if (!canvas)
-        return
-      const rect = canvas.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const y = e.clientY - rect.top
-      if (isInRing(x, y, center, center, innerRadius - 8, outerRadius + 8)) {
-        isDraggingRef.current = true
-        canvas.setPointerCapture(e.pointerId)
-        handlePointerEvent(e)
-      }
-    },
-    [center, innerRadius, outerRadius, handlePointerEvent],
-  )
-
-  const handlePointerMove = useCallback(
-    (e: ReactPointerEvent<HTMLCanvasElement>) => {
-      if (!isDraggingRef.current)
-        return
+  function handlePointerDown(e: ReactPointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current
+    if (!canvas)
+      return
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    if (isInRing(x, y, center, center, innerRadius - 8, outerRadius + 8)) {
+      isDraggingRef.current = true
+      canvas.setPointerCapture(e.pointerId)
       handlePointerEvent(e)
-    },
-    [handlePointerEvent],
-  )
+    }
+  }
 
-  const handlePointerUp = useCallback(() => {
+  function handlePointerMove(e: ReactPointerEvent<HTMLCanvasElement>) {
+    if (!isDraggingRef.current)
+      return
+    handlePointerEvent(e)
+  }
+
+  function handlePointerUp() {
     isDraggingRef.current = false
-  }, [])
+  }
 
   return (
     <div className="flex flex-col items-center gap-3">

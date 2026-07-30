@@ -46,6 +46,8 @@ interface ResultRow {
 }
 
 export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
+  'use no memo'
+
   const nodes = useAtomValue(KbStore.nodesAtom)
   const folders = flattenFolders(nodes)
 
@@ -84,21 +86,38 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
   async function onImport() {
     setError(null)
     setResults([])
+    const selected = fileList ? [...fileList] : []
+    const zips = selected.filter(f => /\.zip$/i.test(f.name))
+    const others = selected.filter(f => !/\.zip$/i.test(f.name))
+    const selectedZip = zipFile
+    const trimmedTextName = textName.trim()
+    const tagArr = parseTags()
+    const parent = parentNodeId ?? undefined
+
+    if (tab === 'files' && selected.length === 0) {
+      setError('请选择文件')
+      return
+    }
+    if (tab === 'files' && zips.length > 0 && others.length > 0) {
+      setError('请勿混选 zip 与普通文件：压缩包请单独切到「压缩包」页签')
+      return
+    }
+    if (tab === 'files' && zips.length > 1) {
+      setError('一次仅支持一个 zip 压缩包，请切到「压缩包」页签')
+      return
+    }
+    if (tab === 'zip' && !selectedZip) {
+      setError('请选择 zip 压缩包')
+      return
+    }
+    if (tab === 'text' && (!textContent.trim() || !trimmedTextName)) {
+      setError('请填写标题和正文')
+      return
+    }
+
     setBusy(true)
     try {
-      const tagArr = parseTags()
-      const parent = parentNodeId ?? undefined
       if (tab === 'files') {
-        if (!fileList?.length)
-          throw new Error('请选择文件')
-        const selected = [...fileList]
-        const zips = selected.filter(f => /\.zip$/i.test(f.name))
-        const others = selected.filter(f => !/\.zip$/i.test(f.name))
-        if (zips.length && others.length) {
-          throw new Error('请勿混选 zip 与普通文件：压缩包请单独切到「压缩包」页签')
-        }
-        if (zips.length > 1)
-          throw new Error('一次仅支持一个 zip 压缩包，请切到「压缩包」页签')
         if (zips.length === 1) {
           // 误在「上传」里选了 zip → 自动走目录还原路径
           const items = await KbApi.ingestZip(KB_DEFAULT_ID, zips[0]!, {
@@ -125,9 +144,7 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
         }
       }
       else if (tab === 'zip') {
-        if (!zipFile)
-          throw new Error('请选择 zip 压缩包')
-        const items = await KbApi.ingestZip(KB_DEFAULT_ID, zipFile, {
+        const items = await KbApi.ingestZip(KB_DEFAULT_ID, selectedZip!, {
           ...(tagArr ? { tags: tagArr } : {}),
         })
         setResults(items.map(i => ({
@@ -138,11 +155,9 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
         })))
       }
       else {
-        if (!textContent.trim() || !textName.trim())
-          throw new Error('请填写标题和正文')
         const doc = await KbApi.ingestText(KB_DEFAULT_ID, {
           content: textContent,
-          name: textName.trim(),
+          name: trimmedTextName,
           ...(parent != null ? { parentNodeId: parent } : {}),
           ...(tagArr ? { tags: tagArr } : {}),
         })
@@ -153,9 +168,7 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
     catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-    finally {
-      setBusy(false)
-    }
+    setBusy(false)
   }
 
   async function onBatchCommit() {
@@ -172,9 +185,7 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
     catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-    finally {
-      setBusy(false)
-    }
+    setBusy(false)
   }
 
   function openDoc(id: string) {

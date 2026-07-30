@@ -1,5 +1,6 @@
 import type { CopilotChatAssistantMessageProps } from '@copilotkit/react-core/v2'
 import { CopilotChatAssistantMessage, useCopilotChatConfiguration, useCopilotKit } from '@copilotkit/react-core/v2'
+import { runWithCleanup } from '@lib/runWithCleanup'
 import { cn } from '@lib/utils'
 import { AlertTriangle, ChevronDown, ChevronRight, ClipboardCopy, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
@@ -61,16 +62,13 @@ function ErrorCard({ messageId, messages, content, code, json }: ErrorCardProps)
     if (!agent)
       return
     setRetrying(true)
-    try {
+    await runWithCleanup(async () => {
       // 删错误卡片 + 上一条 user(重发会重新 addMessage)
       const userId = lastUser.id
       agent.setMessages(agent.messages.filter(m => m.id !== messageId && m.id !== userId))
       agent.addMessage({ id: crypto.randomUUID(), role: 'user', content: userText } as never)
       await copilotkit.runAgent({ agent })
-    }
-    finally {
-      setRetrying(false)
-    }
+    }, () => setRetrying(false))
   }
 
   async function handleCopy() {
@@ -86,7 +84,7 @@ function ErrorCard({ messageId, messages, content, code, json }: ErrorCardProps)
       <div className="flex items-start gap-2">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400" />
         <div className="min-w-0 flex-1">
-          <div className="whitespace-pre-wrap break-words text-red-500">{content}</div>
+          <div className="whitespace-pre-wrap wrap-break-word text-red-500">{content}</div>
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button

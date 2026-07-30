@@ -2,7 +2,7 @@ import { renderMarkdown } from '@agent/markdown'
 import { ThemeStore } from '@stores/theme-store'
 import { useAtomValue } from 'jotai'
 import mermaid from 'mermaid'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { KbMarkdownToc } from './KbMarkdownToc'
 
 interface KbMarkdownPreviewProps {
@@ -23,17 +23,7 @@ export function KbMarkdownPreview({ content, className }: KbMarkdownPreviewProps
   const mode = useAtomValue(ThemeStore.modeAtom)
   const isDark = mode === 'dark'
 
-  const { html, toc } = useMemo(() => {
-    try {
-      return renderMarkdown(content || '')
-    }
-    catch {
-      return {
-        html: '<p class="text-destructive">预览解析失败</p>',
-        toc: [],
-      }
-    }
-  }, [content])
+  const { html, toc } = renderMarkdown(content)
 
   useEffect(() => {
     const root = scrollRef.current

@@ -16,6 +16,11 @@ vi.mock('../config', () => ({
 
 const mockQuery = vi.mocked(query)
 
+async function* streamSdkMessages(messages: SDKMessage[]) {
+  for (const message of messages)
+    yield message
+}
+
 describe('runQueryInGraphNode', () => {
   it('writer 收到 agui 事件并返回 messages + sessionId', async () => {
     const messages: SDKMessage[] = [
@@ -46,10 +51,7 @@ describe('runQueryInGraphNode', () => {
       } as SDKMessage,
     ]
 
-    mockQuery.mockReturnValue((async function* () {
-      for (const m of messages)
-        yield m
-    })() as ReturnType<typeof query>)
+    mockQuery.mockReturnValue(streamSdkMessages(messages) as ReturnType<typeof query>)
 
     const written: unknown[] = []
     const result = await runQueryInGraphNode({
@@ -67,8 +69,8 @@ describe('runQueryInGraphNode', () => {
   })
 
   it('result 失败时抛错', async () => {
-    mockQuery.mockReturnValue((async function* () {
-      yield {
+    const messages = [
+      {
         type: 'result',
         subtype: 'error_during_execution',
         errors: ['auth failed'],
@@ -83,8 +85,9 @@ describe('runQueryInGraphNode', () => {
         modelUsage: {},
         permission_denials: [],
         uuid: '00000000-0000-4000-8000-000000000099',
-      } as unknown as SDKMessage
-    })() as ReturnType<typeof query>)
+      } as unknown as SDKMessage,
+    ]
+    mockQuery.mockReturnValue(streamSdkMessages(messages) as ReturnType<typeof query>)
 
     await expect(runQueryInGraphNode({ prompt: 'x' })).rejects.toThrow('auth failed')
   })

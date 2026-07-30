@@ -9,7 +9,7 @@ import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/protocol'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { KbMarkdownEditor } from '../kb/KbMarkdownEditor'
 import {
   DEFAULT_REACT_AGENT_LAB_CONFIG,
@@ -35,10 +35,7 @@ export function AgentLabConfigPanel({
   const [editorKey, setEditorKey] = useState(0)
   const [savedHint, setSavedHint] = useState<string | null>(null)
 
-  const finalSystem = useMemo(
-    () => composeReactAgentSystemPrompt(config.userPrompt),
-    [config.userPrompt],
-  )
+  const finalSystem = composeReactAgentSystemPrompt(config.userPrompt)
 
   function patch(partial: Partial<ReactAgentLabConfig>) {
     onChange({ ...config, ...partial })
@@ -101,9 +98,9 @@ export function AgentLabConfigPanel({
         )}
       </div>
 
-      <div className="flex min-h-[12rem] flex-1 flex-col space-y-1.5">
+      <div className="flex min-h-48 flex-1 flex-col space-y-1.5">
         <Label>用户提示词（Markdown）</Label>
-        <div className="min-h-[10rem] flex-1 overflow-hidden rounded-md border border-border">
+        <div className="min-h-40 flex-1 overflow-hidden rounded-md border border-border">
           <KbMarkdownEditor
             key={`prompt-${editorKey}`}
             docId={`lab-prompt-${editorKey}`}

@@ -106,7 +106,7 @@ export function TextEditor() {
           />
         </div>
 
-        <aside className="flex w-[22rem] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-muted">
+        <aside className="flex w-88 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-muted">
           <div className="shrink-0 border-b border-border px-4 py-3">
             <span className="text-sm font-semibold text-foreground">写作对话</span>
             <p className="mt-0.5 text-xs text-muted-foreground">⌘J 将选区加入引用</p>

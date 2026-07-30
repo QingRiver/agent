@@ -42,9 +42,12 @@ async function countStarts(app: ReturnType<typeof compileToolsNode>, callId: str
     },
     { version: 'v3', configurable: { thread_id: threadId } },
   )
-  const protocolDone = (async () => {
+
+  async function drainProtocol() {
     for await (const _ of stream) { /* drain */ }
-  })()
+  }
+
+  const protocolDone = drainProtocol()
   const events: AguiMappedEvent[] = await Array.fromAsync(stream.extensions.aguiEvents)
   await protocolDone
   if (!events.some(e => e.type === EventType.RUN_FINISHED) && stream.interrupted) {

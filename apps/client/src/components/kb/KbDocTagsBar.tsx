@@ -2,6 +2,7 @@ import type { TagRow } from '@apis/tags-api'
 import { TagManager } from '@components/tags/TagManager'
 import { Checkbox } from '@components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@components/ui/popover'
+import { runWithCleanup } from '@lib/runWithCleanup'
 import { Check, ChevronDown, Pencil, Plus } from 'lucide-react'
 import { useState } from 'react'
 
@@ -44,12 +45,10 @@ export function KbDocTagsBar({
     else
       selected.add(id)
     setBusy(true)
-    try {
-      await onChangeTagIds([...selected])
-    }
-    finally {
-      setBusy(false)
-    }
+    await runWithCleanup(
+      () => onChangeTagIds([...selected]),
+      () => setBusy(false),
+    )
   }
 
   if (!editing) {
@@ -104,7 +103,7 @@ export function KbDocTagsBar({
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className="w-[var(--radix-popover-trigger-width)] p-1"
+          className="w-(--radix-popover-trigger-width) p-1"
         >
           <div className="max-h-56 overflow-y-auto py-0.5">
             {allTags.length === 0 && (

@@ -1,21 +1,20 @@
+import type { ReactAgentRuntimeConfig } from '@agent/graph/react-agent-prompts'
 import {
   DEFAULT_REACT_AGENT_USER_PROMPT,
   REACT_AGENT_MAX_STEPS_DEFAULT,
-  REACT_AGENT_MAX_STEPS_MAX,
-  REACT_AGENT_MAX_STEPS_MIN,
-  REACT_AGENT_USER_PROMPT_MAX,
+
+  ReactAgentRuntimeConfigSchema,
 } from '@agent/graph/react-agent-prompts'
 import { z } from 'zod'
 
 export const AGENT_LAB_STORAGE_KEY = 'agent-lab:react-agent-config'
 
-export const ReactAgentLabConfigSchema = z.object({
+export type { ReactAgentRuntimeConfig }
+
+/** Lab 完整配置 = 运行字段 + UI / 本地持久化元数据 */
+export const ReactAgentLabConfigSchema = ReactAgentRuntimeConfigSchema.extend({
   name: z.string().min(1).max(80),
   description: z.string().max(200).default(''),
-  userPrompt: z.string().max(REACT_AGENT_USER_PROMPT_MAX),
-  kbId: z.string().min(1).max(128),
-  /** 图节点转移上限（= LangGraph recursionLimit） */
-  maxSteps: z.number().int().min(REACT_AGENT_MAX_STEPS_MIN).max(REACT_AGENT_MAX_STEPS_MAX),
   builtinToolIds: z.tuple([z.literal('kb_search')]),
   updatedAt: z.number().int().nonnegative(),
 })
@@ -30,6 +29,16 @@ export const DEFAULT_REACT_AGENT_LAB_CONFIG: ReactAgentLabConfig = {
   maxSteps: REACT_AGENT_MAX_STEPS_DEFAULT,
   builtinToolIds: ['kb_search'],
   updatedAt: 0,
+}
+
+export function toReactAgentRuntimeConfig(
+  config: Pick<ReactAgentLabConfig, 'userPrompt' | 'kbId' | 'maxSteps'>,
+): ReactAgentRuntimeConfig {
+  return ReactAgentRuntimeConfigSchema.parse({
+    userPrompt: config.userPrompt,
+    kbId: config.kbId,
+    maxSteps: config.maxSteps,
+  })
 }
 
 function migrateLegacyConfig(raw: unknown): unknown {

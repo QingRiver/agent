@@ -69,14 +69,17 @@ export async function* streamGraphAguiEvents(
     // drain 主迭代器驱动 transformer；stream 内部节点出错时该迭代器会 reject，
     // 捕获到 streamError 由主流程统一抛出，避免成为 unhandled rejection 崩溃进程
     let streamError: unknown
-    const protocolDone = (async () => {
+
+    async function drainProtocol() {
       try {
         for await (const _ of stream) { /* drain protocol to drive transformer */ }
       }
       catch (err) {
         streamError = err
       }
-    })()
+    }
+
+    const protocolDone = drainProtocol()
 
     for await (const event of stream.extensions.aguiEvents) {
       const ev = event as BaseEvent
