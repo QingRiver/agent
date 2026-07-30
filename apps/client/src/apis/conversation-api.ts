@@ -26,11 +26,6 @@ export class Conversation {
     return data.conversation
   }
 
-  static async messages(id: string) {
-    const res = await api.conversations.messages.$get({ query: { id } })
-    return await successData(res)
-  }
-
   static async pin(id: string) {
     await api.conversations.pin.$post({ json: { id } })
   }

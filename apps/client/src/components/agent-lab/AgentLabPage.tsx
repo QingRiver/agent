@@ -57,7 +57,7 @@ function AgentLabChatPanel({
           blockInput={hasPendingInterrupt}
         >
           <AgentLabStateBridge config={config} />
-          <AgentInterruptUi agentId="reactAgent" threadId={threadId} />
+          <AgentInterruptUi agentId="reactAgent" />
         </ConversationChat>
       </div>
     </div>

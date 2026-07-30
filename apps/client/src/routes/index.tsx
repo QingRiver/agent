@@ -31,7 +31,7 @@ function ChatPanel({
           threadId={threadId}
           blockInput={hasPendingInterrupt}
         >
-          <AgentInterruptUi agentId={graphsName} threadId={threadId} />
+          <AgentInterruptUi agentId={graphsName} />
         </ConversationChat>
       </div>
     </div>

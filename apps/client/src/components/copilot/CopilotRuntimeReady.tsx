@@ -6,7 +6,7 @@ interface CopilotRuntimeReadyProps {
 }
 
 /**
- * useInterrupt / CopilotChat 依赖 runtime /info 同步后的稳定 agent 实例。
+ * CopilotChat / pendingInterrupts 依赖 runtime /info 同步后的稳定 agent 实例。
  * 在 Connecting 阶段 run 会落在 provisional agent 上，连接完成后 agent 被替换会导致
  * agent 被替换，导致进行中的 run / interrupt UI 错位。
  */

@@ -1,6 +1,11 @@
-// Package name is literally highlight.js — not a relative .js path.
-// eslint-disable-next-line no-restricted-syntax -- highlight.js is the npm package name
-import hljs from 'highlight.js'
+import hljs from 'highlight.js/lib/core'
+import css from 'highlight.js/lib/languages/css'
+import javascript from 'highlight.js/lib/languages/javascript'
+import json from 'highlight.js/lib/languages/json'
+import markdown from 'highlight.js/lib/languages/markdown'
+import python from 'highlight.js/lib/languages/python'
+import typescript from 'highlight.js/lib/languages/typescript'
+import html from 'highlight.js/lib/languages/xml'
 import { Marked } from 'marked'
 import markedFootnote from 'marked-footnote'
 import { gfmHeadingId } from 'marked-gfm-heading-id'
@@ -13,6 +18,14 @@ export interface TocItem {
   level: number
   slug: string
 }
+
+hljs.registerLanguage('javascript', javascript)
+hljs.registerLanguage('typescript', typescript)
+hljs.registerLanguage('python', python)
+hljs.registerLanguage('html', html)
+hljs.registerLanguage('css', css)
+hljs.registerLanguage('json', json)
+hljs.registerLanguage('markdown', markdown)
 
 const marked = new Marked()
   .use(gfmHeadingId())
@@ -27,8 +40,9 @@ const marked = new Marked()
       // 原样返回，避免 hljs 转义/改写后污染 mermaid 源码
       if (lang === 'mermaid')
         return code
-      const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
-      return hljs.highlight(code, { language }).value
+      if (!lang || !hljs.getLanguage(lang))
+        return hljs.highlightAuto(code, []).value
+      return hljs.highlight(code, { language: lang }).value
     },
   }))
   // 须在 marked-highlight 之后：非 mermaid 返回 false，回落到 highlight

@@ -30,7 +30,7 @@ describe('mapInterruptToAgUi', () => {
     })
   })
 
-  it('buildInterruptFinalizeEvents emits snapshot, legacy CUSTOM, and RUN_FINISHED interrupt', () => {
+  it('buildInterruptFinalizeEvents emits snapshot and RUN_FINISHED interrupt', () => {
     const events = buildInterruptFinalizeEvents({
       threadId: 't1',
       runId: 'r1',
@@ -46,10 +46,6 @@ describe('mapInterruptToAgUi', () => {
       snapshot: { input: 'test' },
     })
     expect(events[1]).toMatchObject({
-      type: EventType.CUSTOM,
-      name: 'on_interrupt',
-    })
-    expect(events[2]).toMatchObject({
       type: EventType.RUN_FINISHED,
       threadId: 't1',
       runId: 'r1',

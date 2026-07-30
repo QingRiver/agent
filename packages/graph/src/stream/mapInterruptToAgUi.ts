@@ -10,8 +10,6 @@ export interface BuildInterruptFinalizeOptions {
   runId: string
   interrupts: readonly InterruptPayload[]
   snapshot?: Record<string, unknown>
-  /** CopilotKit `useInterrupt` 仍订阅 CUSTOM(on_interrupt) */
-  emitLegacyCustom?: boolean
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -68,7 +66,6 @@ export function buildInterruptFinalizeEvents(
     runId,
     interrupts,
     snapshot,
-    emitLegacyCustom = true,
   } = options
 
   const aguiInterrupts = mapInterruptPayloadsToAgUi(interrupts)
@@ -80,16 +77,6 @@ export function buildInterruptFinalizeEvents(
       snapshot,
     }
     events.push(stateSnapshot)
-  }
-
-  if (emitLegacyCustom) {
-    for (const lg of interrupts) {
-      events.push({
-        type: EventType.CUSTOM,
-        name: 'on_interrupt',
-        value: lg.payload,
-      })
-    }
   }
 
   const runFinished: RunFinishedEvent = {

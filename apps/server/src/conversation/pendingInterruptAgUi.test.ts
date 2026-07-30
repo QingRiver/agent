@@ -14,15 +14,27 @@ describe('pendingInterruptAgUi', () => {
     expect(agui.reason).toBe('select')
 
     const events = buildPendingInterruptConnectEvents('t1', 'run-1', pending)
-    expect(events).toHaveLength(2)
+    expect(events).toHaveLength(1)
     expect(events[0]).toMatchObject({
-      type: 'CUSTOM',
-      name: 'on_interrupt',
-      value: { type: 'select', message: '请选择优先级' },
-    })
-    expect(events[1]).toMatchObject({
       type: 'RUN_FINISHED',
       outcome: { type: 'interrupt', interrupts: [agui] },
+    })
+  })
+
+  it('maps approval pending interrupt with confirmation reason', () => {
+    const pending = {
+      interruptId: 'apr-1',
+      type: 'approval' as const,
+      message: '确认？',
+      details: '详情',
+    }
+    const agui = pendingInterruptToAgUi(pending)
+    expect(agui.id).toBe('apr-1')
+    expect(agui.reason).toBe('confirmation')
+    expect(agui.metadata).toEqual({
+      type: 'approval',
+      message: '确认？',
+      details: '详情',
     })
   })
 })

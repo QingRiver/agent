@@ -51,7 +51,8 @@ export class CheckpointConnectRunner extends InMemoryAgentRunner {
   }
 }
 
-function buildCheckpointReplayRun(
+/** 供单测：空内存 connect 时的 checkpoint → AG-UI 回放序列 */
+export function buildCheckpointReplayRun(
   threadId: string,
   messages: Message[],
   pendingInterrupt: PendingInterrupt | null,

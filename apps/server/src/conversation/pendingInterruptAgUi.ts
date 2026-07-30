@@ -14,12 +14,6 @@ export function pendingInterruptToAgUi(pending: PendingInterrupt): Interrupt {
   }
 }
 
-/** CUSTOM on_interrupt value：与 live run 一致，不含 interruptId */
-export function pendingInterruptCustomValue(pending: PendingInterrupt): Record<string, unknown> {
-  const { interruptId: _, ...rest } = pending
-  return rest
-}
-
 export function buildPendingInterruptConnectEvents(
   threadId: string,
   runId: string,
@@ -27,11 +21,6 @@ export function buildPendingInterruptConnectEvents(
 ): BaseEvent[] {
   const aguiInterrupt = pendingInterruptToAgUi(pending)
   return [
-    {
-      type: EventType.CUSTOM,
-      name: 'on_interrupt',
-      value: pendingInterruptCustomValue(pending),
-    },
     {
       type: EventType.RUN_FINISHED,
       threadId,

@@ -60,13 +60,13 @@ pnpm dev                        # server + client 并行
 | 数据 | 来源 |
 |------|------|
 | 聊天消息 UI | CopilotKit `connect` → `MESSAGES_SNAPSHOT`（server checkpoint hydrate） |
-| HITL 挂起审批 | `GET /conversations/messages` 的 `threadState.pendingInterrupt`（`ConversationSync` 轮询） |
+| HITL 挂起审批 | CopilotKit `agent.pendingInterrupts`（live run 或 `CheckpointConnectRunner` 重放 AG-UI 事件） |
 | 会话列表 / 当前 thread | `GET /conversations/list`、`conversation-store` |
 | Agent 错误 | CopilotKit 流 + `AgentErrorBanner` |
 
-HITL 图（`hitl`、`tushare` 等）在挂起时由 `HitlInterruptUi` 渲染审批卡片；`useHitlResume` 经 CopilotKit 发送 resume。
+HITL 图（`reactAgent`、`tushare`、`dev` 等）在挂起时由 `AgentInterruptUi` 渲染审批卡片；`useAgentInterruptResume` 经 `runAgent({ resume })` 发送恢复。
 
-聊天 UI **不**用 `GET /conversations/messages` 返回的 `messages` 字段渲染，仅消费 `threadState`。
+聊天 UI **不**用 `GET /conversations/messages` 返回的 `messages` 字段渲染。会话 HTTP 的 `threadState.pendingInterrupt` 仍可供服务端 / e2e 使用，**不再**驱动客户端 HITL UI。
 
 ### 知识库
 
@@ -110,7 +110,7 @@ src/
 │   ├── auth/               # RequireAuth、UserAvatarMenu
 │   ├── conversation/       # 侧边栏、新建对话、ConversationSync
 │   ├── copilot/            # ConversationChat、CopilotKitAppProvider
-│   ├── hitl/               # HitlInterruptUi、ApprovalCard、resume hooks
+│   ├── hitl/               # AgentInterruptUi、ApprovalCard、resume hooks
 │   ├── kb/                 # 文件树、编辑器、导入、标签、召回面板
 │   ├── text-editor/        # Yjs + CodeMirror 润色编辑器
 │   └── ui/                 # shadcn 风格基础组件

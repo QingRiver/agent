@@ -17,7 +17,3 @@ export type CreateConversationBody = InferRequestType<Conversations['create']['$
 export type CreateConversationResponse = InferResponseType<Conversations['create']['$post'], 200>
 
 export type ConversationDetailResponse = InferResponseType<Conversations['detail']['$get'], 200>
-
-export type ConversationMessagesResponse = InferResponseType<Conversations['messages']['$get'], 200>
-export type AgUiMessage = ConversationMessagesResponse['messages'][number]
-export type ThreadState = ConversationMessagesResponse['threadState']

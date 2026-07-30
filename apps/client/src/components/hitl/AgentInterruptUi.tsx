@@ -1,75 +1,58 @@
 import type { GraphsName } from '@apis/api-types'
-import type { InterruptRequest } from '@lib/interruptContracts'
-import { useAgent, useCopilotKit, useInterrupt } from '@copilotkit/react-core/v2'
-import { useConversations } from '@hooks/useConversations'
-import { narrowInterruptRequest, narrowPendingInterrupt } from '@lib/interruptContracts'
+import { useAgent, useCopilotKit } from '@copilotkit/react-core/v2'
+import { narrowAgUiPendingInterrupt } from '@lib/interruptContracts'
 import { runWithCleanup } from '@lib/runWithCleanup'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { InterruptCard } from './InterruptCards'
 import { useAgentInterruptResume } from './useAgentInterruptResume'
 
 interface AgentInterruptUiProps {
   agentId: GraphsName
-  threadId: string
 }
 
 /**
  * 任意 agent 的中断 UI（注入 CopilotChat）。
- * - 进行中 run：useInterrupt 订阅 on_interrupt
- * - 刷新后：threadState.pendingInterrupt 来自 checkpoint hydrate
+ * 单投影：只信 `agent.pendingInterrupts`（live run 或 CheckpointConnectRunner 重放写入）。
  * resume 必须带 interruptId（见 useAgentInterruptResume）。
  */
-export function AgentInterruptUi({ agentId, threadId }: AgentInterruptUiProps) {
-  const { threadState, reloadActiveThread } = useConversations()
+export function AgentInterruptUi({ agentId }: AgentInterruptUiProps) {
   const { copilotkit } = useCopilotKit()
   const { agent } = useAgent({ agentId })
   const [busy, setBusy] = useState(false)
 
-  const resumeInterrupt = useAgentInterruptResume(agent, threadId, reloadActiveThread)
+  const resumeInterrupt = useAgentInterruptResume(agent)
 
-  async function respond(payload: unknown, interruptId?: string) {
+  const pendingId = agent.pendingInterrupts[0]?.id
+  const pendingMeta = agent.pendingInterrupts[0]?.metadata
+  const request = useMemo(
+    () => narrowAgUiPendingInterrupt(
+      pendingId != null ? { id: pendingId, metadata: pendingMeta } : null,
+    ),
+    [pendingId, pendingMeta],
+  )
+
+  const onRespond = useCallback((payload: unknown) => {
+    if (request == null)
+      return
     setBusy(true)
-    await runWithCleanup(
-      () => resumeInterrupt(payload, interruptId),
+    void runWithCleanup(
+      () => resumeInterrupt(payload, request.interruptId),
       () => setBusy(false),
     )
-  }
+  }, [request, resumeInterrupt])
 
-  const liveElement = useInterrupt({
-    agentId,
-    renderInChat: false,
-    enabled: event => event.name === 'on_interrupt',
-    render: ({ event }) => {
-      const request = narrowInterruptRequest(event.value)
-      if (!request)
-        return <></>
-
-      const interruptId = agent.pendingInterrupts[0]?.id
-      return (
+  const element = useMemo(() => {
+    if (request == null)
+      return null
+    return (
+      <div className={busy ? 'pointer-events-none opacity-60' : undefined}>
         <InterruptCard
           request={request}
-          onRespond={payload => void respond(payload, interruptId)}
+          onRespond={onRespond}
         />
-      )
-    },
-  })
-
-  const pending = threadState?.pendingInterrupt
-  const pendingRequest: InterruptRequest | null = pending != null
-    ? narrowPendingInterrupt(pending)
-    : null
-  const checkpointElement = pendingRequest != null
-    ? (
-        <div className={busy ? 'pointer-events-none opacity-60' : undefined}>
-          <InterruptCard
-            request={pendingRequest}
-            onRespond={payload => void respond(payload, pendingRequest.interruptId)}
-          />
-        </div>
-      )
-    : null
-
-  const element = liveElement ?? checkpointElement
+      </div>
+    )
+  }, [busy, request, onRespond])
 
   useEffect(() => {
     copilotkit.setInterruptElement(element)

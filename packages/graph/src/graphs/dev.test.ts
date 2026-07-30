@@ -46,11 +46,14 @@ describe('devGraph hitlDemo + AguiTransformer', () => {
       }
     }
 
-    const onInterrupt = events.find(
-      e => e.type === EventType.CUSTOM && 'name' in e && e.name === 'on_interrupt',
-    ) as { value: Record<string, unknown> } | undefined
-    const runFinished = events.find(e => e.type === EventType.RUN_FINISHED)
-    return { onInterrupt, runFinished, events }
+    const runFinished = events.find(
+      (e): e is Extract<typeof e, { type: typeof EventType.RUN_FINISHED }> =>
+        e.type === EventType.RUN_FINISHED,
+    )
+    const interrupt = runFinished?.outcome?.type === 'interrupt'
+      ? runFinished.outcome.interrupts[0]
+      : undefined
+    return { interrupt, runFinished, events }
   }
 
   it('澄清选 hitlDemo 后串联 input → select → multiSelect → approval', async () => {
@@ -62,14 +65,14 @@ describe('devGraph hitlDemo + AguiTransformer', () => {
       threadId,
       'r0',
     )
-    expect(clarify.onInterrupt?.value).toMatchObject({ type: 'select' })
+    expect(clarify.interrupt?.metadata).toMatchObject({ type: 'select' })
 
     const step1 = await streamUntilInterrupt(
       new Command({ resume: { value: 'hitlDemo' } }),
       threadId,
       'r1',
     )
-    expect(step1.onInterrupt?.value).toMatchObject({ type: 'input' })
+    expect(step1.interrupt?.metadata).toMatchObject({ type: 'input' })
     expect(step1.runFinished).toMatchObject({
       outcome: { type: 'interrupt' },
     })
@@ -79,21 +82,21 @@ describe('devGraph hitlDemo + AguiTransformer', () => {
       threadId,
       'r2',
     )
-    expect(step2.onInterrupt?.value).toMatchObject({ type: 'select' })
+    expect(step2.interrupt?.metadata).toMatchObject({ type: 'select' })
 
     const step3 = await streamUntilInterrupt(
       new Command({ resume: { value: 'high' } }),
       threadId,
       'r3',
     )
-    expect(step3.onInterrupt?.value).toMatchObject({ type: 'multiSelect' })
+    expect(step3.interrupt?.metadata).toMatchObject({ type: 'multiSelect' })
 
     const step4 = await streamUntilInterrupt(
       new Command({ resume: { values: ['audit', 'notify'] } }),
       threadId,
       'r4',
     )
-    expect(step4.onInterrupt?.value).toMatchObject({
+    expect(step4.interrupt?.metadata).toMatchObject({
       type: 'approval',
       message: expect.stringContaining('请确认'),
       details: expect.stringContaining('季度资金归集'),
