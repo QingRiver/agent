@@ -8,6 +8,8 @@ import { useAgentInterruptResume } from './useAgentInterruptResume'
 
 interface AgentInterruptUiProps {
   agentId: GraphsName
+  /** 与 Shell 提交相同的 forwardedProps（如 kb 的 kbId） */
+  forwardedProps?: Record<string, unknown>
 }
 
 /**
@@ -15,12 +17,12 @@ interface AgentInterruptUiProps {
  * 单投影：只信 `agent.pendingInterrupts`（live run 或 CheckpointConnectRunner 重放写入）。
  * resume 必须带 interruptId（见 useAgentInterruptResume）。
  */
-export function AgentInterruptUi({ agentId }: AgentInterruptUiProps) {
+export function AgentInterruptUi({ agentId, forwardedProps }: AgentInterruptUiProps) {
   const { copilotkit } = useCopilotKit()
   const { agent } = useAgent({ agentId })
   const [busy, setBusy] = useState(false)
 
-  const resumeInterrupt = useAgentInterruptResume(agent)
+  const resumeInterrupt = useAgentInterruptResume(agent, forwardedProps)
 
   const pendingId = agent.pendingInterrupts[0]?.id
   const pendingMeta = agent.pendingInterrupts[0]?.metadata

@@ -8,16 +8,16 @@ LangGraph Agent 图定义与 AG-UI 流式映射。Web / Copilot 侧可运行图�
 |------|------|
 | `Graphs` / `GraphsName` | 可运行图注册表与名称类型 |
 | `AguiTransformer` / `aguiTransformerFactory` | ProtocolEvent → AG-UI |
-| `devGraph` / `kbGraph` / `writerGraph` 等 | 各图及扩展事件名 |
+| `devGraph` / `kbGraph` / `editorGraph` 等 | 各图及扩展事件名 |
 | `ASK_*` | 人在回路 ask 工具与系统提示（内部走 `hitl*` helpers） |
 
-当前 `Graphs` 键：`claudeAgent`、`dev`、`kb`、`tushare`、`writer`、`editorChat`。
+当前 `Graphs` 键：`claudeAgent`、`reactAgent`、`dev`、`kb`、`tushare`、`editor`。
 
 ## 目录
 
 ```text
 src/
-├── graphs/                 # 薄装配（dev / kb / tushare / writer / editorChat / claudeAgent）
+├── graphs/                 # 薄装配（dev / kb / tushare / editor / claudeAgent / reactAgent）
 ├── nodes/
 │   ├── writeEdit.ts        # makeWriteEditNode + runWriteEdit
 │   ├── chatCompletion.ts   # runChatCompletion(silent|streamReasoning)

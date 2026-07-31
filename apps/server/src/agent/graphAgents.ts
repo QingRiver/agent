@@ -1,6 +1,6 @@
 import type { RunAgentInput } from '@ag-ui/core'
 import type { GraphsName } from '@agent/graph'
-import type { AguiTransformerGraphApp } from './streamGraphAguiEvents'
+import type { AguiTransformerGraphApp, StreamGraphAguiOptions } from './streamGraphAguiEvents'
 import { env } from '@agent/env'
 import {
   aguiTransformerFactory,
@@ -17,6 +17,7 @@ import { Command } from '@langchain/langgraph'
 import { getCheckpointer } from '../db/checkpointer'
 import { buildMessagesInput, extractLastUserMessage } from './extractLastUserMessage'
 import { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
+import { attachResolveAgentConfigMiddleware } from './middleware/resolveAgentConfig'
 import { streamGraphAguiEvents } from './streamGraphAguiEvents'
 
 interface GraphAgentDefinition {
@@ -46,26 +47,15 @@ const GRAPH_AGENT_DEFINITIONS = {
     },
     resolveConfigurable: (input) => {
       const forwarded = readReactAgentForwardedProps(input)
-      const state = input.state as {
-        userPrompt?: unknown
-        kbId?: unknown
-      } | undefined
       return {
-        userPrompt: sanitizeUserPrompt(forwarded.userPrompt ?? state?.userPrompt),
-        kbId: sanitizeKbId(forwarded.kbId ?? state?.kbId, env.KB_COLLECTION),
+        userPrompt: sanitizeUserPrompt(forwarded.userPrompt),
+        kbId: sanitizeKbId(forwarded.kbId, env.KB_COLLECTION),
       }
     },
     /** 唯一环控：配置 maxSteps ≡ LangGraph recursionLimit（节点转移上限） */
     resolveRecursionLimit: (input) => {
       const forwarded = readReactAgentForwardedProps(input)
-      const state = input.state as { maxSteps?: unknown, maxToolRounds?: unknown } | undefined
-      // maxToolRounds：兼容旧 Lab localStorage / state 字段名
-      return clampMaxSteps(
-        forwarded.maxSteps
-        ?? state?.maxSteps
-        ?? state?.maxToolRounds
-        ?? REACT_AGENT_MAX_STEPS_DEFAULT,
-      )
+      return clampMaxSteps(forwarded.maxSteps ?? REACT_AGENT_MAX_STEPS_DEFAULT)
     },
   },
   dev: {
@@ -97,10 +87,9 @@ const GRAPH_AGENT_DEFINITIONS = {
       return buildMessagesInput(userText)
     },
   },
-  writer: {
-    description: '中文文本改写（editCase=inline 选区幽灵预览；document 全文+修订摘要）',
+  editor: {
+    description: '文本编辑器（editorPath=job 润色/⌘K；chat 为 Ask/Write 对话）',
     resolveStreamInput: (input) => {
-      // 原文可经 state.originalMarkdown 或最后 user message 传入
       const userText = extractLastUserMessage(input, {
         stateKeys: ['originalMarkdown'],
         defaultMessage: '',
@@ -110,58 +99,50 @@ const GRAPH_AGENT_DEFINITIONS = {
       return { messages: [] }
     },
     resolveConfigurable: (input) => {
+      const forwarded = input.forwardedProps as { editorPath?: unknown } | undefined
+      const editorPath = forwarded?.editorPath === 'job' ? 'job' as const : 'chat' as const
       const state = input.state as {
         writerMode?: unknown
         editCase?: unknown
         polishInstruction?: unknown
         documentBaseline?: unknown
         focuses?: unknown
+        forceIntent?: unknown
       } | undefined
-      const editCase = state?.editCase === 'inline' || state?.editCase === 'document'
-        ? state.editCase
-        : state?.writerMode === 'inline' ? 'inline' : 'document'
+
+      const forceIntent = state?.forceIntent === 'ask' || state?.forceIntent === 'write'
+        ? state.forceIntent
+        : undefined
       const polishInstruction = typeof state?.polishInstruction === 'string'
         ? state.polishInstruction
         : undefined
       const documentBaseline = typeof state?.documentBaseline === 'string'
         ? state.documentBaseline
         : undefined
+
+      if (editorPath === 'chat') {
+        return {
+          editorPath,
+          reasoning: true,
+          editCase: 'document' as const,
+          writerMode: 'polish' as const,
+          ...(forceIntent ? { forceIntent } : {}),
+          ...(documentBaseline ? { documentBaseline } : {}),
+          ...(polishInstruction ? { polishInstruction } : {}),
+          ...(Array.isArray(state?.focuses) ? { focuses: state.focuses } : {}),
+        }
+      }
+
+      const editCase = state?.editCase === 'inline' || state?.editCase === 'document'
+        ? state.editCase
+        : state?.writerMode === 'inline' ? 'inline' : 'document'
       return {
+        editorPath,
+        reasoning: false,
         editCase,
         writerMode: editCase === 'inline' ? 'inline' : 'polish',
         ...(polishInstruction ? { polishInstruction } : {}),
         ...(documentBaseline ? { documentBaseline } : {}),
-        ...(Array.isArray(state?.focuses) ? { focuses: state.focuses } : {}),
-      }
-    },
-  },
-  editorChat: {
-    description: '写作助手对话（意图分流 Ask/Write；Write 自动落到多段红绿幽灵）',
-    resolveStreamInput: input => buildMessagesInput(extractLastUserMessage(input, {
-      defaultMessage: '',
-    })),
-    resolveConfigurable: (input) => {
-      const state = input.state as {
-        forceIntent?: unknown
-        documentBaseline?: unknown
-        polishInstruction?: unknown
-        focuses?: unknown
-        editCase?: unknown
-      } | undefined
-      const forceIntent = state?.forceIntent === 'ask' || state?.forceIntent === 'write'
-        ? state.forceIntent
-        : undefined
-      const documentBaseline = typeof state?.documentBaseline === 'string'
-        ? state.documentBaseline
-        : undefined
-      const polishInstruction = typeof state?.polishInstruction === 'string'
-        ? state.polishInstruction
-        : undefined
-      return {
-        editCase: 'document' as const,
-        ...(forceIntent ? { forceIntent } : {}),
-        ...(documentBaseline ? { documentBaseline } : {}),
-        ...(polishInstruction ? { polishInstruction } : {}),
         ...(Array.isArray(state?.focuses) ? { focuses: state.focuses } : {}),
       }
     },
@@ -173,9 +154,10 @@ const GRAPH_AGENT_DEFINITIONS = {
       defaultMessage: '知识库中有哪些退款政策？',
     })),
     resolveConfigurable: (input) => {
-      const state = input.state as { kbId?: unknown } | undefined
-      const kbId = typeof state?.kbId === 'string' && state.kbId.trim()
-        ? state.kbId.trim()
+      const forwarded = input.forwardedProps as { kbId?: unknown } | undefined
+      const raw = forwarded?.kbId
+      const kbId = typeof raw === 'string' && raw.trim()
+        ? raw.trim()
         : env.KB_COLLECTION
       return { kbId }
     },
@@ -207,22 +189,36 @@ export function getAguiGraphApp(name: GraphsName): AguiTransformerGraphApp {
 
 function createGraphAgent(name: GraphsName): GraphTransformerAguiAgent {
   const definition = GRAPH_AGENT_DEFINITIONS[name]
+  const agent = new GraphTransformerAguiAgent(
+    { agentId: name, description: definition.description },
+    input => streamGraphAguiEvents(
+      input,
+      getAguiGraphApp(name),
+      getGraphAgentStreamOptions(name),
+      name,
+    ),
+  )
+  if (name === 'reactAgent')
+    attachResolveAgentConfigMiddleware(agent)
+  return agent
+}
+
+export const copilotAgents = Object.fromEntries(
+  (Object.keys(Graphs) as GraphsName[]).map(name => [name, createGraphAgent(name)]),
+) as Record<GraphsName, GraphTransformerAguiAgent>
+
+/** 供薄 SSE 旁路复用与 createGraphAgent 相同的 resolve* 选项 */
+export function getGraphAgentStreamOptions(name: GraphsName): StreamGraphAguiOptions {
+  const definition = GRAPH_AGENT_DEFINITIONS[name]
   const resolveConfigurable = 'resolveConfigurable' in definition
     ? definition.resolveConfigurable
     : undefined
   const resolveRecursionLimit = 'resolveRecursionLimit' in definition
     ? definition.resolveRecursionLimit
     : undefined
-  return new GraphTransformerAguiAgent(
-    { agentId: name, description: definition.description },
-    input => streamGraphAguiEvents(input, getAguiGraphApp(name), {
-      resolveStreamInput: definition.resolveStreamInput,
-      ...(resolveConfigurable ? { resolveConfigurable } : {}),
-      ...(resolveRecursionLimit ? { resolveRecursionLimit } : {}),
-    }, name),
-  )
+  return {
+    resolveStreamInput: definition.resolveStreamInput,
+    ...(resolveConfigurable ? { resolveConfigurable } : {}),
+    ...(resolveRecursionLimit ? { resolveRecursionLimit } : {}),
+  }
 }
-
-export const copilotAgents = Object.fromEntries(
-  (Object.keys(Graphs) as GraphsName[]).map(name => [name, createGraphAgent(name)]),
-) as Record<GraphsName, GraphTransformerAguiAgent>

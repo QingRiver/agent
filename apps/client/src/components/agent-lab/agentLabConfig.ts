@@ -2,21 +2,24 @@ import type { ReactAgentRuntimeConfig } from '@agent/graph/react-agent-prompts'
 import {
   DEFAULT_REACT_AGENT_USER_PROMPT,
   REACT_AGENT_MAX_STEPS_DEFAULT,
-
   ReactAgentRuntimeConfigSchema,
 } from '@agent/graph/react-agent-prompts'
 import { z } from 'zod'
 
-export const AGENT_LAB_STORAGE_KEY = 'agent-lab:react-agent-config'
+/** 本地只存服务端配置 id，正文一律 GET */
+export const AGENT_LAB_ID_STORAGE_KEY = 'agent-lab:agent-config-id'
+/** @deprecated 旧全文草稿 key，读取时只抽 id 后清除 */
+const LEGACY_FULL_CONFIG_KEY = 'agent-lab:react-agent-config'
 
 export type { ReactAgentRuntimeConfig }
 
-/** Lab 完整配置 = 运行字段 + UI / 本地持久化元数据 */
+/** Lab 表单态 = 运行字段 + UI 元数据（真相在服务端） */
 export const ReactAgentLabConfigSchema = ReactAgentRuntimeConfigSchema.extend({
   name: z.string().min(1).max(80),
   description: z.string().max(200).default(''),
   builtinToolIds: z.tuple([z.literal('kb_search')]),
   updatedAt: z.number().int().nonnegative(),
+  agentConfigId: z.string().min(1).max(128).nullable(),
 })
 
 export type ReactAgentLabConfig = z.infer<typeof ReactAgentLabConfigSchema>
@@ -29,59 +32,62 @@ export const DEFAULT_REACT_AGENT_LAB_CONFIG: ReactAgentLabConfig = {
   maxSteps: REACT_AGENT_MAX_STEPS_DEFAULT,
   builtinToolIds: ['kb_search'],
   updatedAt: 0,
+  agentConfigId: null,
 }
 
-export function toReactAgentRuntimeConfig(
-  config: Pick<ReactAgentLabConfig, 'userPrompt' | 'kbId' | 'maxSteps'>,
-): ReactAgentRuntimeConfig {
-  return ReactAgentRuntimeConfigSchema.parse({
-    userPrompt: config.userPrompt,
-    kbId: config.kbId,
-    maxSteps: config.maxSteps,
+export function labConfigFromRemote(remote: {
+  id: string
+  name: string
+  description: string
+  userPrompt: string
+  kbId: string
+  maxSteps: number
+  updatedAt: number
+}): ReactAgentLabConfig {
+  return ReactAgentLabConfigSchema.parse({
+    name: remote.name,
+    description: remote.description,
+    userPrompt: remote.userPrompt,
+    kbId: remote.kbId,
+    maxSteps: remote.maxSteps,
+    builtinToolIds: ['kb_search'],
+    updatedAt: remote.updatedAt,
+    agentConfigId: remote.id,
   })
 }
 
-function migrateLegacyConfig(raw: unknown): unknown {
-  if (raw == null || typeof raw !== 'object' || Array.isArray(raw))
-    return raw
-  const o = raw as Record<string, unknown>
-  if (o.maxSteps != null || o.maxToolRounds == null)
-    return raw
-  const { maxToolRounds, ...rest } = o
-  return { ...rest, maxSteps: maxToolRounds }
-}
-
-export function loadAgentLabConfig(): ReactAgentLabConfig {
+export function loadStoredAgentConfigId(): string | null {
   try {
-    const raw = localStorage.getItem(AGENT_LAB_STORAGE_KEY)
-    if (raw == null)
-      return { ...DEFAULT_REACT_AGENT_LAB_CONFIG }
-    const parsed = ReactAgentLabConfigSchema.safeParse(
-      migrateLegacyConfig(JSON.parse(raw)),
-    )
-    if (!parsed.success)
-      return { ...DEFAULT_REACT_AGENT_LAB_CONFIG }
-    return parsed.data
+    const direct = localStorage.getItem(AGENT_LAB_ID_STORAGE_KEY)?.trim()
+    if (direct)
+      return direct
+
+    // 迁移：旧全文草稿只抽 id，然后删掉全文
+    const legacy = localStorage.getItem(LEGACY_FULL_CONFIG_KEY)
+    if (legacy == null)
+      return null
+    localStorage.removeItem(LEGACY_FULL_CONFIG_KEY)
+    const parsed = JSON.parse(legacy) as { agentConfigId?: unknown }
+    const id = typeof parsed.agentConfigId === 'string' ? parsed.agentConfigId.trim() : ''
+    if (!id)
+      return null
+    localStorage.setItem(AGENT_LAB_ID_STORAGE_KEY, id)
+    return id
   }
   catch {
-    return { ...DEFAULT_REACT_AGENT_LAB_CONFIG }
+    return null
   }
 }
 
-export function saveAgentLabConfig(
-  config: ReactAgentLabConfig,
-): ReactAgentLabConfig {
-  const next = ReactAgentLabConfigSchema.parse({
-    ...config,
-    updatedAt: Date.now(),
-  })
-  localStorage.setItem(AGENT_LAB_STORAGE_KEY, JSON.stringify(next))
-  return next
+export function saveStoredAgentConfigId(id: string | null) {
+  if (id == null || !id.trim()) {
+    localStorage.removeItem(AGENT_LAB_ID_STORAGE_KEY)
+    return
+  }
+  localStorage.setItem(AGENT_LAB_ID_STORAGE_KEY, id.trim())
 }
 
 export function resetAgentLabConfig(): ReactAgentLabConfig {
-  return saveAgentLabConfig({
-    ...DEFAULT_REACT_AGENT_LAB_CONFIG,
-    updatedAt: Date.now(),
-  })
+  saveStoredAgentConfigId(null)
+  return { ...DEFAULT_REACT_AGENT_LAB_CONFIG }
 }

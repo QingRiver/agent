@@ -2,6 +2,7 @@ export { buildMessagesInput, extractLastUserMessage } from './extractLastUserMes
 export {
   copilotAgents,
   getAguiGraphApp,
+  getGraphAgentStreamOptions,
   listGraphAgentCatalog,
 } from './graphAgents'
 export { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'

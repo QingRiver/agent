@@ -5,6 +5,7 @@ import process from 'node:process'
 import { computeHunks, WRITER_CHANGE_SUMMARIES_EVENT, WriterHunkSummariesSchema } from '@agent/proto'
 import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ChatOpenAI } from '@langchain/openai'
+import { readEditorPath } from '../edges/routeByEditorPath'
 import {
   buildWriteSystemPrompt,
   DOCUMENT_ASSISTANT_NOTE,
@@ -30,17 +31,15 @@ export interface WriteEditInput {
   focuses?: EditorFocus[]
   /** inline 时通常为带 <focus> 的全文 */
   humanContent?: string
+  /** document：是否 streamReasoning；job 路径关，chat Write 开 */
+  reasoning?: boolean
 }
 
-export interface WriteEditNodeOptions {
-  /** 强制 editCase（editorChat Write 路径用 document） */
-  editCase?: EditorEditCase
-}
-
-/** ⌘K / document 改稿：LangChain 默认流式 → AG-UI 文本与 reasoning */
+/** ⌘K inline：旁路作业，关 thinking */
 const llm = new ChatOpenAI({
   model: process.env.OPENAI_MODEL ?? '',
   temperature: 0.7,
+  modelKwargs: { thinking: { type: 'disabled' } },
 })
 
 export async function summarizeHunks(original: string, polished: string): Promise<WriterChangeSummary[]> {
@@ -107,13 +106,15 @@ export async function runWriteEdit(
     return { messages: [response], polished }
   }
 
-  // document：聊天先出「编写中…」；正文静默累积（不发 TEXT_MESSAGE）；reasoning 单独推 AG-UI
+  // document：聊天先出「编写中…」；正文静默累积（不发 TEXT_MESSAGE）
   writeAguiAssistantText(config, DOCUMENT_WRITING_NOTE)
+  const useReasoning = input.reasoning === true
   const polished = await runChatCompletion(config, {
     system,
     user: humanContent,
     temperature: 0.7,
-    mode: 'streamReasoning',
+    mode: useReasoning ? 'streamReasoning' : 'silent',
+    thinking: useReasoning,
   })
 
   const baseline = input.documentBaseline!.trim()
@@ -177,18 +178,23 @@ export function readOptionalString(config: LangGraphRunnableConfig, key: string)
 async function writeEditNode(
   state: { messages: BaseMessage[] },
   config: LangGraphRunnableConfig,
-  options?: WriteEditNodeOptions,
 ): Promise<{ messages: BaseMessage[] }> {
-  const editCase = options?.editCase ?? resolveEditCase(config)
+  const editorPath = readEditorPath(config)
+  // chat Write 强制 document；job 按 state/configurable（inline | document）
+  const editCase = editorPath === 'chat' ? 'document' : resolveEditCase(config)
   const humanContent = lastHumanMessageText(state.messages)
   const focuses = readFocuses(config)
   const instructionFromConfig = readOptionalString(config, 'polishInstruction')
   const instruction = instructionFromConfig || (editCase === 'document' ? humanContent : '')
   const baselineFromConfig = readOptionalString(config, 'documentBaseline')
+  // chat：基线只信 documentBaseline（user 文是指令）；job document：可回退到 user 全文
   const baseline = baselineFromConfig
-    || (editCase === 'document' && !options?.editCase ? humanContent : '')
+    || (editCase === 'document' && editorPath === 'job' ? humanContent : '')
 
-  const input: WriteEditInput = { editCase }
+  const input: WriteEditInput = {
+    editCase,
+    reasoning: editorPath === 'chat',
+  }
   if (editCase === 'document') {
     if (baselineFromConfig || baseline)
       input.documentBaseline = baselineFromConfig || baseline
@@ -210,10 +216,10 @@ async function writeEditNode(
   return { messages }
 }
 
-/** writer / editorChat 共用的 writeEdit 节点工厂 */
-export function makeWriteEditNode(opts?: WriteEditNodeOptions) {
+/** editor 图 writeEdit 节点 */
+export function makeWriteEditNode() {
   return async (
     state: { messages: BaseMessage[] },
     config: LangGraphRunnableConfig,
-  ): Promise<{ messages: BaseMessage[] }> => writeEditNode(state, config, opts)
+  ): Promise<{ messages: BaseMessage[] }> => writeEditNode(state, config)
 }

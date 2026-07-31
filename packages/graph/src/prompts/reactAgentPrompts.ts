@@ -5,6 +5,9 @@ import { z } from 'zod'
 /** CopilotKit `properties` / `RunAgentInput.forwardedProps` 上的 reactAgent 命名空间 */
 export const REACT_AGENT_FORWARDED_PROPS_KEY = 'reactAgent' as const
 
+/** 产品路径：只传配置 id；服务端 middleware 再装 RuntimeBundle */
+export const AGENT_CONFIG_ID_PROPS_KEY = 'agentConfigId' as const
+
 /** 平台 KB 工具引导（仅服务端拼接进 system，客户端不可覆盖） */
 export const KB_SEARCH_SYSTEM_PROMPT = [
   '涉及已导入知识库内容的问题时，必须先调用 kb_search，再据返回的引用片段作答。',
@@ -76,7 +79,7 @@ export function sanitizeKbId(raw: unknown, fallback = 'kb_default'): string {
 
 /**
  * 从 RunAgentInput.forwardedProps.reactAgent 读取运行配置（partial）。
- * 非法结构返回空对象，由调用方回退到 state / 默认值。
+ * 非法结构返回空对象；调用方用默认值，不再回退 input.state。
  */
 export function readReactAgentForwardedProps(
   input: Pick<RunAgentInput, 'forwardedProps'>,
@@ -96,4 +99,18 @@ export function readReactAgentForwardedProps(
   if (parsed.data.maxSteps !== undefined)
     out.maxSteps = parsed.data.maxSteps
   return out
+}
+
+/** 从 forwardedProps 读 agentConfigId；非法则 undefined */
+export function readAgentConfigId(
+  input: Pick<RunAgentInput, 'forwardedProps'>,
+): string | undefined {
+  const props = input.forwardedProps
+  if (props == null || typeof props !== 'object' || Array.isArray(props))
+    return undefined
+  const raw = (props as Record<string, unknown>)[AGENT_CONFIG_ID_PROPS_KEY]
+  if (typeof raw !== 'string')
+    return undefined
+  const id = raw.trim()
+  return id.length > 0 ? id.slice(0, 128) : undefined
 }

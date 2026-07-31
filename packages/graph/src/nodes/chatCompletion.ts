@@ -1,6 +1,6 @@
 /**
  * 直连 Chat Completions（非 LangChain）通用内核。
- * - silent：整段返回，不进 AG-UI（分类 / hunk 摘要）
+ * - silent：整段返回，不进 AG-UI（分类 / hunk 摘要 / 旁路 writer 改稿）
  * - streamReasoning：流式；reasoning_* → AG-UI；content 只累积，不发 TEXT_MESSAGE_*
  */
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
@@ -27,11 +27,17 @@ export async function runChatCompletion(
     user: string
     temperature?: number
     mode: ChatCompletionMode
+    /**
+     * DeepSeek V4：`thinking.type`。
+     * silent 默认 disabled；streamReasoning 默认 enabled。
+     */
+    thinking?: boolean
   },
 ): Promise<string> {
   const { apiKey, base, model } = resolveOpenAiEnv()
   const temperature = params.temperature ?? 0.7
   const stream = params.mode === 'streamReasoning'
+  const thinkingEnabled = params.thinking ?? params.mode === 'streamReasoning'
 
   const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
@@ -43,6 +49,7 @@ export async function runChatCompletion(
       model,
       temperature,
       stream,
+      thinking: { type: thinkingEnabled ? 'enabled' : 'disabled' },
       messages: [
         { role: 'system', content: params.system },
         { role: 'user', content: params.user },
@@ -136,9 +143,11 @@ export async function runChatCompletion(
       const delta = parsed.choices?.[0]?.delta
       if (!delta)
         continue
-      const reasoning = delta.reasoning_content ?? delta.reasoning
-      if (typeof reasoning === 'string' && reasoning)
-        onReasoningDelta(reasoning)
+      if (thinkingEnabled) {
+        const reasoning = delta.reasoning_content ?? delta.reasoning
+        if (typeof reasoning === 'string' && reasoning)
+          onReasoningDelta(reasoning)
+      }
       if (typeof delta.content === 'string' && delta.content)
         content += delta.content
     }

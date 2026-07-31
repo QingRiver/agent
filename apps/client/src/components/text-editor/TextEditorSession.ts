@@ -1,10 +1,12 @@
 import type { Hunk, WriterChangeSummary } from '@agent/proto'
+import type { GraphAguiSseEvent } from '@apis/graph-agui-sse'
 import type { ViewUpdate } from '@codemirror/view'
 import type { AgentErrorInfo } from '@components/copilot/AgentErrorBanner'
 import type { InlineEditState } from './inline-edit-field'
 import type { Suggestion } from './types'
 import { computeHunks, hunkKey, WRITER_CHANGE_SUMMARIES_EVENT } from '@agent/proto'
 import { Conversation } from '@apis/conversation-api'
+import { runGraphAguiSse } from '@apis/graph-agui-sse'
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
@@ -37,25 +39,6 @@ const INITIAL_TEXT = `低空经济是2026年非常火热的行业，主要靠无
 
 未来三年，随着低空空域逐步开放和电池技术进步，城市间的无人机货运网络有望率先跑通。eVTOL 的载客商业化则会更慢一些，预计要到2028年之后才会在少数城市试点。整体来看，低空经济仍处于基础设施建设的早期阶段，机会和风险并存。`
 
-export interface WriterAgent {
-  isRunning: boolean
-  threadId?: string | null
-  state?: Record<string, unknown> | null
-  setState?: (state: Record<string, unknown>) => void
-  setMessages: (messages: unknown[]) => void
-  runAgent: (
-    input: Record<string, never>,
-    options: {
-      onEvent?: (ctx: {
-        event: { type: string, delta?: string, name?: string, value?: unknown }
-      }) => void
-      onCustomEvent?: (ctx: {
-        event: { type?: string, name?: string, value?: unknown }
-      }) => void
-    },
-  ) => Promise<unknown>
-}
-
 export interface SelectionRange {
   from: number
   to: number
@@ -64,7 +47,6 @@ export interface SelectionRange {
 
 export interface TextEditorSessionOptions {
   mount: HTMLElement
-  getAgent: () => WriterAgent | undefined
   onSuggestionsChange: (suggestions: Suggestion[]) => void
   onPolishingChange: (polishing: boolean) => void
   onAgentError?: (error: AgentErrorInfo) => void
@@ -90,6 +72,9 @@ export class TextEditorSession {
   private readonly yText: Y.Text
   private view: EditorView | null = null
   private threadId: string | null = null
+  private writerState: Record<string, unknown> = {}
+  private running = false
+  private runAbort: AbortController | null = null
   private summariesByHunkKey = new Map<string, string>()
   private polishing = false
   private polishBaseline: string | null = null
@@ -292,6 +277,7 @@ export class TextEditorSession {
       return
     this.disposed = true
     this.inlineAbort = true
+    this.runAbort?.abort()
     this.view?.destroy()
     this.view = null
     this.ydoc.destroy()
@@ -349,6 +335,7 @@ export class TextEditorSession {
 
   stopInline(): void {
     this.inlineAbort = true
+    this.runAbort?.abort()
     if (!this.view)
       return
     const edit = this.view.state.field(inlineEditField)
@@ -361,6 +348,7 @@ export class TextEditorSession {
 
   rejectInline(): void {
     this.inlineAbort = true
+    this.runAbort?.abort()
     if (!this.alive() || !this.view)
       return
     this.view.dispatch({ effects: clearInlineEditEffect.of(null) })
@@ -409,7 +397,7 @@ export class TextEditorSession {
     text: string
     instruction: string
   }): Promise<void> {
-    if (!this.alive() || this.polishing || !this.view)
+    if (!this.alive() || this.polishing || this.running || !this.view)
       return
     if (this.view.state.field(suggestionsField).length > 0) {
       this.options.onAgentError?.({
@@ -420,9 +408,6 @@ export class TextEditorSession {
       })
       return
     }
-    const ag = this.options.getAgent()
-    if (!ag || ag.isRunning)
-      return
     if (this.view.state.sliceDoc(params.from, params.to) !== params.text)
       return
 
@@ -451,48 +436,33 @@ export class TextEditorSession {
       }),
     })
 
-    this.setEditCase(ag, 'inline', {
+    this.setEditCase('inline', {
       polishInstruction: instruction,
       focuses: [{ from: params.from, to: params.to, text: params.text }],
     })
-    ag.setMessages([{ id: `writer-inline-${Date.now()}`, role: 'user', content: userContent }] as never[])
+    const messages = [{ id: `writer-inline-${Date.now()}`, role: 'user' as const, content: userContent }]
     let aiText = ''
     try {
-      if (!this.threadId)
-        this.threadId = (await Conversation.create('writer')).id
-      if (!this.alive() || gen !== this.inlineGen)
-        return
-      ag.threadId = this.threadId
-      await ag.runAgent({}, {
-        onEvent: ({ event }) => {
-          if (!this.alive() || gen !== this.inlineGen || this.inlineAbort)
-            return
-          if (event.type === 'TEXT_MESSAGE_CONTENT') {
-            aiText += event.delta ?? ''
-            this.view?.dispatch({
-              effects: setInlineAiTextEffect.of({
-                aiText: sanitizeInlineOutput(aiText) || aiText,
-                streaming: true,
-              }),
-            })
-          }
-          else if (event.type === 'RUN_ERROR') {
-            const ev = event as unknown as Record<string, unknown>
-            const str = (k: string): string => {
-              const v = ev[k]
-              return typeof v === 'string' ? v : ''
-            }
-            this.options.onAgentError?.({
-              message: str('message') || '选区改写失败',
-              code: str('code'),
-              name: str('name'),
-              json: str('json'),
-            })
-          }
-        },
+      await this.runGraphSse(messages, (event) => {
+        if (!this.alive() || gen !== this.inlineGen || this.inlineAbort)
+          return
+        if (event.type === 'TEXT_MESSAGE_CONTENT') {
+          aiText += event.delta ?? ''
+          this.view?.dispatch({
+            effects: setInlineAiTextEffect.of({
+              aiText: sanitizeInlineOutput(aiText) || aiText,
+              streaming: true,
+            }),
+          })
+        }
+        else if (event.type === 'RUN_ERROR') {
+          this.reportRunError(event, '选区改写失败')
+        }
       })
     }
     catch (err) {
+      if (this.isAbortError(err))
+        return
       if (this.alive() && gen === this.inlineGen) {
         console.error('writer inline 失败:', err)
         const message = err instanceof Error ? err.message : String(err)
@@ -514,7 +484,7 @@ export class TextEditorSession {
           }),
         })
       }
-      this.setEditCase(ag, 'document')
+      this.setEditCase('document')
     }
   }
 
@@ -562,12 +532,9 @@ export class TextEditorSession {
   }
 
   async polish(): Promise<void> {
-    if (!this.alive() || this.polishing || !this.view)
+    if (!this.alive() || this.polishing || this.running || !this.view)
       return
     if (this.view.state.field(inlineEditField))
-      return
-    const ag = this.options.getAgent()
-    if (!ag || ag.isRunning)
       return
     const original = this.view.state.doc.toString()
     if (!original.trim())
@@ -580,52 +547,13 @@ export class TextEditorSession {
     this.options.onPolishingChange(true)
     let aiText = ''
     let polishedFromCustom = ''
-    this.setEditCase(ag, 'document', { documentBaseline: original })
-    ag.setMessages([{ id: `writer-user-${Date.now()}`, role: 'user', content: original }] as never[])
+    this.setEditCase('document', { documentBaseline: original })
+    const messages = [{ id: `writer-user-${Date.now()}`, role: 'user' as const, content: original }]
     try {
-      if (!this.threadId)
-        this.threadId = (await Conversation.create('writer')).id
-      if (!this.alive())
-        return
-      ag.threadId = this.threadId
-      await ag.runAgent({}, {
-        onEvent: ({ event }) => {
-          if (!this.alive() || this.polishBaseline === null)
-            return
-          if (event.type === 'CUSTOM' && event.name === WRITER_CHANGE_SUMMARIES_EVENT) {
-            const value = event.value as {
-              changes?: WriterChangeSummary[]
-              polished?: string
-            } | null
-            this.applyAgentSummaries(value)
-            if (typeof value?.polished === 'string' && value.polished.trim()) {
-              polishedFromCustom = value.polished
-              this.syncSuggestions(original, polishedFromCustom, { final: true })
-            }
-          }
-          else if (event.type === 'TEXT_MESSAGE_CONTENT') {
-            // document 案助手气泡为短说明；改稿在 CUSTOM.polished
-            aiText += event.delta ?? ''
-          }
-          else if (event.type === 'RUN_ERROR') {
-            const ev = event as unknown as Record<string, unknown>
-            const str = (k: string): string => {
-              const v = ev[k]
-              return typeof v === 'string' ? v : ''
-            }
-            this.options.onAgentError?.({
-              message: str('message') || '润色失败',
-              code: str('code'),
-              name: str('name'),
-              json: str('json'),
-            })
-          }
-        },
-        onCustomEvent: ({ event }) => {
-          if (!this.alive() || this.polishBaseline === null)
-            return
-          if (event.name !== WRITER_CHANGE_SUMMARIES_EVENT)
-            return
+      await this.runGraphSse(messages, (event) => {
+        if (!this.alive() || this.polishBaseline === null)
+          return
+        if (event.type === 'CUSTOM' && event.name === WRITER_CHANGE_SUMMARIES_EVENT) {
           const value = event.value as {
             changes?: WriterChangeSummary[]
             polished?: string
@@ -635,10 +563,19 @@ export class TextEditorSession {
             polishedFromCustom = value.polished
             this.syncSuggestions(original, polishedFromCustom, { final: true })
           }
-        },
+        }
+        else if (event.type === 'TEXT_MESSAGE_CONTENT') {
+          // document 案助手气泡为短说明；改稿在 CUSTOM.polished
+          aiText += event.delta ?? ''
+        }
+        else if (event.type === 'RUN_ERROR') {
+          this.reportRunError(event, '润色失败')
+        }
       })
     }
     catch (err) {
+      if (this.isAbortError(err))
+        return
       if (this.alive()) {
         console.error('writer agent 失败:', err)
         const message = err instanceof Error ? err.message : String(err)
@@ -665,23 +602,66 @@ export class TextEditorSession {
     }
   }
 
+  private async runGraphSse(
+    messages: Array<{ id: string, role: 'user' | 'assistant' | 'system', content: string }>,
+    onEvent: (event: GraphAguiSseEvent) => void,
+  ): Promise<void> {
+    if (this.running)
+      return
+    this.running = true
+    const abort = new AbortController()
+    this.runAbort = abort
+    try {
+      if (!this.threadId)
+        this.threadId = (await Conversation.create('editor')).id
+      if (!this.alive() || abort.signal.aborted)
+        return
+      await runGraphAguiSse({
+        graph: 'editor',
+        threadId: this.threadId,
+        state: this.writerState,
+        forwardedProps: { editorPath: 'job' },
+        messages,
+        signal: abort.signal,
+        onEvent,
+      })
+    }
+    finally {
+      if (this.runAbort === abort)
+        this.runAbort = null
+      this.running = false
+    }
+  }
+
+  private reportRunError(event: GraphAguiSseEvent, fallback: string): void {
+    const str = (k: string): string => {
+      const v = event[k]
+      return typeof v === 'string' ? v : ''
+    }
+    this.options.onAgentError?.({
+      message: str('message') || fallback,
+      code: str('code'),
+      name: str('name'),
+      json: str('json'),
+    })
+  }
+
+  private isAbortError(err: unknown): boolean {
+    if (err instanceof DOMException && err.name === 'AbortError')
+      return true
+    return err instanceof Error && err.name === 'AbortError'
+  }
+
   private setEditCase(
-    ag: WriterAgent,
     editCase: 'inline' | 'document',
     extra?: Record<string, unknown>,
   ): void {
-    const prev = ag.state != null && typeof ag.state === 'object' ? ag.state : {}
-    const next = {
-      ...prev,
+    this.writerState = {
+      ...this.writerState,
       editCase,
       writerMode: editCase === 'inline' ? 'inline' : 'polish',
       ...extra,
     }
-    const withSetState = ag as WriterAgent & { setState?: (s: Record<string, unknown>) => void }
-    if (typeof withSetState.setState === 'function')
-      withSetState.setState(next)
-    else
-      ag.state = next
   }
 
   private alive(): boolean {

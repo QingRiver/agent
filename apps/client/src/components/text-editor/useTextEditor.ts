@@ -3,10 +3,8 @@ import type { RefObject } from 'react'
 import type { EditorQuote } from './editor-quotes'
 import type { EditorWriteProposal } from './EditorChatPanel'
 import type { InlineEditState } from './inline-edit-field'
-import type { SelectionRange, TextEditorSession, WriterAgent } from './TextEditorSession'
+import type { SelectionRange, TextEditorSession } from './TextEditorSession'
 import type { Suggestion } from './types'
-import { useAgent } from '@copilotkit/react-core/v2'
-import { useLatest } from '@hooks/useLatest'
 import { ThemeStore } from '@stores/theme-store'
 import { useAtomValue } from 'jotai'
 import { useEffect, useRef, useState } from 'react'
@@ -48,10 +46,8 @@ export interface UseTextEditorResult {
 }
 
 export function useTextEditor(): UseTextEditorResult {
-  const { agent } = useAgent({ agentId: 'writer' })
   const mountRef = useRef<HTMLDivElement>(null)
   const sessionRef = useRef<TextEditorSession | null>(null)
-  const agentRef = useLatest(agent)
   const mode = useAtomValue(ThemeStore.modeAtom)
 
   const [polishing, setPolishing] = useState(false)
@@ -69,7 +65,6 @@ export function useTextEditor(): UseTextEditorResult {
 
     const session = new Session({
       mount,
-      getAgent: () => agentRef.current as unknown as WriterAgent | undefined,
       onSuggestionsChange: setSuggestions,
       onPolishingChange: setPolishing,
       onAgentError: setAgentError,
@@ -104,7 +99,7 @@ export function useTextEditor(): UseTextEditorResult {
       setInlineEditActions(null)
       setSuggestionGhostActions(null)
     }
-  }, [mode, agentRef])
+  }, [mode])
 
   useEffect(() => {
     setInlineEditActions({

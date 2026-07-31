@@ -1,1 +1,2 @@
 pnpm-lock.yaml diff=notrack linguist-generated=true
+**/drizzle/meta/** diff=notrack linguist-generated=true

@@ -3,7 +3,7 @@ import { EditorChatPanel } from '@components/text-editor/EditorChatPanel'
 import { KbStore } from '@stores/kb-store'
 import { getDefaultStore } from 'jotai'
 
-/** 知识库源码模式右侧 AI：复用 editorChat，读写 KbStore 正文 */
+/** 知识库源码模式右侧 AI：复用 editor 图 chat 路径，读写 KbStore 正文 */
 export function KbSourceChatPanel() {
   function getDocument() {
     return getDefaultStore().get(KbStore.activeDocAtom)?.content ?? ''

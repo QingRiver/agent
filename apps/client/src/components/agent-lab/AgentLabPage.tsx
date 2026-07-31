@@ -1,12 +1,16 @@
 import type { ReactAgentLabConfig } from './agentLabConfig'
+import { AgentConfigApi } from '@apis/agent-config-api'
 import { Conversation } from '@apis/conversation-api'
-import { ConversationChat } from '@components/copilot/ConversationChat'
-import { AgentInterruptUi } from '@components/hitl/AgentInterruptUi'
-import { useAgentHasPendingInterrupt } from '@components/hitl/useAgentHasPendingInterrupt'
-import { useEffect, useState } from 'react'
-import { loadAgentLabConfig } from './agentLabConfig'
+import { CopilotChatShell } from '@components/copilot/CopilotChatShell'
+import { ReactAgentRuntimeStore } from '@stores/react-agent-runtime-store'
+import { useEffect, useRef, useState } from 'react'
+import {
+  DEFAULT_REACT_AGENT_LAB_CONFIG,
+  labConfigFromRemote,
+  loadStoredAgentConfigId,
+  saveStoredAgentConfigId,
+} from './agentLabConfig'
 import { AgentLabConfigPanel } from './AgentLabConfigPanel'
-import { AgentLabStateBridge } from './AgentLabStateBridge'
 
 type ThreadCreationResult
   = | { ok: true, threadId: string }
@@ -25,6 +29,21 @@ async function createAgentLabThread(): Promise<ThreadCreationResult> {
   }
 }
 
+async function loadLabConfigFromServer(): Promise<ReactAgentLabConfig> {
+  const id = loadStoredAgentConfigId()
+  if (!id)
+    return { ...DEFAULT_REACT_AGENT_LAB_CONFIG }
+
+  try {
+    const remote = await AgentConfigApi.get(id)
+    return labConfigFromRemote(remote)
+  }
+  catch {
+    saveStoredAgentConfigId(null)
+    return { ...DEFAULT_REACT_AGENT_LAB_CONFIG }
+  }
+}
+
 function AgentLabChatPanel({
   threadId,
   config,
@@ -32,8 +51,6 @@ function AgentLabChatPanel({
   threadId: string
   config: ReactAgentLabConfig
 }) {
-  const hasPendingInterrupt = useAgentHasPendingInterrupt('reactAgent')
-
   return (
     <div className="flex h-full min-h-0 flex-col p-4">
       <div className="mb-2 shrink-0">
@@ -47,50 +64,112 @@ function AgentLabChatPanel({
           {' '}
           {threadId.slice(0, 8)}
           …
+          {config.agentConfigId
+            ? ` · config ${config.agentConfigId.slice(0, 8)}…`
+            : ' · 同步配置中…'}
         </p>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border">
-        <ConversationChat
-          graphsName="reactAgent"
+        <CopilotChatShell
+          agentId="reactAgent"
           threadId={threadId}
-          kbId={config.kbId}
-          blockInput={hasPendingInterrupt}
-        >
-          <AgentLabStateBridge config={config} />
-          <AgentInterruptUi agentId="reactAgent" />
-        </ConversationChat>
+          hitl
+        />
       </div>
     </div>
   )
 }
 
 export function AgentLabPage() {
-  const [config, setConfig] = useState<ReactAgentLabConfig>(() => loadAgentLabConfig())
+  const [config, setConfig] = useState<ReactAgentLabConfig | null>(null)
   const [threadId, setThreadId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const configIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
 
-    async function initializeThread() {
+    async function bootstrap() {
       setCreating(true)
       setError(null)
-      const result = await createAgentLabThread()
+      const [labConfig, threadResult] = await Promise.all([
+        loadLabConfigFromServer(),
+        createAgentLabThread(),
+      ])
       if (cancelled)
         return
-      if (!result.ok)
-        setError(result.error)
+      configIdRef.current = labConfig.agentConfigId
+      setConfig(labConfig)
+      if (labConfig.agentConfigId)
+        ReactAgentRuntimeStore.setAgentConfigId(labConfig.agentConfigId)
+      if (!threadResult.ok)
+        setError(threadResult.error)
       else
-        setThreadId(result.threadId)
+        setThreadId(threadResult.threadId)
       setCreating(false)
     }
 
-    void initializeThread()
+    void bootstrap()
     return () => {
       cancelled = true
+      ReactAgentRuntimeStore.setAgentConfigId(null)
     }
   }, [])
+
+  // 表单变更 → debounce upsert → 只把 agentConfigId 交给 CopilotKit properties
+  const name = config?.name
+  const description = config?.description
+  const userPrompt = config?.userPrompt
+  const kbId = config?.kbId
+  const maxSteps = config?.maxSteps
+  useEffect(() => {
+    if (
+      name === undefined
+      || description === undefined
+      || userPrompt === undefined
+      || kbId === undefined
+      || maxSteps === undefined
+    ) {
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const existingId = configIdRef.current
+        const payload = {
+          ...(existingId ? { id: existingId } : {}),
+          name,
+          description,
+          userPrompt,
+          kbId,
+          maxSteps,
+        }
+        try {
+          const saved = await AgentConfigApi.upsert(payload)
+          if (cancelled)
+            return
+          configIdRef.current = saved.id
+          saveStoredAgentConfigId(saved.id)
+          ReactAgentRuntimeStore.setAgentConfigId(saved.id)
+          setConfig((prev) => {
+            if (prev == null)
+              return prev
+            if (prev.agentConfigId === saved.id)
+              return prev
+            return { ...prev, agentConfigId: saved.id }
+          })
+        }
+        catch (err) {
+          console.error('[AgentLabPage] upsert failed', err)
+        }
+      })()
+    }, 350)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [name, description, userPrompt, kbId, maxSteps])
 
   async function createThread() {
     setCreating(true)
@@ -106,21 +185,27 @@ export function AgentLabPage() {
   return (
     <div className="mx-auto flex h-[calc(100vh-5rem)] max-w-7xl gap-0 border-x border-border">
       <aside className="w-full max-w-md shrink-0 border-r border-border bg-card">
-        <AgentLabConfigPanel
-          config={config}
-          onChange={setConfig}
-          onNewThread={() => void createThread()}
-          creatingThread={creating}
-        />
+        {config == null
+          ? (
+              <p className="p-4 text-sm text-muted-foreground">加载配置…</p>
+            )
+          : (
+              <AgentLabConfigPanel
+                config={config}
+                onChange={setConfig}
+                onNewThread={() => void createThread()}
+                creatingThread={creating}
+              />
+            )}
       </aside>
       <main className="min-w-0 flex-1 bg-muted/30">
         {error != null && (
           <p className="p-4 text-sm text-destructive">{error}</p>
         )}
-        {threadId == null && error == null && (
-          <p className="p-4 text-sm text-muted-foreground">正在创建测试线程…</p>
+        {(threadId == null || config == null) && error == null && (
+          <p className="p-4 text-sm text-muted-foreground">正在准备试验台…</p>
         )}
-        {threadId != null && (
+        {threadId != null && config != null && (
           <AgentLabChatPanel
             key={threadId}
             threadId={threadId}

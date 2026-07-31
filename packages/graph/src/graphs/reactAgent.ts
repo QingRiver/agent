@@ -14,6 +14,7 @@ import { ASK_TOOLS } from '../tools/ask-tools'
 import { KB_TOOLS } from '../tools/kb'
 
 export {
+  AGENT_CONFIG_ID_PROPS_KEY,
   clampMaxSteps,
   composeReactAgentSystemPrompt,
   DEFAULT_REACT_AGENT_USER_PROMPT,
@@ -25,6 +26,7 @@ export {
   REACT_AGENT_USER_PROMPT_MAX,
   type ReactAgentRuntimeConfig,
   ReactAgentRuntimeConfigSchema,
+  readAgentConfigId,
   readReactAgentForwardedProps,
   sanitizeKbId,
   sanitizeUserPrompt,

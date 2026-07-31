@@ -6,6 +6,7 @@ import { fail } from './assert'
 /** /copilotkit/agent/{agent}/run 的可变请求体（threadId/runId 等由 runAgentRun 注入） */
 export interface AgentRunBody {
   state?: Record<string, unknown>
+  forwardedProps?: Record<string, unknown>
   messages?: Array<{ id: string, role: string, content: string }>
   resume?: Array<{ interruptId: string, status: string, payload: unknown }>
 }

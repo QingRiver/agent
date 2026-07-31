@@ -27,7 +27,7 @@ export async function runKbAgentE2E(): Promise<void> {
     'kb',
     threadId,
     {
-      state: { kbId: KB_ID },
+      forwardedProps: { kbId: KB_ID },
       messages: [{ id: randomUUID(), role: 'user', content: QUESTION }],
     },
     { echo: true },

@@ -124,8 +124,9 @@ pnpm dev
 | `hitl`           | 人在回路（`interrupt` + resume）            |
 | `kb`             | 知识库 RAG（混合召回 + rerank + 引文）           |
 | `tushare`        | A 股个股分析（Tushare MCP + ask_human）      |
-| `writer`         | 中文文本润色                                |
+| `editor`         | 文本编辑器（job 润色/⌘K；chat Ask/Write）   |
 | `claudeAgent`    | Claude Agent SDK + checkpoint + AG-UI |
+| `reactAgent`     | 通用 ReAct（可配 prompt）                   |
 
 
 

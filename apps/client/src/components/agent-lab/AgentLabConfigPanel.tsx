@@ -14,7 +14,6 @@ import { KbMarkdownEditor } from '../kb/KbMarkdownEditor'
 import {
   DEFAULT_REACT_AGENT_LAB_CONFIG,
   resetAgentLabConfig,
-  saveAgentLabConfig,
 } from './agentLabConfig'
 
 interface AgentLabConfigPanelProps {
@@ -33,26 +32,20 @@ export function AgentLabConfigPanel({
   const [platformOpen, setPlatformOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [editorKey, setEditorKey] = useState(0)
-  const [savedHint, setSavedHint] = useState<string | null>(null)
+  const [hint, setHint] = useState<string | null>(null)
 
   const finalSystem = composeReactAgentSystemPrompt(config.userPrompt)
 
   function patch(partial: Partial<ReactAgentLabConfig>) {
     onChange({ ...config, ...partial })
-    setSavedHint(null)
-  }
-
-  function handleSave() {
-    const saved = saveAgentLabConfig(config)
-    onChange(saved)
-    setSavedHint('已保存到本地')
+    setHint(null)
   }
 
   function handleReset() {
     const next = resetAgentLabConfig()
     onChange(next)
     setEditorKey(k => k + 1)
-    setSavedHint('已恢复默认并保存')
+    setHint('已恢复默认；下次编辑会写入新的服务端配置')
   }
 
   return (
@@ -60,7 +53,7 @@ export function AgentLabConfigPanel({
       <div>
         <h2 className="text-base font-semibold text-foreground">Agent 配置</h2>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          配置存 localStorage；改 prompt 后下一句对话即生效（无需先保存）
+          正文在服务端；本地只记 agentConfigId。改表单会自动 upsert。
         </p>
       </div>
 
@@ -164,7 +157,6 @@ export function AgentLabConfigPanel({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" onClick={handleSave}>保存到本地</Button>
         <Button type="button" size="sm" variant="outline" onClick={handleReset}>恢复默认</Button>
         <Button
           type="button"
@@ -176,8 +168,8 @@ export function AgentLabConfigPanel({
           {creatingThread ? '创建中…' : '新开测试线程'}
         </Button>
       </div>
-      {savedHint != null && (
-        <p className="text-xs text-muted-foreground">{savedHint}</p>
+      {hint != null && (
+        <p className="text-xs text-muted-foreground">{hint}</p>
       )}
     </div>
   )

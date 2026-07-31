@@ -2,7 +2,7 @@ import type { WriterChangeSummary } from '@agent/proto'
 import type { EditorQuote } from './editor-quotes'
 import { WRITER_CHANGE_SUMMARIES_EVENT } from '@agent/proto'
 import { Conversation } from '@apis/conversation-api'
-import { ConversationChat } from '@components/copilot/ConversationChat'
+import { CopilotChatShell } from '@components/copilot/CopilotChatShell'
 import { useAgent, useCopilotKit } from '@copilotkit/react-core/v2'
 import { runWithCleanup } from '@lib/runWithCleanup'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
@@ -34,13 +34,6 @@ interface EditorChatAgent {
     onCustomEvent?: (ctx: { event: CustomEventLike }) => void
     onEvent?: (ctx: { event: CustomEventLike }) => void
   }) => { unsubscribe: () => void }
-  runAgent: (
-    input?: Record<string, unknown>,
-    subscriber?: {
-      onCustomEvent?: (ctx: { event: CustomEventLike }) => void
-      onEvent?: (ctx: { event: CustomEventLike }) => void
-    },
-  ) => Promise<unknown>
 }
 
 function writeAgentState(agent: EditorChatAgent, state: Record<string, unknown>) {
@@ -103,18 +96,14 @@ export function EditorChatPanel({
   blockInput = false,
   blockInputHint,
 }: EditorChatPanelProps) {
-  'use no memo'
-
   const [threadId, setThreadId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
-  const { agent: rawAgent } = useAgent({ agentId: 'editorChat' })
+  const { agent: rawAgent } = useAgent({ agentId: 'editor' })
   const agent = rawAgent as unknown as EditorChatAgent | null
   const { copilotkit } = useCopilotKit()
   const proposalRef = useRef<EditorWriteProposal | null>(null)
   const lastAppliedKeyRef = useRef<string | null>(null)
-
-  const readDocument = useEffectEvent(() => getDocument())
 
   function applyProposal(p: EditorWriteProposal) {
     const key = `${p.baseline}\0${p.polished}`
@@ -141,7 +130,7 @@ export function EditorChatPanel({
 
     async function initializeConversation() {
       try {
-        const c = await Conversation.create('editorChat')
+        const c = await Conversation.create('editor')
         if (!cancelled)
           setThreadId(c.id)
       }
@@ -171,35 +160,9 @@ export function EditorChatPanel({
     return unsubscribe
   }, [agent])
 
-  useEffect(() => {
-    if (!agent)
-      return
-
-    const originalRun = agent.runAgent.bind(agent)
-    // eslint-disable-next-line react-compiler/react-compiler -- inject document state at the AG-UI run boundary
-    agent.runAgent = async (input, subscriber) => {
-      const prev = agent.state != null && typeof agent.state === 'object'
-        ? { ...agent.state }
-        : {}
-      const baseline = typeof prev.documentBaseline === 'string' && prev.documentBaseline.trim()
-        ? prev.documentBaseline
-        : readDocument()
-      writeAgentState(agent, {
-        ...prev,
-        editCase: 'document',
-        documentBaseline: baseline,
-      })
-      return originalRun(input ?? {}, subscriber)
-    }
-
-    return () => {
-      agent.runAgent = originalRun
-    }
-  }, [agent])
-
   async function runChat(value: string) {
     const trimmed = value.trim()
-    if (!trimmed || !agent)
+    if (!trimmed || !agent || !rawAgent)
       return
 
     const baseline = getDocument()
@@ -235,21 +198,12 @@ export function EditorChatPanel({
     setEditorChatSuppressDocumentDump(likelyWriteIntent(trimmed))
     onChatBusyChange?.(true)
     setApplyError(null)
-    const collect = {
-      onCustomEvent: ({ event }: { event: CustomEventLike }) => {
-        ingestWriterCustomEvent(event, applyProposal)
-      },
-      onEvent: ({ event }: { event: CustomEventLike }) => {
-        ingestWriterCustomEvent(event, applyProposal)
-      },
-    }
     await runWithCleanup(async () => {
-      try {
-        await agent.runAgent({}, collect)
-      }
-      catch {
-        await copilotkit.runAgent({ agent: rawAgent! })
-      }
+      // 单一路径：与 Shell 默认提交一致；CUSTOM 由 subscribe 收
+      await copilotkit.runAgent({
+        agent: rawAgent,
+        forwardedProps: { editorPath: 'chat' },
+      })
     }, () => {
       onChatBusyChange?.(false)
       setEditorChatSuppressDocumentDump(false)
@@ -280,8 +234,8 @@ export function EditorChatPanel({
         <p className="shrink-0 border-b border-border px-3 py-2 text-xs text-destructive">{applyError}</p>
       )}
       <div className="min-h-0 flex-1">
-        <ConversationChat
-          graphsName="editorChat"
+        <CopilotChatShell
+          agentId="editor"
           threadId={threadId}
           chatClassName="h-full min-h-0"
           placeholder={quotes.length > 0 ? '输入问题或改写指令…' : '讨论文稿，或描述想要的修改…'}

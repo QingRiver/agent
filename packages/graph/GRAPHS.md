@@ -59,9 +59,9 @@ graph TD
 	classDef last fill:#bfb6fc;
 ```
 
-## `editorChatGraph`
+## `editorGraph`
 
-来源：`src/graphs/editorChat.ts`
+来源：`src/graphs/editor.ts`
 
 ```mermaid
 %%{init: {'flowchart': {'curve': 'linear'}}}%%
@@ -71,9 +71,10 @@ graph TD
 	chatbot(chatbot)
 	writeEdit(writeEdit)
 	__end__([__end__]):::last
-	__start__ --> classifyIntent;
 	chatbot --> __end__;
 	writeEdit --> __end__;
+	__start__ -.-> writeEdit;
+	__start__ -.-> classifyIntent;
 	classifyIntent -.-> chatbot;
 	classifyIntent -.-> writeEdit;
 	classDef default fill:#f2f0ff,line-height:1.2;
@@ -106,9 +107,9 @@ graph TD
 	classDef last fill:#bfb6fc;
 ```
 
-## `tushareGraph`
+## `reactAgentGraph`
 
-来源：`src/graphs/tushare.ts`
+来源：`src/graphs/reactAgent.ts`
 
 ```mermaid
 %%{init: {'flowchart': {'curve': 'linear'}}}%%
@@ -126,18 +127,21 @@ graph TD
 	classDef last fill:#bfb6fc;
 ```
 
-## `writerGraph`
+## `tushareGraph`
 
-来源：`src/graphs/writer.ts`
+来源：`src/graphs/tushare.ts`
 
 ```mermaid
 %%{init: {'flowchart': {'curve': 'linear'}}}%%
 graph TD
 	__start__([__start__]):::first
-	writeEdit(writeEdit)
+	agent(agent)
+	tools(tools)
 	__end__([__end__]):::last
-	__start__ --> writeEdit;
-	writeEdit --> __end__;
+	__start__ --> agent;
+	tools --> agent;
+	agent -.-> tools;
+	agent -.-> __end__;
 	classDef default fill:#f2f0ff,line-height:1.2;
 	classDef first fill-opacity:0;
 	classDef last fill:#bfb6fc;

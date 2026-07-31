@@ -6,6 +6,11 @@ import { AlertTriangle, ChevronDown, ChevronRight, ClipboardCopy, RefreshCw } fr
 import { useState } from 'react'
 import { readErrorFields } from './errorMessage'
 
+export interface ErrorAssistantMessageProps extends CopilotChatAssistantMessageProps {
+  /** Shell 注入：kb 重试时带上与提交相同的 forwardedProps */
+  runForwardedProps?: Record<string, unknown>
+}
+
 /**
  * 自定义 assistant message 渲染 slot:遇到 isError 消息渲染成对话流内的错误兜底卡片,
  * 否则透传默认 CopilotChatAssistantMessage。
@@ -13,13 +18,13 @@ import { readErrorFields } from './errorMessage'
  * 卡片含:情绪安抚 + 行动指引文案 + 重新生成(取上一条 user 重发)+ 复制原问题 + 折叠技术详情。
  * 视觉淡红(非高饱和),隐藏赞踩/copy/朗读。
  */
-export function ErrorAssistantMessage(props: CopilotChatAssistantMessageProps) {
-  const { message, messages } = props
+export function ErrorAssistantMessage(props: ErrorAssistantMessageProps) {
+  const { message, messages, runForwardedProps, ...rest } = props
   const errorFields = readErrorFields(message)
 
   if (!errorFields) {
     // 非错误消息:透传默认渲染,保留原有行为
-    return <CopilotChatAssistantMessage {...props} />
+    return <CopilotChatAssistantMessage {...rest} message={message} messages={messages} />
   }
 
   return (
@@ -29,6 +34,7 @@ export function ErrorAssistantMessage(props: CopilotChatAssistantMessageProps) {
       content={typeof message.content === 'string' ? message.content : ''}
       code={errorFields.code}
       json={errorFields.json}
+      runForwardedProps={runForwardedProps}
     />
   )
 }
@@ -39,9 +45,10 @@ interface ErrorCardProps {
   content: string
   code: string
   json: string
+  runForwardedProps?: Record<string, unknown>
 }
 
-function ErrorCard({ messageId, messages, content, code, json }: ErrorCardProps) {
+function ErrorCard({ messageId, messages, content, code, json, runForwardedProps }: ErrorCardProps) {
   const { copilotkit } = useCopilotKit()
   const config = useCopilotChatConfiguration()
   const agentId = config?.agentId
@@ -67,7 +74,10 @@ function ErrorCard({ messageId, messages, content, code, json }: ErrorCardProps)
       const userId = lastUser.id
       agent.setMessages(agent.messages.filter(m => m.id !== messageId && m.id !== userId))
       agent.addMessage({ id: crypto.randomUUID(), role: 'user', content: userText } as never)
-      await copilotkit.runAgent({ agent })
+      await copilotkit.runAgent({
+        agent,
+        ...(runForwardedProps ? { forwardedProps: runForwardedProps } : {}),
+      })
     }, () => setRetrying(false))
   }
 

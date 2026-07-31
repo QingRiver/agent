@@ -1,19 +1,24 @@
 import { z } from 'zod'
 import { claudeAgentGraph } from './graphs/claudeAgent'
 import { devGraph } from './graphs/dev'
-import { editorChatGraph } from './graphs/editorChat'
+import { editorGraph } from './graphs/editor'
 import { kbGraph } from './graphs/kb'
 import { reactAgentGraph } from './graphs/reactAgent'
 import { tushareGraph } from './graphs/tushare'
-import { writerGraph } from './graphs/writer'
 
 export { claudeAgentGraph } from './graphs/claudeAgent'
 export { devGraph } from './graphs/dev'
-export { editorChatGraph } from './graphs/editorChat'
+export {
+  editorGraph,
+  type EditorPath,
+  WRITER_CHANGE_SUMMARIES_EVENT,
+  type WriterChangeSummary,
+} from './graphs/editor'
 export {
   kbGraph,
 } from './graphs/kb'
 export {
+  AGENT_CONFIG_ID_PROPS_KEY,
   clampMaxSteps,
   composeReactAgentSystemPrompt,
   DEFAULT_REACT_AGENT_USER_PROMPT,
@@ -26,16 +31,12 @@ export {
   reactAgentGraph,
   type ReactAgentRuntimeConfig,
   ReactAgentRuntimeConfigSchema,
+  readAgentConfigId,
   readReactAgentForwardedProps,
   sanitizeKbId,
   sanitizeUserPrompt,
 } from './graphs/reactAgent'
 export { tushareGraph } from './graphs/tushare'
-export {
-  WRITER_CHANGE_SUMMARIES_EVENT,
-  type WriterChangeSummary,
-  writerGraph,
-} from './graphs/writer'
 export { type EditorFocus, runWriteEdit, type WriteEditInput } from './nodes/writeEdit'
 export {
   type AguiExtensions,
@@ -65,8 +66,7 @@ export const Graphs = {
   dev: devGraph,
   kb: kbGraph,
   tushare: tushareGraph,
-  writer: writerGraph,
-  editorChat: editorChatGraph,
+  editor: editorGraph,
 } as const
 
 export type GraphsName = keyof typeof Graphs

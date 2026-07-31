@@ -45,7 +45,7 @@ pnpm dev                        # server + client 并行
 | `/register` | 注册（公开页） |
 | `/` | 会话列表 + CopilotChat（需登录） |
 | `/kb` | 知识库：文件树、Markdown 编辑、导入、召回调试 |
-| `/text-editor` | AI 文本润色编辑器（`writer` Agent） |
+| `/text-editor` | AI 文本润色编辑器（`editor` Agent） |
 
 顶栏导航在 [src/routes/__root.tsx](src/routes/__root.tsx)；`RequireAuth` 对非 `/login`、`/register` 路径要求登录。
 
@@ -64,7 +64,7 @@ pnpm dev                        # server + client 并行
 | 会话列表 / 当前 thread | `GET /conversations/list`、`conversation-store` |
 | Agent 错误 | CopilotKit 流 + `AgentErrorBanner` |
 
-HITL 图（`reactAgent`、`tushare`、`dev` 等）在挂起时由 `AgentInterruptUi` 渲染审批卡片；`useAgentInterruptResume` 经 `runAgent({ resume })` 发送恢复。
+HITL 图（`reactAgent`、`tushare`、`dev` 等）在挂起时由 `CopilotChatShell hitl` 内建的 `AgentInterruptUi` 渲染审批卡片；`useAgentInterruptResume` 经 `runAgent({ resume })` 发送恢复。
 
 聊天 UI **不**用 `GET /conversations/messages` 返回的 `messages` 字段渲染。会话 HTTP 的 `threadState.pendingInterrupt` 仍可供服务端 / e2e 使用，**不再**驱动客户端 HITL UI。
 
@@ -78,11 +78,11 @@ HITL 图（`reactAgent`、`tushare`、`dev` 等）在挂起时由 `AgentInterrup
 | 导入 | `POST /kb/ingest/*` |
 | 召回调试 | `POST /kb/query`（`KbRecallPanel`） |
 
-`kb` Agent 对话时，`KbAgentState` 将当前知识库 ID 注入 CopilotKit state。
+`kb` Agent 对话时，`CopilotChatShell` 在 `runAgent` 时把 `kbId` prop 写入本轮 `forwardedProps`。
 
 ### 文本编辑器
 
-`TextEditor`：Yjs 正文 + ⌘K 幽灵改写 + ⌘J/editorChat Ask·Write；全文改稿以多段红绿幽灵审阅。
+`TextEditor`：Yjs 正文 + ⌘K 幽灵改写 + ⌘J/editor Ask·Write；全文改稿以多段红绿幽灵审阅。
 
 ## 目录说明
 
@@ -109,7 +109,7 @@ src/
 ├── components/
 │   ├── auth/               # RequireAuth、UserAvatarMenu
 │   ├── conversation/       # 侧边栏、新建对话、ConversationSync
-│   ├── copilot/            # ConversationChat、CopilotKitAppProvider
+│   ├── copilot/            # CopilotChatShell、CopilotKitAppProvider
 │   ├── hitl/               # AgentInterruptUi、ApprovalCard、resume hooks
 │   ├── kb/                 # 文件树、编辑器、导入、标签、召回面板
 │   ├── text-editor/        # Yjs + CodeMirror 润色编辑器
