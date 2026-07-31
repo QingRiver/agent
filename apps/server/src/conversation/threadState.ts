@@ -19,7 +19,7 @@ export async function getThreadSnapshot(
   return app.getState({ configurable: { thread_id: threadId } })
 }
 
-/** checkpoints.sqlite 为唯一真相源：从 LangGraph snapshot hydrate 挂起的 HITL interrupt */
+/** Postgres checkpoint（PostgresSaver）为唯一真相源：从 LangGraph snapshot hydrate 挂起的 HITL interrupt */
 export function extractPendingInterruptFromSnapshot(
   snapshot: StateSnapshot,
 ): PendingInterrupt | null {

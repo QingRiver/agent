@@ -8,7 +8,7 @@ const migrationsFolder = path.join(
   '../../drizzle',
 )
 
-/** 应用 drizzle 迁移（postgres 方言），创建/更新 conversation_threads */
+/** 应用 drizzle 迁移（postgres 方言），创建/更新业务表 */
 export async function migrateAppSchema(): Promise<void> {
   await migrate(db, { migrationsFolder })
 }

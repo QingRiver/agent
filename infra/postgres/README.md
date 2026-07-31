@@ -48,7 +48,7 @@ docker compose down
 容器只需把库跑起来；表结构由 server 启动时 `bootstrapDatabases()` 自动建：
 
 - **better-auth** 表（`user` / `session` / `account` / `verification`）：better-auth 迁移系统建。
-- **conversation_threads**：drizzle 迁移建（`pnpm --filter server db:generate` 生成，`migrateAppSchema()` 应用）。
+- **conversation / kb / gtd / tags**：drizzle 迁移建（`0000_threads` → `0001_tags` → `0002_kb` → `0003_gtd`，`migrateAppSchema()` 应用）。
 - **checkpoints** 等：`PostgresSaver.setup()` 建。
 
 E2E 账号种子（写入 `user`/`account` 等）：

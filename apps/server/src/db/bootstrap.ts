@@ -10,13 +10,13 @@ async function runDatabaseBootstrap(): Promise<void> {
   const { runMigrations } = await getMigrations(getAuth().options)
   await runMigrations()
 
-  // 2. drizzle 表（conversation_threads）
+  // 2. drizzle 表（conversation / kb / gtd / tags）
   await migrateAppSchema()
 
   // 3. LangGraph checkpoint 表
   await setupCheckpointer()
 
-  console.log('[db] postgres ready (auth + conversation_threads + checkpoints)')
+  console.log('[db] postgres ready (auth + drizzle + checkpoints)')
 }
 
 export function bootstrapDatabases(): Promise<void> {

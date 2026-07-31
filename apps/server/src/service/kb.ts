@@ -821,10 +821,8 @@ export class KbService {
           docId: id,
           position: i,
           content: chunk.raw_text,
-          contentHash: null,
           headingPath: chunk.heading_path,
           pageNumber: chunk.page_number ?? null,
-          enabled: true,
           createdAt: ct,
         })),
       )

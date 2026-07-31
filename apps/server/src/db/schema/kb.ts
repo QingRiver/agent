@@ -80,12 +80,9 @@ export const kbChunks = pgTable('kb_chunks', {
   docId: text('doc_id').notNull().references(() => kbDocuments.id, { onDelete: 'cascade' }),
   position: integer('position').notNull(),
   content: text('content').notNull(),
-  contentHash: text('content_hash'),
   headingPath: text('heading_path').array(),
   pageNumber: integer('page_number'),
-  enabled: boolean('enabled').notNull().default(true),
   createdAt: bigint('created_at', { mode: 'number' }).notNull(),
 }, table => [
   index('idx_kb_chunks_doc').on(table.docId),
-  index('idx_kb_chunks_doc_enabled').on(table.docId, table.enabled),
 ])

@@ -121,7 +121,7 @@ export const InterruptRequestValueSchema = z.discriminatedUnion('type', [
 ])
 export type InterruptRequestValue = z.infer<typeof InterruptRequestValueSchema>
 
-/** 图执行态：checkpoints.sqlite 为唯一真相源 */
+/** 图执行态：Postgres LangGraph checkpoint 为唯一真相源 */
 export interface ThreadState {
   pendingInterrupt: PendingInterrupt | null
 }
