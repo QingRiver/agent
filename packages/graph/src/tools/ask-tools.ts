@@ -4,7 +4,7 @@
  * 与 CLI `packages/cli/src/agent/interact-tools.ts` 同名同 schema、同语义。
  * 工具内通过 `hitl*` helpers 调用 `interrupt()`；resume 后返回字符串 → ToolMessage。
  */
-import type { SelectOption } from '@agent/protocol'
+import type { SelectOption } from '@agent/proto'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 import {

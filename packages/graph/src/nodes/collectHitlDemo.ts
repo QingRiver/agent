@@ -1,4 +1,4 @@
-import type { SelectOption } from '@agent/protocol'
+import type { SelectOption } from '@agent/proto'
 import type { DevStateType } from '../state/devState'
 import {
   hitlApproval,

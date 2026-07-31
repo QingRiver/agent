@@ -47,6 +47,4 @@ pnpm test
 ## 相关文档
 
 - 仓库根 [README](../../README.md)
-- [wiki/ReAct.md](../../wiki/ReAct.md) — weather + tushare
-- [wiki/CLI-交互实现.md](../../wiki/CLI-交互实现.md)
 - [packages/graph/README.md](../graph/README.md)

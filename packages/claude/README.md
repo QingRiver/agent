@@ -1,4 +1,4 @@
-# @agent/claude-agent
+# @agent/claude
 
 Anthropic Claude Agent SDK 适配：跑 query、转 LangChain / AG-UI，并嵌入 LangGraph 节点（`claudeAgent` 图）。
 
@@ -27,7 +27,7 @@ src/
 ## 使用
 
 ```ts
-import { runQueryInGraphNode } from '@agent/claude-agent'
+import { runQueryInGraphNode } from '@agent/claude'
 ```
 
 由图 `@agent/graph` 的 `claudeAgentGraph` 调用；需根 `.env` 中配置 `ANTHROPIC_*`。
@@ -35,13 +35,12 @@ import { runQueryInGraphNode } from '@agent/claude-agent'
 ## 常用命令
 
 ```bash
-pnpm --filter @agent/claude-agent tc
-pnpm --filter @agent/claude-agent demo   # tsx src/demo.ts
+pnpm --filter @agent/claude tc
+pnpm --filter @agent/claude demo   # tsx src/demo.ts
 ```
 
 ## 相关文档
 
 - 仓库根 [README](../../README.md)
 - [packages/graph/README.md](../graph/README.md) — `claudeAgent` 图
-- [wiki/LangGraph-AGUI-事件映射.md](../../wiki/LangGraph-AGUI-事件映射.md)
 - [apps/server/README.md](../../apps/server/README.md) — Agent 注册

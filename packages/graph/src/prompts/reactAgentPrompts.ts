@@ -1,5 +1,5 @@
 import type { RunAgentInput } from '@ag-ui/core'
-import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/protocol'
+import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
 import { z } from 'zod'
 
 /** CopilotKit `properties` / `RunAgentInput.forwardedProps` 上的 reactAgent 命名空间 */

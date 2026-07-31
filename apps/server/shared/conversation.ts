@@ -5,14 +5,14 @@ import { z } from 'zod'
 export type { GraphsName } from '@agent/graph'
 export { GraphsNameSchema } from '@agent/graph'
 
-// 中断协议类型/schema 由 @agent/protocol 统一维护，此处 re-export 保持 server 内 import 路径不变
+// 中断协议类型/schema 由 @agent/proto 统一维护，此处 re-export 保持 server 内 import 路径不变
 export {
   type ApprovalDecision,
   ApprovalDecisionSchema,
   type PendingInterrupt,
   PendingInterruptSchema,
   type ThreadState,
-} from '@agent/protocol'
+} from '@agent/proto'
 
 export const ConversationIdSchema = z.uuid()
 export type ConversationId = z.infer<typeof ConversationIdSchema>

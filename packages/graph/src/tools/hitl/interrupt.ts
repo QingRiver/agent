@@ -1,9 +1,9 @@
 /**
- * 平台 HITL interrupt helpers —— 与 ask_* / InterruptCard / @agent/protocol 同构。
+ * 平台 HITL interrupt helpers —— 与 ask_* / InterruptCard / @agent/proto 同构。
  * payload 不含 interruptId（由 LangGraph runtime 生成）。
  * select / multiSelect 的 UI 末尾固定带自定义输入行（与选项对齐），返回值可能不在 options 内。
  */
-import type { ApprovalDecision, SelectOption } from '@agent/protocol'
+import type { ApprovalDecision, SelectOption } from '@agent/proto'
 import { interrupt } from '@langchain/langgraph'
 
 export async function hitlInput(params: {

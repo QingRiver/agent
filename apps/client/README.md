@@ -8,7 +8,7 @@ Vite + React + TanStack Router 前端：登录后的多 Agent 会话聊天、人
 - TanStack Router、Jotai
 - Tailwind CSS 4、Radix UI
 - `@copilotkit/react-core`（CopilotKit v2）
-- `@agent/graph`（`GraphsName`）、`@agent/markdown`、`@agent/protocol`
+- `@agent/graph`（`GraphsName`）、`@agent/markdown`、`@agent/proto`
 - CodeMirror 6 + Yjs（文本编辑器协同）
 
 ## 前置条件
@@ -82,7 +82,7 @@ HITL 图（`reactAgent`、`tushare`、`dev` 等）在挂起时由 `AgentInterrup
 
 ### 文本编辑器
 
-`TextEditor`：Yjs 正文 + ⌘K 幽灵改写 + ⌘J/editorChat Ask·Write；全文改稿以多段红绿幽灵审阅。详见 [wiki/文本编辑器.md](../../wiki/文本编辑器.md)。
+`TextEditor`：Yjs 正文 + ⌘K 幽灵改写 + ⌘J/editorChat Ask·Write；全文改稿以多段红绿幽灵审阅。
 
 ## 目录说明
 
@@ -143,6 +143,3 @@ pnpm devops e2e ui            # Playwright UI E2E（需 dev + e2e auth）
 
 - 仓库根 [README](../../README.md)
 - Server API：[apps/server/README.md](../server/README.md)、[apps/server/docs/kb-api.md](../server/docs/kb-api.md)
-- HITL：[wiki/LangGraph-AGUI-人在回路.md](../../wiki/LangGraph-AGUI-人在回路.md)
-- 文本编辑器：[wiki/文本编辑器.md](../../wiki/文本编辑器.md)
-- 知识库 RAG：[wiki/RAG.md](../../wiki/RAG.md)

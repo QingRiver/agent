@@ -1,5 +1,5 @@
 {
-  "name": "@agent/protocol",
+  "name": "@agent/proto",
   "type": "module",
   "version": "0.0.0",
   "private": true,

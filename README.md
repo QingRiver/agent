@@ -12,15 +12,14 @@
 | [apps/client](./apps/client/README.md) | Vite + React：会话聊天、HITL、知识库、文本编辑器 |
 | [packages/graph](./packages/graph/README.md) | `@agent/graph` — LangGraph 图与 AguiTransformer |
 | [packages/kb](./packages/kb/README.md) | `@agent/kb` — 向量召回、rerank、入库算法 |
-| [packages/protocol](./packages/protocol/README.md) | `@agent/protocol` — HITL / 引文 / Writer 中性契约 |
-| [packages/claudeAgent](./packages/claudeAgent/README.md) | `@agent/claude-agent` — Claude Agent SDK 适配 |
+| [packages/proto](./packages/proto/README.md) | `@agent/proto` — HITL / 引文 / Writer 中性契约 |
+| [packages/claude](./packages/claude/README.md) | `@agent/claude` — Claude Agent SDK 适配 |
 | [packages/tools](./packages/tools/README.md) | `@agent/tools` — Open-Meteo、Tushare / MCP |
 | [packages/markdown](./packages/markdown/README.md) | `@agent/markdown` — Markdown → HTML + TOC |
 | [packages/env](./packages/env/README.md) | `@agent/env` — 根 `.env` 加载 + zod 校验 |
 | [packages/cli](./packages/cli/README.md) | `@agent/cli` — 终端交互实验 |
 | [packages/e2e](./packages/e2e/README.md) | `@agent/e2e` — agent / UI E2E（经 `pnpm devops`） |
 | [infra/](./infra/) | postgres、qdrant、markitdown、qlib |
-| [wiki/](./wiki/Home.md) | 设计与原理文档 |
 
 
 
@@ -165,24 +164,9 @@ pnpm test                # Vitest
 | 包 | 文档 |
 |----|------|
 | Server / Client | [apps/server](./apps/server/README.md)、[apps/client](./apps/client/README.md) |
-| Graph / KB / Protocol | [graph](./packages/graph/README.md)、[kb](./packages/kb/README.md)、[protocol](./packages/protocol/README.md) |
-| Claude / Tools / Markdown | [claudeAgent](./packages/claudeAgent/README.md)、[tools](./packages/tools/README.md)、[markdown](./packages/markdown/README.md) |
+| Graph / KB / Proto | [graph](./packages/graph/README.md)、[kb](./packages/kb/README.md)、[proto](./packages/proto/README.md) |
+| Claude / Tools / Markdown | [claude](./packages/claude/README.md)、[tools](./packages/tools/README.md)、[markdown](./packages/markdown/README.md) |
 | Env / CLI / E2E | [env](./packages/env/README.md)、[cli](./packages/cli/README.md)、[e2e](./packages/e2e/README.md) |
-
-### Wiki
-
-| 文档                                                           | 内容                            |
-| ------------------------------------------------------------ | ----------------------------- |
-| [wiki/Home.md](./wiki/Home.md)                               | 文档索引                          |
-| [wiki/ReAct.md](./wiki/ReAct.md)                             | Tool Call / ReAct 与 weather 图 |
-| [wiki/RAG.md](./wiki/RAG.md)                                 | 知识库 RAG                       |
-| [wiki/LangGraph-AGUI-事件映射.md](./wiki/LangGraph-AGUI-事件映射.md) | ProtocolEvent → AG-UI         |
-| [wiki/LangGraph-AGUI-人在回路.md](./wiki/LangGraph-AGUI-人在回路.md) | interrupt / 审批 / resume       |
-| [wiki/CLI-交互实现.md](./wiki/CLI-交互实现.md)                       | 终端 CLI 布局与流式渲染                |
-| [wiki/文本编辑器.md](./wiki/文本编辑器.md)                             | AI 修订编辑器                      |
-
-
-
 
 ## License
 

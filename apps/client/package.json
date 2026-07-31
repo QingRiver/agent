@@ -14,7 +14,7 @@
     "@agent/graph": "workspace:*",
     "@agent/gtd": "workspace:*",
     "@agent/markdown": "workspace:*",
-    "@agent/protocol": "workspace:*",
+    "@agent/proto": "workspace:*",
     "@codemirror/lang-markdown": "catalog:",
     "@codemirror/state": "catalog:",
     "@codemirror/view": "catalog:",

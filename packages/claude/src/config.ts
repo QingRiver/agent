@@ -4,7 +4,7 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { readOnlyOptions } from './presets'
 
-/** `packages/claudeAgent` 根目录（含 `.claude/settings.local.json`） */
+/** `packages/claude` 根目录（含 `.claude/settings.local.json`） */
 export const claudeAgentPackageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',

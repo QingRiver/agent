@@ -1,5 +1,5 @@
 import type { BaseMessage } from '@langchain/core/messages'
-import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/protocol'
+import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
 import { TUSHARE_SYSTEM_PROMPT } from '@agent/tools'
 import { SystemMessage } from '@langchain/core/messages'
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph'

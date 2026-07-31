@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@agent/env": "workspace:*",
-    "@agent/protocol": "workspace:*",
+    "@agent/proto": "workspace:*",
     "@agent/tools": "workspace:*",
     "@inkjs/ui": "catalog:",
     "@modelcontextprotocol/sdk": "catalog:",

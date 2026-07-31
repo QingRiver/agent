@@ -1,5 +1,5 @@
 import process from 'node:process'
-import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/protocol'
+import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
 import { interactTools } from '@cli/agent/interact-tools'
 import { createTushareAgent } from '@cli/agent/tushare'
 import { OpenAIDriver } from '@core/driver/openai'

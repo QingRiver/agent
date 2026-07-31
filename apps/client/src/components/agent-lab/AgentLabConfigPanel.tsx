@@ -5,7 +5,7 @@ import {
   REACT_AGENT_MAX_STEPS_MAX,
   REACT_AGENT_MAX_STEPS_MIN,
 } from '@agent/graph/react-agent-prompts'
-import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/protocol'
+import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'

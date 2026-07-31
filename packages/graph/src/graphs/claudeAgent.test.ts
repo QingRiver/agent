@@ -6,8 +6,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { aguiTransformerFactory } from '../stream/index'
 import { claudeAgentGraph } from './claudeAgent'
 
-vi.mock('@agent/claude-agent', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent/claude-agent')>()
+vi.mock('@agent/claude', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent/claude')>()
   return {
     ...actual,
     runQueryInGraphNode: vi.fn(async ({ writer }) => {

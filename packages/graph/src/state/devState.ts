@@ -1,4 +1,4 @@
-import type { ApprovalDecision } from '@agent/protocol'
+import type { ApprovalDecision } from '@agent/proto'
 import type { BaseMessage } from '@langchain/core/messages'
 import { Annotation } from '@langchain/langgraph'
 

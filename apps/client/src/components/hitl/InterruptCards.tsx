@@ -1,4 +1,4 @@
-import type { InterruptRequest, SelectOption } from '@agent/protocol'
+import type { InterruptRequest, SelectOption } from '@agent/proto'
 import { useState } from 'react'
 import { ApprovalCard } from './ApprovalCard'
 

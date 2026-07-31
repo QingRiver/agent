@@ -1,6 +1,6 @@
-import type { WriterChangeSummary } from '@agent/protocol'
+import type { WriterChangeSummary } from '@agent/proto'
 import type { EditorQuote } from './editor-quotes'
-import { WRITER_CHANGE_SUMMARIES_EVENT } from '@agent/protocol'
+import { WRITER_CHANGE_SUMMARIES_EVENT } from '@agent/proto'
 import { Conversation } from '@apis/conversation-api'
 import { ConversationChat } from '@components/copilot/ConversationChat'
 import { useAgent, useCopilotKit } from '@copilotkit/react-core/v2'

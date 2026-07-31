@@ -1,6 +1,6 @@
 import type { BaseMessage } from '@langchain/core/messages'
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
-import { runQueryInGraphNode } from '@agent/claude-agent'
+import { runQueryInGraphNode } from '@agent/claude'
 import { Annotation, StateGraph } from '@langchain/langgraph'
 import { lastHumanMessageText } from '../utils/messageText'
 

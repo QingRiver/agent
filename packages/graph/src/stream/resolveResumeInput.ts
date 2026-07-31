@@ -1,5 +1,5 @@
 import type { RunAgentInput } from '@ag-ui/core'
-import type { ApprovalDecision } from '@agent/protocol'
+import type { ApprovalDecision } from '@agent/proto'
 
 /**
  * 从 RunAgentInput 解析 LangGraph `Command({ resume })` 的 resume 值。

@@ -79,7 +79,7 @@ Schema TS：`src/db/schema/{conversation,tags,kb,gtd}.ts`。生成：`pnpm --fil
 
 ### Checkpoint / HITL
 
-会话消息与挂起中断在 LangGraph checkpoint（非 `conversation_threads` 列）。刷新后由 [CheckpointConnectRunner](src/copilot/checkpointConnectRunner.ts) 投影为 AG-UI 事件。时序见 [wiki/HITL-中断时序.md](../../wiki/HITL-中断时序.md)。
+会话消息与挂起中断在 LangGraph checkpoint（非 `conversation_threads` 列）。刷新后由 [CheckpointConnectRunner](src/copilot/checkpointConnectRunner.ts) 投影为 AG-UI 事件。
 
 ### 结构总览
 
@@ -168,7 +168,7 @@ erDiagram
   }
 ```
 
-挂起 HITL：`checkpoint_writes.channel = '__interrupt__'`，blob 为 `{ id, value }`；详情见 [wiki/HITL-中断时序.md](../../wiki/HITL-中断时序.md) §5。
+挂起 HITL：`checkpoint_writes.channel = '__interrupt__'`，blob 为 `{ id, value }`。
 
 ## API
 

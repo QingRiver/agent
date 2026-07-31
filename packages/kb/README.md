@@ -55,6 +55,5 @@ pnpm test
 ## 相关文档
 
 - 仓库根 [README](../../README.md)
-- [wiki/RAG.md](../../wiki/RAG.md) — 管线设计主文档
 - Server API：[apps/server/docs/kb-api.md](../../apps/server/docs/kb-api.md)
 - [apps/server/README.md](../../apps/server/README.md)

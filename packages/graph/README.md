@@ -38,15 +38,13 @@ src/
 
 Interrupt：业务代码应调用 `hitl*`，勿直接 `interrupt({ type })`。Client 侧任意 agent 用 `AgentInterruptUi`（见 `apps/client/src/components/hitl/`）。
 
-相关：[wiki/Graph包积木化重组计划.md](../../wiki/Graph包积木化重组计划.md)、[wiki/HITL通用化与tushare拆分计划.md](../../wiki/HITL通用化与tushare拆分计划.md)。
-
 ## 使用
 
 ```ts
 import { Graphs, type GraphsName, AguiTransformer } from '@agent/graph'
 ```
 
-依赖：`@agent/kb`、`@agent/tools`、`@agent/protocol`、`@agent/claude-agent`、`@agent/env`。
+依赖：`@agent/kb`、`@agent/tools`、`@agent/proto`、`@agent/claude`、`@agent/env`。
 
 ## 常用命令
 

@@ -1,4 +1,4 @@
-import type { EditorChatIntent } from '@agent/protocol'
+import type { EditorChatIntent } from '@agent/proto'
 import type { BaseMessage } from '@langchain/core/messages'
 import { Annotation } from '@langchain/langgraph'
 

@@ -1,4 +1,4 @@
-# @agent/protocol
+# @agent/proto
 
 跨层**中性契约**：HITL 中断/恢复、Writer hunk/summary。不绑定 LangGraph、Copilot 或 CLI 实现。
 
@@ -19,8 +19,8 @@
 ## 使用
 
 ```ts
-import type { InterruptRequest, PendingInterrupt } from '@agent/protocol'
-import { computeHunks } from '@agent/protocol'
+import type { InterruptRequest, PendingInterrupt } from '@agent/proto'
+import { computeHunks } from '@agent/proto'
 ```
 
 - **Client**：HITL 审批卡、文本编辑器 session（避免直接依赖 `@agent/graph`）
@@ -29,13 +29,10 @@ import { computeHunks } from '@agent/protocol'
 ## 常用命令
 
 ```bash
-pnpm --filter @agent/protocol tc
+pnpm --filter @agent/proto tc
 pnpm test
 ```
 
 ## 相关文档
 
 - 仓库根 [README](../../README.md)
-- [wiki/LangGraph-AGUI-人在回路.md](../../wiki/LangGraph-AGUI-人在回路.md)
-- [wiki/CLI-交互实现.md](../../wiki/CLI-交互实现.md)
-- [wiki/文本编辑器.md](../../wiki/文本编辑器.md)

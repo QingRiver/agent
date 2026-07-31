@@ -1,8 +1,8 @@
-import type { InterruptRequest } from '@agent/protocol'
-import { InterruptRequestValueSchema } from '@agent/protocol'
+import type { InterruptRequest } from '@agent/proto'
+import { InterruptRequestValueSchema } from '@agent/proto'
 
 /**
- * 中断协议契约 —— 与 `@agent/protocol` 统一，供 Interrupt UI 使用。
+ * 中断协议契约 —— 与 `@agent/proto` 统一，供 Interrupt UI 使用。
  *
  * 单投影：UI 只从 `agent.pendingInterrupts`（AG-UI Interrupt）收窄。
  */

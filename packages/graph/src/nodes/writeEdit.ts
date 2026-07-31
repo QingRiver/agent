@@ -1,8 +1,8 @@
-import type { EditorEditCase, WriterChangeSummary } from '@agent/protocol'
+import type { EditorEditCase, WriterChangeSummary } from '@agent/proto'
 import type { BaseMessage } from '@langchain/core/messages'
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
 import process from 'node:process'
-import { computeHunks, WRITER_CHANGE_SUMMARIES_EVENT, WriterHunkSummariesSchema } from '@agent/protocol'
+import { computeHunks, WRITER_CHANGE_SUMMARIES_EVENT, WriterHunkSummariesSchema } from '@agent/proto'
 import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ChatOpenAI } from '@langchain/openai'
 import {

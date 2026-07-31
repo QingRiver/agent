@@ -17,7 +17,7 @@ import { StreamChannel as StreamChannelImpl } from '@langchain/langgraph'
 import { mapMessagesEventDataToAgUi } from './mapMessagesToAgUi'
 import { mapToolsEventDataToAgUi } from './mapToolsToAgUi'
 
-/** LangGraph `config.writer` 解包名（与 `@agent/claude-agent` 的 `AGUI_WRITER_EVENT` 一致） */
+/** LangGraph `config.writer` 解包名（与 `@agent/claude` 的 `AGUI_WRITER_EVENT` 一致） */
 export const AGUI_WRITER_EVENT = 'agui'
 
 export type AguiMappedEvent

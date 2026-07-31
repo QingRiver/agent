@@ -26,4 +26,3 @@ pnpm test
 
 - 仓库根 [README](../../README.md)
 - [apps/client/README.md](../../apps/client/README.md)
-- [wiki/RAG.md](../../wiki/RAG.md) — 知识库预览上下文

@@ -1,6 +1,6 @@
 # @agent/cli
 
-终端 ReAct 实验：Ink UI + Effect `agentLoop` + OpenAI driver + MCP / HITL。与 Web Copilot 图定义独立，共用 `@agent/protocol` 与 `@agent/tools`。
+终端 ReAct 实验：Ink UI + Effect `agentLoop` + OpenAI driver + MCP / HITL。与 Web Copilot 图定义独立，共用 `@agent/proto` 与 `@agent/tools`。
 
 ## 入口
 
@@ -43,7 +43,5 @@ pnpm --filter @agent/cli tc
 ## 相关文档
 
 - 仓库根 [README](../../README.md)
-- [wiki/CLI-交互实现.md](../../wiki/CLI-交互实现.md) — 主文档
-- [wiki/ReAct.md](../../wiki/ReAct.md) — CLI `agentLoop` vs LangGraph
-- [packages/protocol/README.md](../protocol/README.md)
+- [packages/proto/README.md](../proto/README.md)
 - [packages/tools/README.md](../tools/README.md)

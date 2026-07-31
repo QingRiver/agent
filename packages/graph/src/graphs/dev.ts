@@ -1,6 +1,6 @@
 import type { DevStateType } from '../state/devState'
 import process from 'node:process'
-import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/protocol'
+import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
 import { SystemMessage } from '@langchain/core/messages'
 import { END, START, StateGraph } from '@langchain/langgraph'
 import { ToolNode } from '@langchain/langgraph/prebuilt'
