@@ -81,6 +81,17 @@ export function sortTags(tags: EntityRowOf<'tag'>[]): EntityRowOf<'tag'>[] {
   return [...tags].sort((a, b) => a.data.name.localeCompare(b.data.name))
 }
 
+/** 返回 taskId 在树中的深度（根为 0） */
+export function taskDepth(tree: TaskTree, taskId: string): number {
+  let depth = 0
+  let node = tree.byId.get(taskId)?.parent ?? null
+  while (node) {
+    depth++
+    node = node.parent
+  }
+  return depth
+}
+
 /** 返回 taskId 的全部祖先 Task（从父到根） */
 export function ancestors(tree: TaskTree, taskId: string): EntityRowOf<'task'>[] {
   const result: EntityRowOf<'task'>[] = []

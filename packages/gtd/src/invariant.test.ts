@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { makeProjectRow, makeTaskRow, makeTaskTagRow } from './__tests__/sync-fixtures'
 import { validateInvariants } from './invariant'
 import { RowStore } from './rows'
-import { EXPLICIT_STATUS } from './types'
+import { EXPLICIT_STATUS, PLANNED_MODE } from './types'
 
 describe('validateInvariants', () => {
   it('合法 rows 返回空数组', () => {
@@ -44,5 +44,26 @@ describe('validateInvariants', () => {
     const p1 = makeProjectRow('p1')
     const p2 = makeProjectRow('p2')
     expect(validateInvariants(new RowStore([a, b, p1, p2]))).toEqual([])
+  })
+
+  it('invalid_planned: on 缺 plannedDate', () => {
+    const t = makeTaskRow('t1', { plannedMode: PLANNED_MODE.ON, plannedDate: null })
+    expect(validateInvariants(new RowStore([t])).some(v => v.code === 'invalid_planned')).toBe(true)
+  })
+
+  it('invalid_planned: rolling 带 plannedDate', () => {
+    const t = makeTaskRow('t1', {
+      plannedMode: PLANNED_MODE.ROLLING,
+      plannedDate: '2026-07-16T00:00:00.000Z',
+    })
+    expect(validateInvariants(new RowStore([t])).some(v => v.code === 'invalid_planned')).toBe(true)
+  })
+
+  it('invalid_defer_due: defer > due', () => {
+    const t = makeTaskRow('t1', {
+      deferDate: '2026-07-17T10:00:00.000Z',
+      dueDate: '2026-07-16T10:00:00.000Z',
+    })
+    expect(validateInvariants(new RowStore([t])).some(v => v.code === 'invalid_defer_due')).toBe(true)
   })
 })

@@ -1,6 +1,22 @@
-import type { EntityRowOf, RenderGroup, RenderItem } from '@agent/gtd'
-import { EXPLICIT_STATUS, GROUP_TYPE, renderPerspective, SORT_FIELD } from '@agent/gtd'
+import type { EntityRowOf, ForecastStripKey, RenderGroup, RenderItem } from '@agent/gtd'
+import {
+  EXPLICIT_STATUS,
+  FORECAST_STRIP_ORDER,
+  FORECAST_STRIP_TEXT,
+  GROUP_TYPE,
+  renderPerspective,
+  SORT_FIELD,
+  stripToForecastOptions,
+} from '@agent/gtd'
 import { Button } from '@components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@components/ui/dropdown-menu'
 import { Input } from '@components/ui/input'
 import {
   DndContext,
@@ -18,6 +34,7 @@ import {
 import { useGtd } from '@hooks/useGtd'
 import { cn } from '@lib/utils'
 import { GtdStore, resolvePerspective } from '@stores/gtd-store'
+import { Settings2 } from 'lucide-react'
 import { useState } from 'react'
 import { GtdTaskRow } from './GtdTaskRow'
 
@@ -35,6 +52,7 @@ function RenderNodes({
   collapsed,
   hidden,
   parents,
+  stickyHeaders,
   onToggleCollapsed,
 }: {
   nodes: Array<RenderGroup | RenderItem>
@@ -42,6 +60,7 @@ function RenderNodes({
   collapsed: Set<string>
   hidden: Set<string>
   parents: Set<string>
+  stickyHeaders: boolean
   onToggleCollapsed: (taskId: string) => void
 }) {
   return (
@@ -52,7 +71,12 @@ function RenderNodes({
             <div key={node.key || 'root'} className="mb-3">
               {node.label
                 ? (
-                    <div className="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <div
+                      className={cn(
+                        'mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground',
+                        stickyHeaders && 'sticky top-0 z-10 bg-background/95 py-1 backdrop-blur-sm',
+                      )}
+                    >
                       {node.label}
                     </div>
                   )
@@ -63,6 +87,7 @@ function RenderNodes({
                 collapsed={collapsed}
                 hidden={hidden}
                 parents={parents}
+                stickyHeaders={stickyHeaders}
                 onToggleCollapsed={onToggleCollapsed}
               />
             </div>
@@ -91,11 +116,15 @@ export function GtdTaskList() {
   const {
     rowStore,
     selection,
+    forecastStrip,
+    forecastSignals,
     isLoading,
     addInboxTask,
     addProjectTask,
     reorderTask,
     patchProject,
+    toggleForecastStripSegment,
+    patchForecastSignals,
   } = useGtd()
   const [draft, setDraft] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
@@ -105,6 +134,7 @@ export function GtdTaskList() {
   )
 
   const perspective = resolvePerspective(rowStore, selection)
+  const isForecast = selection.kind === 'perspective' && selection.id === 'forecast'
   const selectedProject = selection.kind === 'project'
     ? rowStore.findLive('project', selection.id) ?? null
     : null
@@ -121,9 +151,14 @@ export function GtdTaskList() {
   const title = resolveTitle()
   const liveTasks = rowStore.liveTasks()
 
-  // perspective 渲染需要墙钟「现在」；随 store 更新重算即可
+  // perspective 渲染需要墙钟「现在」与用户时区日界
   // eslint-disable-next-line react/purity -- wall-clock now for due/soon grouping
-  const tree = renderPerspective(rowStore, perspective, new Date(), GtdStore.dueSoonMs)
+  const now = new Date()
+  const timeZone = new Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  const forecastOptions = isForecast
+    ? stripToForecastOptions(forecastStrip, forecastSignals, now, timeZone)
+    : undefined
+  const tree = renderPerspective(rowStore, perspective, now, GtdStore.dueSoonMs, timeZone, forecastOptions)
 
   function collectVisibleTaskIds() {
     const ids: string[] = []
@@ -180,34 +215,88 @@ export function GtdTaskList() {
     setDraft('')
   }
 
+  const stripSelected = new Set(forecastStrip)
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold text-foreground">{title}</h1>
-          <p className="text-xs text-muted-foreground">
-            {isLoading ? '加载中…' : `${activeCount} 个活跃任务`}
-          </p>
+      <header className="flex shrink-0 flex-col gap-2 border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-semibold text-foreground">{title}</h1>
+            <p className="text-xs text-muted-foreground">
+              {isLoading ? '加载中…' : `${activeCount} 个活跃任务`}
+            </p>
+          </div>
+          {selectedProject && (
+            <div className="flex shrink-0 rounded-lg border border-border bg-muted p-0.5">
+              {([
+                [GROUP_TYPE.SEQUENTIAL, '顺序'],
+                [GROUP_TYPE.PARALLEL, '并行'],
+                [GROUP_TYPE.SINGLE_ACTION, '清单'],
+              ] as const).map(([type, label]) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={cn(
+                    'h-8 rounded-md px-3 text-xs text-muted-foreground transition-colors',
+                    selectedProject.data.type === type && 'bg-accent text-accent-foreground',
+                  )}
+                  onClick={() => patchProject(selectedProject.id, { type })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {isForecast && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" className="size-8 shrink-0 p-0" title="信号开关">
+                  <Settings2 className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>包含信号</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {(
+                  [
+                    ['includeOverdue', '逾期'],
+                    ['includeDue', '截止'],
+                    ['includeDeferred', '推迟'],
+                    ['includePlanned', '计划'],
+                    ['includeFlagged', '旗标'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <DropdownMenuCheckboxItem
+                    key={key}
+                    checked={forecastSignals[key]}
+                    onCheckedChange={v => patchForecastSignals({ [key]: v === true })}
+                  >
+                    {label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
-        {selectedProject && (
-          <div className="flex shrink-0 rounded-lg border border-border bg-muted p-0.5">
-            {([
-              [GROUP_TYPE.SEQUENTIAL, '顺序'],
-              [GROUP_TYPE.PARALLEL, '并行'],
-              [GROUP_TYPE.SINGLE_ACTION, '清单'],
-            ] as const).map(([type, label]) => (
-              <button
-                key={type}
-                type="button"
-                className={cn(
-                  'h-8 rounded-md px-3 text-xs text-muted-foreground transition-colors',
-                  selectedProject.data.type === type && 'bg-accent text-accent-foreground',
-                )}
-                onClick={() => patchProject(selectedProject.id, { type })}
-              >
-                {label}
-              </button>
-            ))}
+        {isForecast && (
+          <div className="flex rounded-lg border border-border bg-muted p-0.5">
+            {FORECAST_STRIP_ORDER.map((key) => {
+              const active = stripSelected.has(key as ForecastStripKey)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={cn(
+                    'h-8 flex-1 rounded-md px-2 text-xs text-muted-foreground transition-colors',
+                    active && 'bg-accent text-accent-foreground',
+                  )}
+                  onClick={() => toggleForecastStripSegment(key as ForecastStripKey)}
+                >
+                  {FORECAST_STRIP_TEXT[key]}
+                </button>
+              )
+            })}
           </div>
         )}
       </header>
@@ -278,6 +367,7 @@ export function GtdTaskList() {
                     collapsed={collapsed}
                     hidden={hiddenTaskIds}
                     parents={parentTaskIds}
+                    stickyHeaders={isForecast}
                     onToggleCollapsed={(taskId) => {
                       setCollapsed((current) => {
                         const next = new Set(current)

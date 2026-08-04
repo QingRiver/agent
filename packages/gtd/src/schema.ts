@@ -9,6 +9,7 @@ import {
   FOLDER_STATUS,
   GROUP_KEY,
   GROUP_TYPE,
+  PLANNED_MODE,
   REPEAT_ANCHOR,
   REPEAT_CYCLE,
   REVIEW_INTERVAL,
@@ -99,6 +100,8 @@ export const TagSchema = z
   })
   .describe('扁平标签；一个 Task 可挂多个 Tag（经 Task.tagIds 多对多）')
 
+export const PlannedModeSchema = z.enum(PLANNED_MODE).default(PLANNED_MODE.NONE)
+
 // ---------- RepeatRule ----------
 
 export const RepeatRuleSchema = z
@@ -176,6 +179,8 @@ export const TaskSchema = z
     groupType: GroupTypeSchema.nullable().describe('仅当有子 task(action group)时生效；null=叶子 action'),
     deferDate: datetime.nullable().describe('推迟日，之前派生 blocked'),
     dueDate: datetime.nullable().describe('截止日；过期→overdue，临近→due_soon'),
+    plannedMode: PlannedModeSchema.describe('计划：none / on(具体日) / rolling(每日滚到今日)；不影响 computed 着色'),
+    plannedDate: datetime.nullable().default(null).describe('仅 plannedMode=on 时有值'),
     completedAt: datetime.nullable(),
     droppedAt: datetime.nullable().describe('cancelled 时间'),
     flagged: z.boolean().describe('旗标'),
@@ -264,6 +269,7 @@ export const GtdDocumentSchema = z
 
 export type Folder = z.infer<typeof FolderSchema>
 export type Tag = z.infer<typeof TagSchema>
+export type PlannedMode = z.infer<typeof PlannedModeSchema>
 export type RepeatRule = z.infer<typeof RepeatRuleSchema>
 export type ReviewConfig = z.infer<typeof ReviewConfigSchema>
 export type Attachment = z.infer<typeof AttachmentSchema>

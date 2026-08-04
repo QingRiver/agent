@@ -2,6 +2,7 @@ import type { RowStore } from './rows'
 import type { ComputedStatus } from './schema'
 import type { EntityRowOf } from './sync-schema'
 import type { TaskTree } from './tree'
+import { isWallClockUnlocked } from './time'
 import { buildTaskTree } from './tree'
 import { COMPUTED_STATUS, EXPLICIT_STATUS, GROUP_TYPE } from './types'
 
@@ -37,6 +38,7 @@ function computeStatusInner(task: EntityRowOf<'task'>, ctx: ComputeContext): Com
   ctx.visiting.add(task.id)
 
   // 终态 → blocked
+  // 注意：Forecast 栏位 `overdue`（截止日 < timeslice.start）≠ 本处 OVERDUE（due < now）；禁止合并两套语义。
   if (
     task.data.status === EXPLICIT_STATUS.COMPLETED
     || task.data.status === EXPLICIT_STATUS.CANCELLED
@@ -47,8 +49,8 @@ function computeStatusInner(task: EntityRowOf<'task'>, ctx: ComputeContext): Com
     return COMPUTED_STATUS.BLOCKED
   }
 
-  // deferDate 在未来 → blocked
-  if (task.data.deferDate && new Date(task.data.deferDate).getTime() > ctx.now.getTime()) {
+  // 墙钟未解锁（defer > now）→ blocked；与 Forecast 推迟栏「按日历日」正交，共用 isWallClockUnlocked
+  if (!isWallClockUnlocked(task.data.deferDate, ctx.now)) {
     ctx.cache.set(task.id, COMPUTED_STATUS.BLOCKED)
     ctx.visiting.delete(task.id)
     return COMPUTED_STATUS.BLOCKED

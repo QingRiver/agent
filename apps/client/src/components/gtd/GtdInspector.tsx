@@ -1,4 +1,5 @@
-import { EXPLICIT_STATUS, GROUP_TYPE } from '@agent/gtd'
+import { EXPLICIT_STATUS, GROUP_TYPE, PLANNED_MODE } from '@agent/gtd'
+import { GTD_TIME_END_OF_DAY, GTD_TIME_START_OF_DAY, startOfLocalDayIso } from '@components/gtd/gtd-datetime'
 import { GtdDateTimeField } from '@components/gtd/GtdDateTimeField'
 import { GtdRepeatEditor } from '@components/gtd/GtdRepeatEditor'
 import { Button } from '@components/ui/button'
@@ -15,6 +16,7 @@ export function GtdInspector() {
     selectedProjectId,
     selection,
     patchTask,
+    setTaskPlanned,
     dropTask,
     restoreTask,
     deleteTaskLogical,
@@ -119,13 +121,49 @@ export function GtdInspector() {
             <GtdDateTimeField
               label="推迟"
               value={task.data.deferDate}
+              defaultTime={GTD_TIME_START_OF_DAY}
               onChange={iso => patchTask(task.id, { deferDate: iso })}
             />
             <GtdDateTimeField
               label="截止"
               value={task.data.dueDate}
+              defaultTime={GTD_TIME_END_OF_DAY}
               onChange={iso => patchTask(task.id, { dueDate: iso })}
             />
+          </div>
+          <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs text-muted-foreground">计划</Label>
+              <div className="w-40 shrink-0">
+                <Select
+                  value={task.data.plannedMode ?? PLANNED_MODE.NONE}
+                  onChange={(e) => {
+                    const mode = e.target.value as typeof PLANNED_MODE[keyof typeof PLANNED_MODE]
+                    if (mode === PLANNED_MODE.ON) {
+                      setTaskPlanned(
+                        task.id,
+                        mode,
+                        task.data.plannedDate ?? startOfLocalDayIso(),
+                      )
+                      return
+                    }
+                    setTaskPlanned(task.id, mode, null)
+                  }}
+                >
+                  <option value={PLANNED_MODE.NONE}>无</option>
+                  <option value={PLANNED_MODE.ROLLING}>滚动到今日</option>
+                  <option value={PLANNED_MODE.ON}>选日期</option>
+                </Select>
+              </div>
+            </div>
+            {(task.data.plannedMode ?? PLANNED_MODE.NONE) === PLANNED_MODE.ON && (
+              <GtdDateTimeField
+                label="计划日"
+                value={task.data.plannedDate}
+                defaultTime={GTD_TIME_START_OF_DAY}
+                onChange={iso => setTaskPlanned(task.id, PLANNED_MODE.ON, iso)}
+              />
+            )}
           </div>
           <section className="space-y-2 rounded-lg border border-border bg-muted p-3">
             <div className="flex items-center justify-between">

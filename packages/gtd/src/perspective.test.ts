@@ -103,7 +103,7 @@ describe('renderPerspective', () => {
   it('端到端产出 RenderGroup[] 且 computed 非硬编码', () => {
     const t = makeTaskRow('a', { dueDate: new Date(NOW.getTime() - 60000).toISOString() })
     const p = makePerspective()
-    const groups = renderPerspective(new RowStore([t]), p, NOW, DUE_SOON_MS)
+    const groups = renderPerspective(new RowStore([t]), p, NOW, DUE_SOON_MS, 'UTC')
     expect(groups).toBeInstanceOf(Array)
     const item = groups[0]?.children[0]
     expect(item && 'computed' in item && item.computed).toBe('overdue')
@@ -126,9 +126,31 @@ describe('renderPerspective', () => {
         ],
       },
     })
-    const groups = renderPerspective(new RowStore([hit, miss]), p, NOW, DUE_SOON_MS)
+    const groups = renderPerspective(new RowStore([hit, miss]), p, NOW, DUE_SOON_MS, 'UTC')
     const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null).filter(Boolean)
     expect(ids).toEqual(['hit'])
+  })
+
+  it('forecast 默认仅今日：rolling 入今日块', () => {
+    const t = makeTaskRow('r', { plannedMode: 'rolling', plannedDate: null })
+    const forecast = builtinPerspectives().find(x => x.id === 'forecast')!
+    const groups = renderPerspective(new RowStore([t]), forecast, NOW, DUE_SOON_MS, 'UTC')
+    expect(groups.map(g => g.key)).toEqual(['today'])
+    expect(groups[0]?.children).toHaveLength(1)
+  })
+
+  it('forecast 经 applyBaseFilter：completed 不进视图', () => {
+    const active = makeTaskRow('a', { plannedMode: 'rolling', plannedDate: null })
+    const done = makeTaskRow('d', {
+      plannedMode: 'rolling',
+      plannedDate: null,
+      status: EXPLICIT_STATUS.COMPLETED,
+      completedAt: NOW.toISOString(),
+    })
+    const forecast = builtinPerspectives().find(x => x.id === 'forecast')!
+    const groups = renderPerspective(new RowStore([active, done]), forecast, NOW, DUE_SOON_MS, 'UTC')
+    const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null)
+    expect(ids).toEqual(['a'])
   })
 })
 
@@ -143,8 +165,20 @@ describe('applyBuiltinFilter', () => {
 })
 
 describe('builtinPerspectives', () => {
-  it('返回 8 个内置透视', () => {
-    expect(builtinPerspectives()).toHaveLength(8)
+  it('返回 7 个内置透视', () => {
+    expect(builtinPerspectives()).toHaveLength(7)
+  })
+
+  it('forecast 居首且无 predicted', () => {
+    expect(builtinPerspectives()[0]?.id).toBe('forecast')
+    expect(builtinPerspectives().find(x => x.id === 'predicted')).toBeUndefined()
+  })
+
+  it('forecast 声明：REMAINING + 空 groupBy/sortBy（日块非通用管线）', () => {
+    const forecast = builtinPerspectives().find(x => x.id === 'forecast')!
+    expect(forecast.availabilityFilter).toBe(AVAILABILITY_FILTER.REMAINING)
+    expect(forecast.groupBy).toEqual([])
+    expect(forecast.sortBy).toEqual([])
   })
 
   it('flagged 内置透视使用 DSL is 节点', () => {

@@ -77,6 +77,8 @@ export const gtdTasks = pgTable('gtd_tasks', {
   groupType: text('group_type'),
   deferDate: timestamp('defer_date', { withTimezone: true, mode: 'date' }),
   dueDate: timestamp('due_date', { withTimezone: true, mode: 'date' }),
+  plannedMode: text('planned_mode').notNull().default('none'),
+  plannedDate: timestamp('planned_date', { withTimezone: true, mode: 'date' }),
   completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
   droppedAt: timestamp('dropped_at', { withTimezone: true, mode: 'date' }),
   flagged: boolean('flagged').notNull().default(false),

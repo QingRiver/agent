@@ -267,6 +267,48 @@ export const SORT_FIELD_TEXT = {
   [SORT_FIELD.ORDER]: '顺序',
 } as const
 
+// ===== 计划模式（Planned；替代 Forecast Tag） =====
+export const PLANNED_MODE = {
+  /** 无计划 */
+  NONE: 'none',
+  /** 计划在具体日 */
+  ON: 'on',
+  /** 每日滚到今日 */
+  ROLLING: 'rolling',
+} as const
+
+export const PLANNED_MODE_TEXT = {
+  [PLANNED_MODE.NONE]: '无',
+  [PLANNED_MODE.ON]: '计划日',
+  [PLANNED_MODE.ROLLING]: '滚动到今日',
+} as const
+
+/** Forecast 顶栏五段（有序；连续多选） */
+export const FORECAST_STRIP = {
+  PAST: 'past',
+  TODAY: 'today',
+  TOMORROW: 'tomorrow',
+  DAY_AFTER: 'dayAfter',
+  LATER: 'later',
+} as const
+
+export const FORECAST_STRIP_TEXT = {
+  [FORECAST_STRIP.PAST]: '过去',
+  [FORECAST_STRIP.TODAY]: '今日',
+  [FORECAST_STRIP.TOMORROW]: '明天',
+  [FORECAST_STRIP.DAY_AFTER]: '后天',
+  [FORECAST_STRIP.LATER]: '以后',
+} as const
+
+/** 五段下标顺序（连续多选约束用） */
+export const FORECAST_STRIP_ORDER = [
+  FORECAST_STRIP.PAST,
+  FORECAST_STRIP.TODAY,
+  FORECAST_STRIP.TOMORROW,
+  FORECAST_STRIP.DAY_AFTER,
+  FORECAST_STRIP.LATER,
+] as const
+
 // ===== 排序方向 =====
 export const SORT_DIR = {
   /** 升序 */

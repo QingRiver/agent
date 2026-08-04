@@ -49,7 +49,6 @@ const PERSPECTIVE_ICONS: Record<string, typeof Inbox> = {
   flagged: Flag,
   review: Telescope,
   completed: CheckCircle2,
-  predicted: Sparkles,
 }
 
 function NavItem({

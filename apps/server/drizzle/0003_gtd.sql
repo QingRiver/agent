@@ -44,6 +44,8 @@ CREATE TABLE "gtd_tasks" (
 	"group_type" text,
 	"defer_date" timestamp with time zone,
 	"due_date" timestamp with time zone,
+	"planned_mode" text DEFAULT 'none' NOT NULL,
+	"planned_date" timestamp with time zone,
 	"completed_at" timestamp with time zone,
 	"dropped_at" timestamp with time zone,
 	"flagged" boolean DEFAULT false NOT NULL,

@@ -1,3 +1,4 @@
+import { GTD_TIME_START_OF_DAY } from '@components/gtd/gtd-datetime'
 import { Button } from '@components/ui/button'
 import { Calendar } from '@components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@components/ui/popover'
@@ -30,15 +31,23 @@ interface GtdDateTimeFieldProps {
   label: string
   value: string | null
   onChange: (iso: string | null) => void
+  /** 尚无 value、仅点选日历日时使用的时:分，默认 00:00 */
+  defaultTime?: string
   className?: string
 }
 
-export function GtdDateTimeField({ label, value, onChange, className }: GtdDateTimeFieldProps) {
+export function GtdDateTimeField({
+  label,
+  value,
+  onChange,
+  defaultTime = GTD_TIME_START_OF_DAY,
+  className,
+}: GtdDateTimeFieldProps) {
   const [open, setOpen] = useState(false)
   const selected = parseIso(value)
   const timeValue = selected
     ? `${pad(selected.getHours())}:${pad(selected.getMinutes())}`
-    : '09:00'
+    : defaultTime
 
   const display = selected
     ? format(selected, 'yyyy-MM-dd HH:mm', { locale: zhCN })
@@ -80,7 +89,7 @@ export function GtdDateTimeField({ label, value, onChange, className }: GtdDateT
               value={timeValue}
               onChange={(e) => {
                 const base = selected ?? new Date()
-                onChange(combineDateAndTime(base, e.target.value || '09:00'))
+                onChange(combineDateAndTime(base, e.target.value || defaultTime))
               }}
               className="h-8 flex-1 rounded-md border border-border bg-card px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />

@@ -242,6 +242,8 @@ export class DrizzleGtdRepository implements GtdRepository {
             groupType: row.groupType,
             deferDate: row.deferDate,
             dueDate: row.dueDate,
+            plannedMode: row.plannedMode,
+            plannedDate: row.plannedDate,
             completedAt: row.completedAt,
             droppedAt: row.droppedAt,
             flagged: row.flagged,

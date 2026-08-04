@@ -27,7 +27,7 @@ export const PROMPT_FIXTURE_CONTEXT = {
   tags: [
     { id: 'tag-urgent', name: '紧急' },
   ],
-  builtinPerspectiveIds: ['inbox', 'projects', 'tags', 'forecast', 'flagged', 'review', 'completed', 'predicted'],
+  builtinPerspectiveIds: ['inbox', 'projects', 'tags', 'forecast', 'flagged', 'review', 'completed'],
 }
 
 /** 本周到期且已旗标 — 一次性 Query（相对日期 + 嵌套 and） */

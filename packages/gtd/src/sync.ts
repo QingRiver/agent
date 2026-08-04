@@ -27,6 +27,7 @@ import type {
  */
 import { tryit } from 'radash'
 import { match } from 'ts-pattern'
+import { normalizeDeferDue } from './normalize'
 import { computeNextDates, shouldStop } from './repeat'
 import { EXPLICIT_STATUS } from './types'
 
@@ -465,19 +466,43 @@ function applyMutationUpsert(
   const patch = mut.patch ?? {}
   const row = rows.find(r => r.entity === mut.entity && r.id === mut.entityId)
   if (row) {
-    // patch 列合并：只覆盖 patch 提及的列，未提及列不动
-    row.data = { ...row.data, ...patch } as typeof row.data
+    if (mut.entity === 'task') {
+      const before = {
+        deferDate: (row.data as EntityRowOf<'task'>['data']).deferDate ?? null,
+        dueDate: (row.data as EntityRowOf<'task'>['data']).dueDate ?? null,
+      }
+      row.data = { ...row.data, ...patch } as typeof row.data
+      if (
+        Object.hasOwn(patch, 'deferDate')
+        || Object.hasOwn(patch, 'dueDate')
+      ) {
+        const norm = normalizeDeferDue(before, patch as { deferDate?: string | null, dueDate?: string | null })
+        ;(row.data as EntityRowOf<'task'>['data']).deferDate = norm.deferDate
+        ;(row.data as EntityRowOf<'task'>['data']).dueDate = norm.dueDate
+      }
+    }
+    else {
+      row.data = { ...row.data, ...patch } as typeof row.data
+    }
     row.deleted = false // upsert 复活软删实体（创建意图按到达序胜过删除）
     row.syncId = nextSyncId()
   }
   else {
+    let data = { ...patch } as EntityRow['data']
+    if (mut.entity === 'task') {
+      const norm = normalizeDeferDue(
+        { deferDate: null, dueDate: null },
+        patch as { deferDate?: string | null, dueDate?: string | null },
+      )
+      data = { ...data, ...norm } as typeof data
+    }
     rows.push({
       entity: mut.entity,
       id: mut.entityId,
       userId,
       syncId: nextSyncId(),
       deleted: false,
-      data: { ...patch },
+      data,
     } as EntityRow)
   }
   return 'applied'

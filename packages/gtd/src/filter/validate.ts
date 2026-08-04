@@ -1,6 +1,12 @@
 import type { EntityRef, FilterNode, PerspectiveInputError, TemporalValue } from './schema'
 import { z } from 'zod'
 import { ExplicitStatusSchema } from '../schema'
+import {
+  addZonedDays,
+  endOfZonedWeek,
+  startOfZonedDay,
+  startOfZonedWeek,
+} from '../time'
 import { FILTER_FIELD } from '../types'
 import {
 
@@ -82,95 +88,9 @@ export interface PerspectiveResolutionContext {
 /** 兼容别名 */
 export type FilterResolutionContext = PerspectiveResolutionContext
 
-// ===== 时区 / 相对日期解析（原 perspective-input，迁入此处） =====
+// ===== 时区 / 相对日期解析（日界原语见 ../time.ts） =====
 
-function getZonedDateParts(date: Date, timeZone: string) {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    weekday: 'short',
-  })
-  const parts = Object.fromEntries(
-    dtf.formatToParts(date)
-      .filter(p => p.type !== 'literal')
-      .map(p => [p.type, p.value]),
-  )
-  return {
-    year: Number(parts.year),
-    month: Number(parts.month),
-    day: Number(parts.day),
-    weekday: parts.weekday ?? 'Mon',
-  }
-}
-
-function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  })
-  const parts = Object.fromEntries(
-    dtf.formatToParts(date)
-      .filter(p => p.type !== 'literal')
-      .map(p => [p.type, p.value]),
-  )
-  const asUtc = Date.UTC(
-    Number(parts.year),
-    Number(parts.month) - 1,
-    Number(parts.day),
-    Number(parts.hour),
-    Number(parts.minute),
-    Number(parts.second),
-  )
-  return asUtc - date.getTime()
-}
-
-/** 用户时区某日历日的 00:00:00.000 对应 UTC 时刻 */
-export function startOfZonedDay(date: Date, timeZone: string): Date {
-  const { year, month, day } = getZonedDateParts(date, timeZone)
-  const noonUtc = new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
-  const offset = getTimeZoneOffsetMs(noonUtc, timeZone)
-  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0) - offset)
-}
-
-function addZonedDays(base: Date, timeZone: string, days: number): Date {
-  const { year, month, day } = getZonedDateParts(base, timeZone)
-  const shifted = new Date(Date.UTC(year, month - 1, day + days, 12, 0, 0))
-  return startOfZonedDay(shifted, timeZone)
-}
-
-function weekdayIndex(weekday: string): number {
-  const map: Record<string, number> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  }
-  return map[weekday] ?? 0
-}
-
-function startOfZonedWeek(date: Date, timeZone: string): Date {
-  const parts = getZonedDateParts(date, timeZone)
-  const dayIdx = weekdayIndex(parts.weekday)
-  const mondayOffset = dayIdx === 0 ? -6 : 1 - dayIdx
-  return addZonedDays(startOfZonedDay(date, timeZone), timeZone, mondayOffset)
-}
-
-function endOfZonedWeek(date: Date, timeZone: string): Date {
-  const start = startOfZonedWeek(date, timeZone)
-  const endDay = addZonedDays(start, timeZone, 6)
-  return new Date(endDay.getTime() + 24 * 60 * 60 * 1000 - 1)
-}
+export { startOfZonedDay }
 
 /** 将相对 token 解析为绝对 ISO（基于显式 now + timeZone） */
 export function resolveRelativeDateToken(

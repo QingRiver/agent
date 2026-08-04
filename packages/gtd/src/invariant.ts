@@ -1,5 +1,5 @@
 import type { RowStore } from './rows'
-import { EXPLICIT_STATUS } from './types'
+import { EXPLICIT_STATUS, PLANNED_MODE } from './types'
 
 export type InvariantCode
   = | 'broken_reference'
@@ -10,6 +10,8 @@ export type InvariantCode
     | 'missing_terminal_timestamp'
     | 'invalid_repeat_trace'
     | 'task_on_hold'
+    | 'invalid_planned'
+    | 'invalid_defer_due'
 
 export interface InvariantViolation {
   code: InvariantCode
@@ -155,6 +157,35 @@ export function validateInvariants(rowStore: RowStore): InvariantViolation[] {
   for (const t of tasks) {
     if (parentsWithChildren.has(t.id) && !t.data.groupType) {
       violations.push({ code: 'group_type_mismatch', message: `Task ${t.id} 有子项但 groupType 为空`, entityId: t.id })
+    }
+  }
+
+  // plannedMode / plannedDate 成对
+  for (const t of tasks) {
+    const mode = t.data.plannedMode ?? PLANNED_MODE.NONE
+    const date = t.data.plannedDate
+    if (mode === PLANNED_MODE.ON && date == null) {
+      violations.push({
+        code: 'invalid_planned',
+        message: `Task ${t.id} plannedMode=on 但 plannedDate 为空`,
+        entityId: t.id,
+      })
+    }
+    if ((mode === PLANNED_MODE.NONE || mode === PLANNED_MODE.ROLLING) && date != null) {
+      violations.push({
+        code: 'invalid_planned',
+        message: `Task ${t.id} plannedMode=${mode} 但 plannedDate 非空`,
+        entityId: t.id,
+      })
+    }
+    if (t.data.deferDate != null && t.data.dueDate != null) {
+      if (new Date(t.data.deferDate).getTime() > new Date(t.data.dueDate).getTime()) {
+        violations.push({
+          code: 'invalid_defer_due',
+          message: `Task ${t.id} deferDate 晚于 dueDate`,
+          entityId: t.id,
+        })
+      }
     }
   }
 

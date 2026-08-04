@@ -1,4 +1,5 @@
 import type { FilterEvalContext } from './filter'
+import type { ForecastOptions } from './forecast'
 import type { RowStore } from './rows'
 import type {
   ComputedStatus,
@@ -11,8 +12,9 @@ import type { EntityRowOf } from './sync-schema'
 import type { TaskTree } from './tree'
 import { computeStatus } from './availability'
 import { FILTER_FIELD, LEAF_OP, matchFilter, rawValue } from './filter'
+import { defaultForecastOptions, renderForecast } from './forecast'
 import { needsReview } from './review'
-import { buildTaskTree } from './tree'
+import { buildTaskTree, taskDepth } from './tree'
 import {
   AVAILABILITY_FILTER,
   COMPUTED_STATUS,
@@ -48,16 +50,6 @@ function isActionable(computed: ComputedStatus): boolean {
   return computed === COMPUTED_STATUS.AVAILABLE
     || computed === COMPUTED_STATUS.DUE_SOON
     || computed === COMPUTED_STATUS.OVERDUE
-}
-
-function taskDepth(tree: TaskTree, taskId: string): number {
-  let depth = 0
-  let node = tree.byId.get(taskId)?.parent ?? null
-  while (node) {
-    depth++
-    node = node.parent
-  }
-  return depth
 }
 
 function taskComputed(task: EntityRowOf<'task'>, ctx: RenderContext): ComputedStatus {
@@ -103,13 +95,13 @@ export function applyBaseFilter(
   })
 }
 
-/** 内置透视额外过滤 */
+/** 内置透视额外过滤（非通用 DSL；forecast 不经此函数） */
 export function applyBuiltinFilter(
   tasks: EntityRowOf<'task'>[],
   perspective: Perspective,
   rowStore: RowStore,
   now: Date,
-  dueSoonIntervalMs: number,
+  _dueSoonIntervalMs: number,
 ): EntityRowOf<'task'>[] {
   switch (perspective.id) {
     case 'inbox':
@@ -124,18 +116,6 @@ export function applyBuiltinFilter(
       })
     case 'completed':
       return tasks.filter(t => t.data.status === EXPLICIT_STATUS.COMPLETED)
-    case 'predicted':
-      return tasks.filter(t => t.data.dueDate != null)
-    case 'forecast': {
-      const horizon = new Date(now.getTime() + dueSoonIntervalMs * 7)
-      return tasks.filter((t) => {
-        if (!t.data.dueDate) {
-          return false
-        }
-        const due = new Date(t.data.dueDate).getTime()
-        return due >= now.getTime() && due <= horizon.getTime()
-      })
-    }
     default:
       return tasks
   }
@@ -210,7 +190,12 @@ export function groupBy(
   }))
 }
 
-function compareField(a: EntityRowOf<'task'>, b: EntityRowOf<'task'>, field: string, rowStore: RowStore): number {
+function compareField(
+  a: EntityRowOf<'task'>,
+  b: EntityRowOf<'task'>,
+  field: string,
+  rowStore: RowStore,
+): number {
   const va = rawValue(a, field, rowStore)
   const vb = rawValue(b, field, rowStore)
   if (va == null && vb == null) {
@@ -244,7 +229,11 @@ function compareField(a: EntityRowOf<'task'>, b: EntityRowOf<'task'>, field: str
 }
 
 /** Step5 排序 */
-export function sortTasks(tasks: EntityRowOf<'task'>[], sortBy: SortKey[], rowStore: RowStore): EntityRowOf<'task'>[] {
+export function sortTasks(
+  tasks: EntityRowOf<'task'>[],
+  sortBy: SortKey[],
+  rowStore: RowStore,
+): EntityRowOf<'task'>[] {
   const sorted = [...tasks]
   sorted.sort((a, b) => {
     for (const key of sortBy) {
@@ -258,13 +247,28 @@ export function sortTasks(tasks: EntityRowOf<'task'>[], sortBy: SortKey[], rowSt
   return sorted
 }
 
-/** 完整渲染管线：6 步产出顶层 RenderGroup[] */
+/**
+ * 完整渲染管线。
+ * forecast：先 applyBaseFilter（尊重声明的 availabilityFilter / show*），再 renderForecast 日块分块；
+ * 不走 matchFilter / applyBuiltinFilter / Perspective.groupBy / sortBy（日块归属与块内序由 forecast 域负责）。
+ */
 export function renderPerspective(
   rowStore: RowStore,
   perspective: Perspective,
   now: Date,
   dueSoonIntervalMs: number,
+  timeZone: string,
+  forecastOptions?: ForecastOptions,
 ): RenderGroup[] {
+  if (perspective.id === 'forecast') {
+    const all = rowStore.liveTasks()
+    const tree = buildTaskTree(all)
+    const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map() }
+    const filtered = applyBaseFilter(all, perspective, ctx)
+    const opts = forecastOptions ?? defaultForecastOptions(now, timeZone)
+    return renderForecast(rowStore, opts, now, dueSoonIntervalMs, filtered, timeZone)
+  }
+
   const tasks = rowStore.liveTasks()
   const tree = buildTaskTree(tasks)
   const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map() }
@@ -302,9 +306,16 @@ function builtin(id: string, name: string, overrides: Partial<Perspective> = {})
   }
 }
 
-/** 8 个内置透视 */
+/** 7 个内置透视（forecast 居首） */
 export function builtinPerspectives(): Perspective[] {
   return [
+    // Forecast：availabilityFilter/show* 经 applyBaseFilter 生效；
+    // groupBy/sortBy 必须为空——日块分块与块内序由 renderForecast，勿假装走通用管线。
+    builtin('forecast', '预测', {
+      availabilityFilter: AVAILABILITY_FILTER.REMAINING,
+      groupBy: [],
+      sortBy: [],
+    }),
     builtin('inbox', '收件箱', {
       availabilityFilter: AVAILABILITY_FILTER.REMAINING,
       filter: { op: LEAF_OP.EMPTY, field: FILTER_FIELD.PROJECT },
@@ -317,10 +328,6 @@ export function builtinPerspectives(): Perspective[] {
     builtin('tags', '标签', {
       groupBy: [GROUP_KEY.TAG],
       sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
-    }),
-    builtin('forecast', '预测', {
-      groupBy: [GROUP_KEY.DUE_DATE],
-      sortBy: [{ field: SORT_FIELD.DUE_DATE, dir: SORT_DIR.ASC }],
     }),
     builtin('flagged', '旗标', {
       filter: { op: LEAF_OP.IS, field: FILTER_FIELD.FLAGGED, value: true },
@@ -339,11 +346,6 @@ export function builtinPerspectives(): Perspective[] {
       showCompleted: true,
       groupBy: [GROUP_KEY.DUE_DATE],
       sortBy: [{ field: SORT_FIELD.ADDED_AT, dir: SORT_DIR.DESC }],
-    }),
-    builtin('predicted', '预计', {
-      availabilityFilter: AVAILABILITY_FILTER.REMAINING,
-      groupBy: [GROUP_KEY.DUE_DATE],
-      sortBy: [{ field: SORT_FIELD.DUE_DATE, dir: SORT_DIR.ASC }],
     }),
   ]
 }

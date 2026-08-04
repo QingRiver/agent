@@ -1,6 +1,8 @@
 import type {
   EntityRow,
   EntityRowOf,
+  ForecastSignalOptions,
+  ForecastStripKey,
   GroupType,
   GtdCommand,
   GtdDocument,
@@ -18,15 +20,20 @@ import {
   AVAILABILITY_FILTER,
   builtinPerspectives,
   computeNextReviewDate,
+  DEFAULT_FORECAST_SIGNALS,
+  DEFAULT_FORECAST_STRIP,
   dematerialize,
   EXPLICIT_STATUS,
   FILTER_FIELD,
   FOLDER_STATUS,
+  FORECAST_STRIP_ORDER,
   GROUP_TYPE,
   LEAF_OP,
   materialize,
+  normalizeDeferDue,
   orderBetween,
   parse,
+  PLANNED_MODE,
   reindexSiblings,
   REPEAT_ANCHOR,
   REVIEW_INTERVAL,
@@ -41,11 +48,14 @@ import {
 } from '@agent/gtd'
 import { GtdApi } from '@apis/gtd-api'
 import { atom, getDefaultStore } from 'jotai'
+import { isContiguousStripSelection, toggleForecastStrip } from '../gtd/forecast-strip'
 import { applyLocal as applyRows, loadRows, mergeChanges, persistAndQueue } from '../gtd/row-store'
 import { SyncEngine } from '../gtd/sync-engine'
 
 const DUE_SOON_MS = 2 * 24 * 60 * 60 * 1000
 const LS_SELECTION = 'gtd.selection'
+const LS_FORECAST_STRIP = 'gtd.forecastStrip'
+const LS_FORECAST_SIGNALS = 'gtd.forecastSignals'
 
 // ---------------- mutation/command 构造小工具 ----------------
 
@@ -121,7 +131,7 @@ function readSelection(): GtdSelection {
   try {
     const raw = localStorage.getItem(LS_SELECTION)
     if (!raw)
-      return { kind: 'perspective', id: 'inbox' }
+      return { kind: 'perspective', id: 'forecast' }
     const parsed = JSON.parse(raw) as GtdSelection
     if (parsed && typeof parsed === 'object' && 'kind' in parsed && 'id' in parsed)
       return parsed
@@ -129,12 +139,66 @@ function readSelection(): GtdSelection {
   catch {
     // ignore
   }
-  return { kind: 'perspective', id: 'inbox' }
+  return { kind: 'perspective', id: 'forecast' }
 }
 
 function writeSelection(sel: GtdSelection): void {
   try {
     localStorage.setItem(LS_SELECTION, JSON.stringify(sel))
+  }
+  catch {
+    // ignore
+  }
+}
+
+function readForecastStrip(): ForecastStripKey[] {
+  try {
+    const raw = localStorage.getItem(LS_FORECAST_STRIP)
+    if (!raw)
+      return [...DEFAULT_FORECAST_STRIP]
+    const parsed = JSON.parse(raw) as ForecastStripKey[]
+    const allowed = new Set(FORECAST_STRIP_ORDER)
+    if (
+      Array.isArray(parsed)
+      && parsed.length > 0
+      && parsed.every(k => allowed.has(k as typeof FORECAST_STRIP_ORDER[number]))
+      && isContiguousStripSelection(parsed)
+    ) {
+      return parsed
+    }
+  }
+  catch {
+    // ignore
+  }
+  return [...DEFAULT_FORECAST_STRIP]
+}
+
+function writeForecastStrip(strip: ForecastStripKey[]): void {
+  try {
+    localStorage.setItem(LS_FORECAST_STRIP, JSON.stringify(strip))
+  }
+  catch {
+    // ignore
+  }
+}
+
+function readForecastSignals(): ForecastSignalOptions {
+  try {
+    const raw = localStorage.getItem(LS_FORECAST_SIGNALS)
+    if (!raw)
+      return { ...DEFAULT_FORECAST_SIGNALS }
+    const parsed = JSON.parse(raw) as Partial<ForecastSignalOptions>
+    return { ...DEFAULT_FORECAST_SIGNALS, ...parsed }
+  }
+  catch {
+    // ignore
+  }
+  return { ...DEFAULT_FORECAST_SIGNALS }
+}
+
+function writeForecastSignals(signals: ForecastSignalOptions): void {
+  try {
+    localStorage.setItem(LS_FORECAST_SIGNALS, JSON.stringify(signals))
   }
   catch {
     // ignore
@@ -280,6 +344,8 @@ export class GtdStore {
   static readonly rowsAtom = atom<EntityRow[]>([])
   static readonly rowStoreAtom = atom(get => new RowStore(get(GtdStore.rowsAtom)))
   static readonly selectionAtom = atom<GtdSelection>(readSelection())
+  static readonly forecastStripAtom = atom<ForecastStripKey[]>(readForecastStrip())
+  static readonly forecastSignalsAtom = atom<ForecastSignalOptions>(readForecastSignals())
   static readonly selectedTaskIdAtom = atom<string | null>(null)
   static readonly selectedProjectIdAtom = atom<string | null>(null)
   static readonly isLoadingAtom = atom(false)
@@ -363,6 +429,34 @@ export class GtdStore {
       s.set(GtdStore.selectedProjectIdAtom, sel.id)
     else
       s.set(GtdStore.selectedProjectIdAtom, null)
+  }
+
+  /** 五段条点击：连续多选扩展/端点收缩 */
+  static toggleForecastStripSegment(clicked: ForecastStripKey): void {
+    const s = GtdStore.store()
+    const next = toggleForecastStrip(s.get(GtdStore.forecastStripAtom), clicked)
+    s.set(GtdStore.forecastStripAtom, next)
+    writeForecastStrip(next)
+  }
+
+  static patchForecastSignals(patch: Partial<ForecastSignalOptions>): void {
+    const s = GtdStore.store()
+    const next = { ...s.get(GtdStore.forecastSignalsAtom), ...patch }
+    s.set(GtdStore.forecastSignalsAtom, next)
+    writeForecastSignals(next)
+  }
+
+  /** Planned：none / rolling / on(+date) */
+  static setTaskPlanned(
+    taskId: string,
+    mode: typeof PLANNED_MODE[keyof typeof PLANNED_MODE],
+    date: string | null = null,
+  ): void {
+    if (mode === PLANNED_MODE.ON) {
+      GtdStore.patchTask(taskId, { plannedMode: mode, plannedDate: date })
+      return
+    }
+    GtdStore.patchTask(taskId, { plannedMode: mode, plannedDate: null })
   }
 
   static selectTask(taskId: string | null): void {
@@ -460,6 +554,8 @@ export class GtdStore {
         groupType: null,
         deferDate: null,
         dueDate: null,
+        plannedMode: PLANNED_MODE.NONE,
+        plannedDate: null,
         completedAt: null,
         droppedAt: null,
         flagged: false,
@@ -492,6 +588,8 @@ export class GtdStore {
         groupType: null,
         deferDate: null,
         dueDate: null,
+        plannedMode: PLANNED_MODE.NONE,
+        plannedDate: null,
         completedAt: null,
         droppedAt: null,
         flagged: false,
@@ -529,6 +627,8 @@ export class GtdStore {
         groupType: null,
         deferDate: null,
         dueDate: null,
+        plannedMode: PLANNED_MODE.NONE,
+        plannedDate: null,
         completedAt: null,
         droppedAt: null,
         flagged: false,
@@ -705,7 +805,22 @@ export class GtdStore {
         throw new Error('按推迟日重复的任务不能清空推迟日期')
       // 行模型 task 无 tagIds/attachmentIds；repeatRule/repeatRuleId 由 setTaskRepeat 维护
       const { id: _id, tagIds: _t, attachmentIds: _a, repeatRuleId: _rid, ...rest } = patch
-      return [upsertMut('task', taskId, { ...rest, updatedAt: nowIso() })]
+      const datePatch: { deferDate?: string | null, dueDate?: string | null } = {}
+      if (Object.hasOwn(patch, 'deferDate'))
+        datePatch.deferDate = patch.deferDate ?? null
+      if (Object.hasOwn(patch, 'dueDate'))
+        datePatch.dueDate = patch.dueDate ?? null
+      const dates = Object.keys(datePatch).length > 0
+        ? normalizeDeferDue(
+            { deferDate: task.data.deferDate, dueDate: task.data.dueDate },
+            datePatch,
+          )
+        : null
+      return [upsertMut('task', taskId, {
+        ...rest,
+        ...(dates ?? {}),
+        updatedAt: nowIso(),
+      })]
     })
   }
 
@@ -818,7 +933,7 @@ export class GtdStore {
     GtdStore.applyLocal(() => [deleteMut('perspective', id)])
     const selection = s.get(GtdStore.selectionAtom)
     if (selection.kind === 'perspective' && selection.id === id)
-      GtdStore.setSelection({ kind: 'perspective', id: 'inbox' })
+      GtdStore.setSelection({ kind: 'perspective', id: 'forecast' })
   }
 
   // ---------- Projects ----------
