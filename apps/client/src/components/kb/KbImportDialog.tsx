@@ -1,68 +1,57 @@
-import type { KbNodeRow } from '@apis/kb-api'
-import { KB_DEFAULT_ID, KbApi } from '@apis/kb-api'
+import { KbApi } from '@apis/kb-api'
 import { Button } from '@components/ui/button'
+import { DirStore } from '@stores/dir-store'
 import { KbStore } from '@stores/kb-store'
 import { useAtomValue } from 'jotai'
 import { ClipboardPaste, FolderUp, Loader2, Upload, X } from 'lucide-react'
 import { useState } from 'react'
 
-interface KbImportDialogProps {
+export interface KbImportDialogProps {
   open: boolean
+  /** 挂载点（project/dir id）；由侧栏节点操作打开时绑定，不可改 */
+  mountDirId: string
+  /** 展示用路径（如 `wiki/项目管理`） */
+  mountPath: string
   onClose: () => void
 }
 
 type Tab = 'files' | 'zip' | 'text'
 
-interface FolderPick {
-  id: string | null
-  path: string
-}
-
-/** 把 kb_nodes（全是文件夹）按 parentId 链 walk 成 {id, path} 列表，根级 id=null */
-function flattenFolders(nodes: KbNodeRow[]): FolderPick[] {
-  const byId = new Map(nodes.map(n => [n.id, n]))
-  const pathOf = (id: string): string => {
-    const segs: string[] = []
-    let cur: string | null = id
-    const guard = new Set<string>()
-    while (cur != null && !guard.has(cur)) {
-      guard.add(cur)
-      const n = byId.get(cur)
-      if (!n)
-        break
-      segs.unshift(n.name)
-      cur = n.parentId
-    }
-    return segs.join('/')
-  }
-  return [{ id: null, path: '根级' }, ...nodes.map(n => ({ id: n.id, path: pathOf(n.id) }))]
-}
-
 interface ResultRow {
   docId: string
   name: string
-  vdir: string | null
+  mountPath: string | null
   skipped: boolean
 }
 
-export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
+export function KbImportDialog({ open, mountDirId, mountPath, onClose }: KbImportDialogProps) {
   'use no memo'
 
-  const nodes = useAtomValue(KbStore.nodesAtom)
-  const folders = flattenFolders(nodes)
+  const dirs = useAtomValue(DirStore.dirsAtom)
+  const pathById = new Map(dirs.map((d) => {
+    const segs: string[] = []
+    let cur: string | null = d.id
+    const byId = new Map(dirs.map(x => [x.id, x]))
+    const guard = new Set<string>()
+    while (cur != null && !guard.has(cur)) {
+      guard.add(cur)
+      const row = byId.get(cur)
+      if (!row)
+        break
+      segs.unshift(row.name)
+      cur = row.parentId
+    }
+    return [d.id, segs.join('/')] as const
+  }))
 
   const [tab, setTab] = useState<Tab>('files')
-  const [parentNodeId, setParentNodeId] = useState<string | null>(null)
   const [tags, setTags] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [results, setResults] = useState<ResultRow[]>([])
 
-  // files tab
   const [fileList, setFileList] = useState<FileList | null>(null)
-  // zip tab
   const [zipFile, setZipFile] = useState<File | null>(null)
-  // text tab
   const [textName, setTextName] = useState('')
   const [textContent, setTextContent] = useState('')
 
@@ -83,6 +72,12 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
     setTextContent('')
   }
 
+  function toMountPath(id: string | null | undefined): string | null {
+    if (id == null)
+      return null
+    return pathById.get(id) ?? mountPath
+  }
+
   async function onImport() {
     setError(null)
     setResults([])
@@ -92,7 +87,6 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
     const selectedZip = zipFile
     const trimmedTextName = textName.trim()
     const tagArr = parseTags()
-    const parent = parentNodeId ?? undefined
 
     if (tab === 'files' && selected.length === 0) {
       setError('请选择文件')
@@ -119,51 +113,52 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
     try {
       if (tab === 'files') {
         if (zips.length === 1) {
-          // 误在「上传」里选了 zip → 自动走目录还原路径
-          const items = await KbApi.ingestZip(KB_DEFAULT_ID, zips[0]!, {
+          const items = await KbApi.ingestZip(zips[0]!, {
+            mountDirId,
             ...(tagArr ? { tags: tagArr } : {}),
           })
           setResults(items.map(i => ({
             docId: i.docId,
             name: i.name,
-            vdir: i.vdir,
+            mountPath: toMountPath(i.mountDirId),
             skipped: i.skipped,
           })))
         }
         else {
-          const items = await KbApi.ingestFiles(KB_DEFAULT_ID, others, {
-            ...(parent != null ? { parentNodeId: parent } : {}),
+          const items = await KbApi.ingestFiles(others, {
+            mountDirId,
             ...(tagArr ? { tags: tagArr } : {}),
           })
           setResults(items.map(i => ({
             docId: i.docId,
             name: i.name,
-            vdir: i.vdir,
+            mountPath: toMountPath(i.mountDirId),
             skipped: i.skipped,
           })))
         }
       }
       else if (tab === 'zip') {
-        const items = await KbApi.ingestZip(KB_DEFAULT_ID, selectedZip!, {
+        const items = await KbApi.ingestZip(selectedZip!, {
+          mountDirId,
           ...(tagArr ? { tags: tagArr } : {}),
         })
         setResults(items.map(i => ({
           docId: i.docId,
           name: i.name,
-          vdir: i.vdir,
+          mountPath: toMountPath(i.mountDirId),
           skipped: i.skipped,
         })))
       }
       else {
-        const doc = await KbApi.ingestText(KB_DEFAULT_ID, {
+        const doc = await KbApi.ingestText({
           content: textContent,
           name: trimmedTextName,
-          ...(parent != null ? { parentNodeId: parent } : {}),
+          mountDirId,
           ...(tagArr ? { tags: tagArr } : {}),
         })
-        setResults([{ docId: doc.id, name: doc.name, vdir: doc.vdir, skipped: false }])
+        setResults([{ docId: doc.id, name: doc.name, mountPath: toMountPath(doc.mountDirId), skipped: false }])
       }
-      await KbStore.refresh()
+      await Promise.all([KbStore.refresh(), DirStore.refresh()])
     }
     catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -203,7 +198,14 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xl">
         <div className="flex items-center justify-between border-b border-border p-3">
-          <span className="text-sm font-medium text-foreground">引入文档 → 草稿</span>
+          <div className="min-w-0">
+            <span className="text-sm font-medium text-foreground">引入文档 → 草稿</span>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground" title={mountPath}>
+              挂载到
+              {' '}
+              <span className="text-foreground">{mountPath}</span>
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -237,21 +239,6 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
 
         <div className="flex-1 space-y-3 overflow-y-auto p-3">
           <label className="block">
-            <span className="mb-1 block text-xs text-muted-foreground">目标文件夹</span>
-            <select
-              value={parentNodeId ?? ''}
-              onChange={e => setParentNodeId(e.target.value || null)}
-              className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:border-border"
-            >
-              {folders.map(f => (
-                <option key={f.id ?? 'root'} value={f.id ?? ''}>
-                  {f.path}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block">
             <span className="mb-1 block text-xs text-muted-foreground">标签（逗号分隔，可选）</span>
             <input
               value={tags}
@@ -279,7 +266,7 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
           {tab === 'zip' && (
             <label className="block">
               <span className="mb-1 block text-xs text-muted-foreground">
-                选择 zip（仅导入包内 .md/.markdown，按目录还原，最多 5 层；目标文件夹不生效）
+                选择 zip（仅导入包内 .md/.markdown；目录还原到当前挂载点下，最多 5 层）
               </span>
               <input
                 type="file"
@@ -332,7 +319,7 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
                   className="flex items-center gap-2 rounded-md border border-border bg-muted px-2 py-1.5"
                 >
                   <span className="min-w-0 flex-1 truncate text-sm text-foreground">{r.name}</span>
-                  {r.vdir && <span className="truncate text-xs text-muted-foreground">{r.vdir}</span>}
+                  {r.mountPath && <span className="truncate text-xs text-muted-foreground">{r.mountPath}</span>}
                   {r.skipped && <span className="text-xs text-amber-700 dark:text-amber-400">跳过</span>}
                   <button
                     type="button"

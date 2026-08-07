@@ -3,16 +3,11 @@ import type {
   KbBatchCommit,
   KbCommit,
   KbCreateDoc,
-  KbCreateNode,
   KbDraftUpdate,
-  KbGetDocByVdir,
   KbIngestText,
   KbListDocsRequest,
-  KbListNodesRequest,
   KbMetaUpdate,
-  KbMoveNode,
   KbQueryRequest,
-  KbRenameNode,
 } from '../../shared/kb'
 import type { AppEnv, AuthUser } from '../types'
 import { Buffer } from 'node:buffer'
@@ -21,65 +16,17 @@ import { notFound, requireOwned } from '../http/errors'
 import { KbService } from '../service/kb'
 
 export class KbHandlers {
-  // ---------- 文件夹节点 ----------
-
-  static async listNodes(c: Context<AppEnv>, user: AuthUser, req: KbListNodesRequest) {
-    const nodes = await KbService.listNodes(KbService.resolveKbId(req.kbId), user.id)
-    return c.json({ nodes })
-  }
-
-  static async createNode(c: Context<AppEnv>, user: AuthUser, req: KbCreateNode) {
-    const node = await KbService.createFolder({
-      kbId: KbService.resolveKbId(req.kbId),
-      ...(req.parentId != null ? { parentId: req.parentId } : {}),
-      name: req.name,
-      owner: user.id,
-    })
-    return c.json({ node })
-  }
-
-  static async renameNode(c: Context<AppEnv>, user: AuthUser, id: string, req: KbRenameNode) {
-    const existing = requireOwned(await KbService.getNode(id), user.id)
-    const node = await KbService.renameFolder(existing.kbId, id, req.name)
-    if (!node)
-      notFound()
-    return c.json({ node })
-  }
-
-  static async moveNode(c: Context<AppEnv>, user: AuthUser, id: string, req: KbMoveNode) {
-    const existing = requireOwned(await KbService.getNode(id), user.id)
-    const node = await KbService.moveFolder(existing.kbId, id, req.parentId)
-    if (!node)
-      notFound()
-    return c.json({ node })
-  }
-
-  static async moveNodeToRoot(c: Context<AppEnv>, user: AuthUser, id: string) {
-    const existing = requireOwned(await KbService.getNode(id), user.id)
-    const node = await KbService.moveFolderToRoot(existing.kbId, id)
-    if (!node)
-      notFound()
-    return c.json({ node })
-  }
-
-  static async deleteNode(c: Context<AppEnv>, user: AuthUser, id: string) {
-    const existing = requireOwned(await KbService.getNode(id), user.id)
-    if (!(await KbService.deleteFolder(existing.kbId, id)))
-      notFound()
-    return c.json({ ok: true })
-  }
-
   // ---------- 文档草稿 ----------
 
   static async listDocs(c: Context<AppEnv>, user: AuthUser, q: KbListDocsRequest) {
     // 默认只看自己的；显式 owner 也只能等于当前用户
     const owner = q.owner != null && q.owner === user.id ? q.owner : user.id
     const docs = await KbService.listDocs({
-      kbId: KbService.resolveKbId(q.kbId),
+      userId: user.id,
       owner,
+      ...(q.dirId != null ? { dirId: q.dirId } : {}),
+      ...(q.includeDescendants === true ? { includeDescendants: true } : {}),
       ...(q.tagId != null ? { tagId: q.tagId } : {}),
-      ...(q.vdirPrefix != null ? { vdirPrefix: q.vdirPrefix } : {}),
-      ...(q.parentNodeId !== undefined ? { parentNodeId: q.parentNodeId } : {}),
     })
     return c.json({ docs })
   }
@@ -89,22 +36,11 @@ export class KbHandlers {
     return c.json({ doc })
   }
 
-  static async getDocByVdir(c: Context<AppEnv>, user: AuthUser, req: KbGetDocByVdir) {
-    const doc = requireOwned(
-      await KbService.getDocByVdir({
-        kbId: KbService.resolveKbId(req.kbId),
-        vdir: req.vdir,
-        owner: user.id,
-      }),
-      user.id,
-    )
-    return c.json({ doc })
-  }
-
   static async createDoc(c: Context<AppEnv>, user: AuthUser, req: KbCreateDoc) {
     const doc = await KbService.createDraft({
-      kbId: KbService.resolveKbId(req.kbId),
-      ...(req.parentNodeId != null ? { parentNodeId: req.parentNodeId } : {}),
+      userId: user.id,
+      ...(req.kbId != null ? { kbId: req.kbId } : {}),
+      ...(req.mountDirId != null ? { mountDirId: req.mountDirId } : {}),
       name: req.name,
       ...(req.content != null ? { content: req.content } : {}),
       owner: user.id,
@@ -160,13 +96,10 @@ export class KbHandlers {
     if (!files.length)
       throw new HTTPException(400, { message: 'files is required' })
 
-    const kbId = typeof body.kbId === 'string' ? body.kbId : undefined
-    if (!kbId)
-      throw new HTTPException(400, { message: 'kbId is required' })
     const tags = typeof body.tags === 'string'
       ? body.tags.split(',').map(t => t.trim()).filter(Boolean)
       : undefined
-    const parentNodeId = typeof body.parentNodeId === 'string' ? body.parentNodeId : undefined
+    const mountDirId = typeof body.mountDirId === 'string' ? body.mountDirId : undefined
 
     const fileData = await Promise.all(files.map(async f => ({
       buffer: Buffer.from(await f.arrayBuffer()),
@@ -174,9 +107,9 @@ export class KbHandlers {
     })))
 
     const items = await KbService.ingestFiles({
-      kbId: KbService.resolveKbId(kbId),
+      userId: user.id,
       files: fileData,
-      ...(parentNodeId ? { parentNodeId } : {}),
+      ...(mountDirId ? { mountDirId } : {}),
       owner: user.id,
       ...(tags ? { tags } : {}),
     })
@@ -190,17 +123,16 @@ export class KbHandlers {
     if (!(file instanceof File))
       throw new HTTPException(400, { message: 'file (zip) is required' })
 
-    const kbId = typeof body.kbId === 'string' ? body.kbId : undefined
-    if (!kbId)
-      throw new HTTPException(400, { message: 'kbId is required' })
     const tags = typeof body.tags === 'string'
       ? body.tags.split(',').map(t => t.trim()).filter(Boolean)
       : undefined
+    const mountDirId = typeof body.mountDirId === 'string' ? body.mountDirId : undefined
 
     const zip = Buffer.from(await file.arrayBuffer())
     const items = await KbService.ingestFromZip({
-      kbId: KbService.resolveKbId(kbId),
+      userId: user.id,
       zip,
+      ...(mountDirId ? { mountDirId } : {}),
       owner: user.id,
       ...(tags ? { tags } : {}),
     })
@@ -209,10 +141,10 @@ export class KbHandlers {
 
   static async ingestText(c: Context<AppEnv>, user: AuthUser, req: KbIngestText) {
     const doc = await KbService.ingestText({
-      kbId: KbService.resolveKbId(req.kbId),
+      userId: user.id,
       content: req.content,
       name: req.name,
-      ...(req.parentNodeId != null ? { parentNodeId: req.parentNodeId } : {}),
+      ...(req.mountDirId != null ? { mountDirId: req.mountDirId } : {}),
       owner: user.id,
       tags: req.tags,
     })
@@ -222,8 +154,8 @@ export class KbHandlers {
   // ---------- 检索 ----------
 
   static async query(c: Context<AppEnv>, _user: AuthUser, req: KbQueryRequest) {
-    const { query, kbId, ...opts } = req
-    const result = await KbService.query(query, kbId, opts)
+    const { query, ...opts } = req
+    const result = await KbService.query(query, opts.kbId, opts)
     return c.json({ result })
   }
 }

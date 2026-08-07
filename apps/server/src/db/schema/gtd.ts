@@ -4,71 +4,28 @@ import { bigint, boolean, check, doublePrecision, index, integer, jsonb, pgTable
 import { tags } from './tags'
 
 // ───────────────────────────── gtd_* ─────────────────────────────
-// 行级统一模型：EntityRow 贯通 Client/wire/PG（同形）。六业务表 + sync 辅助；
-// 标签目录迁至公共 tags 表；task_tags/attachments 冗余 user_id 便于按用户 pull。
-// 1:1 复刻 OmniFocus。日期列 timestamptz（defer/due 业务核心）；sort_order float8 + fractional indexing。
-// 自/互引用 FK 在迁移中 DEFERRABLE INITIALLY DEFERRED。sync_id 每用户单调（mode:'number' <2^53）。
-
-/** 文件夹树（项目容器）。parent_id 自引用。 */
-export const gtdFolders = pgTable('gtd_folders', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  parentId: text('parent_id').references((): AnyPgColumn => gtdFolders.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  sortOrder: doublePrecision('sort_order').notNull(),
-  status: text('status').notNull().default('active'),
-  syncId: bigint('sync_id', { mode: 'number' }),
-  deleted: boolean('deleted').notNull().default(false),
-  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }),
-}, table => [
-  index('idx_gtd_folders_user_parent').on(table.userId, table.parentId),
-  index('idx_gtd_folders_user_sort').on(table.userId, table.sortOrder),
-  index('idx_gtd_folders_user_syncid').on(table.userId, table.syncId),
-  // 同级不重名 (user_id, COALESCE(parent_id,''), name) 见迁移 uniq_gtd_folders_parent_name
-  // parent_id 自引用 FK DEFERRABLE INITIALLY DEFERRED 见迁移
-])
+// 行级统一模型：EntityRow 贯通 Client/wire/PG（同形）。project/folder 已并入 dirs 表（删除
+// gtd_projects/gtd_folders）；标签目录在公共 tags 表；task_tags/attachments 冗余 user_id 便于按用户 pull。
+// 1:1 复刻 OmniFocus（去 project facet：type 下沉 task groupType、status 改批量 command、review/defaults/flagged/note 删）。
+// 日期列 timestamptz（defer/due 业务核心）；sort_order float8 + fractional indexing。
+// 自引用 FK（parent_id）在迁移中 DEFERRABLE INITIALLY DEFERRED。sync_id 每用户单调（mode:'number' <2^53）。
+// task 归属：mount_dir_id 权威（FK 软引用 dirs，落库时 server 校验存活）；project_id = walkToProjectRoot(mount_dir_id)
+// 派生的冗余缓存（server 维护、非 LWW，纯缓存列无 FK）。
 
 /**
- * 项目（sequential/parallel/singleAction）。review jsonb 1:1 整体存，
- * next_review_date 为普通列（mapper 单点双写 review jsonb + 此列；
- * generated column 对 timestamptz 不可行：text::timestamptz not immutable）。
- */
-export const gtdProjects = pgTable('gtd_projects', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  folderId: text('folder_id').references(() => gtdFolders.id, { onDelete: 'set null' }),
-  name: text('name').notNull(),
-  note: text('note'),
-  sortOrder: doublePrecision('sort_order').notNull(),
-  status: text('status').notNull().default('active'),
-  type: text('type').notNull(),
-  defaultDeferOffset: integer('default_defer_offset'),
-  defaultDueOffset: integer('default_due_offset'),
-  defaultTagIds: text('default_tag_ids').array(),
-  flagged: boolean('flagged').notNull().default(false),
-  review: jsonb('review').notNull().default({}),
-  nextReviewDate: timestamp('next_review_date', { withTimezone: true, mode: 'date' }),
-  syncId: bigint('sync_id', { mode: 'number' }),
-  deleted: boolean('deleted').notNull().default(false),
-  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }),
-}, table => [
-  index('idx_gtd_projects_user_folder').on(table.userId, table.folderId),
-  index('idx_gtd_projects_user_status_sort').on(table.userId, table.status, table.sortOrder),
-  index('idx_gtd_projects_user_review').on(table.userId).where(sql`next_review_date IS NOT NULL`),
-  index('idx_gtd_projects_user_syncid').on(table.userId, table.syncId),
-])
-
-/**
- * 任务（核心，高频查询）。parent_id 自引用（action group），project_id 互引用。
- * Inbox 语义 CHECK：无 project 必无 parent；子任务继承父 project 靠应用层 + invariant。
+ * 任务（核心，高频查询）。parent_id 自引用（action group）。
+ * 归属权威 = `mount_dir_id`（挂载到 dirs 节点；null=Inbox）；`project_id` = walkToProjectRoot(mount_dir_id)
+ * 派生冗余缓存（server 落库 stamp 填充，非 LWW，无 FK）。子任务默认继承父 mount_dir_id（应用层 + invariant）。
+ * Inbox 语义 CHECK：无 mount 必无 parent；有 parent 必有 mount。
  * repeat_rule 1:1 内联 jsonb（非独立表，少 join；规则随 task 走，不独立成表）。
  */
 export const gtdTasks = pgTable('gtd_tasks', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(),
-  projectId: text('project_id').references(() => gtdProjects.id, { onDelete: 'cascade' }),
+  /** 冗余缓存 = walkToProjectRoot(mount_dir_id)；server 维护、非 LWW；纯缓存列无 FK */
+  projectId: text('project_id'),
+  /** 权威挂载列 → dirs.id；null=Inbox。无 FK（dir 存活由 server stamp 校验修正，避免跨事务 FK 死锁） */
+  mountDirId: text('mount_dir_id'),
   parentId: text('parent_id').references((): AnyPgColumn => gtdTasks.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   note: text('note'),
@@ -91,6 +48,7 @@ export const gtdTasks = pgTable('gtd_tasks', {
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }),
 }, table => [
   index('idx_gtd_tasks_user_proj_parent_sort').on(table.userId, table.projectId, table.parentId, table.sortOrder),
+  index('idx_gtd_tasks_user_mount').on(table.userId, table.mountDirId),
   index('idx_gtd_tasks_user_status').on(table.userId, table.status),
   index('idx_gtd_tasks_user_parent').on(table.userId, table.parentId),
   index('idx_gtd_tasks_user_due').on(table.userId, table.dueDate).where(sql`due_date IS NOT NULL`),
@@ -98,7 +56,8 @@ export const gtdTasks = pgTable('gtd_tasks', {
   index('idx_gtd_tasks_user_flagged').on(table.userId).where(sql`flagged = true`),
   index('idx_gtd_tasks_user_syncid').on(table.userId, table.syncId),
   // BRIN (user_id, created_at) 时序排序/分页见迁移 idx_gtd_tasks_user_created_brin
-  check('ck_gtd_tasks_inbox', sql`((project_id IS NULL AND parent_id IS NULL) OR project_id IS NOT NULL)`),
+  // parent_id 自引用 FK DEFERRABLE INITIALLY DEFERRED 见迁移
+  check('ck_gtd_tasks_inbox', sql`((mount_dir_id IS NULL AND parent_id IS NULL) OR mount_dir_id IS NOT NULL)`),
 ])
 
 /** 任务-标签多对多。tag_id → 公共 tags；冗余 user_id 便于按用户 pull；自有 sync_id/deleted。 */
@@ -181,8 +140,6 @@ export const gtdSyncMutations = pgTable('gtd_sync_mutations', {
 
 // ───────────────────────────── DB row 类型（drizzle inferSelect） ─────────────────────────────
 export type TaskRow = typeof gtdTasks.$inferSelect
-export type FolderRow = typeof gtdFolders.$inferSelect
-export type ProjectRow = typeof gtdProjects.$inferSelect
 export type TagRow = typeof tags.$inferSelect
 export type PerspectiveRow = typeof gtdPerspectives.$inferSelect
 export type AttachmentRow = typeof gtdAttachments.$inferSelect

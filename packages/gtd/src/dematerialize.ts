@@ -35,12 +35,6 @@ export function dematerialize(doc: GtdDocument, userId = 'u1'): EntityRow[] {
       })
     }
   }
-  for (const p of doc.projects) {
-    rows.push({ entity: 'project', id: p.id, userId, syncId: 0, deleted: false, data: p } as unknown as EntityRow)
-  }
-  for (const f of doc.folders) {
-    rows.push({ entity: 'folder', id: f.id, userId, syncId: 0, deleted: false, data: f } as unknown as EntityRow)
-  }
   for (const t of doc.tags) {
     rows.push({ entity: 'tag', id: t.id, userId, syncId: 0, deleted: false, data: t } as unknown as EntityRow)
   }

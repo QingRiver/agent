@@ -4,7 +4,6 @@ import { setPayloadByDocId } from '@agent/kb'
 import { and, eq, inArray, not } from 'drizzle-orm'
 import { db } from '../db/drizzle'
 import {
-  gtdProjects,
   gtdSyncClocks,
   gtdTasks,
   gtdTaskTags,
@@ -91,14 +90,18 @@ export class TagsService {
     const id = randomUUID()
     const ts = new Date()
     try {
-      await db.insert(tags).values({
-        id,
-        userId,
-        name: args.name,
-        color: args.color ?? null,
-        deleted: false,
-        createdAt: ts,
-        updatedAt: ts,
+      await db.transaction(async (tx) => {
+        const [syncId] = await allocateSyncIds(userId, 1, tx)
+        await tx.insert(tags).values({
+          id,
+          userId,
+          name: args.name,
+          color: args.color ?? null,
+          syncId,
+          deleted: false,
+          createdAt: ts,
+          updatedAt: ts,
+        })
       })
     }
     catch (err) {
@@ -286,21 +289,7 @@ export class TagsService {
       }
     }
 
-    const projects = await tx
-      .select({ id: gtdProjects.id, defaultTagIds: gtdProjects.defaultTagIds })
-      .from(gtdProjects)
-      .where(and(eq(gtdProjects.userId, userId), eq(gtdProjects.deleted, false)))
-
-    for (const project of projects) {
-      const current = project.defaultTagIds ?? []
-      if (!current.includes(tagId))
-        continue
-      const next = current.filter(id => id !== tagId)
-      await tx
-        .update(gtdProjects)
-        .set({ defaultTagIds: next, updatedAt: new Date() })
-        .where(eq(gtdProjects.id, project.id))
-    }
+    // Phase 1：project defaultTagIds 已弃用（project facet 全删），不再清理
 
     return { docIds: linkedDocs.map(d => d.id) }
   }
@@ -424,22 +413,7 @@ export class TagsService {
         }
       }
 
-      const projects = await tx
-        .select({ id: gtdProjects.id, defaultTagIds: gtdProjects.defaultTagIds })
-        .from(gtdProjects)
-        .where(and(eq(gtdProjects.userId, userId), eq(gtdProjects.deleted, false)))
-      for (const project of projects) {
-        const current = project.defaultTagIds ?? []
-        if (!current.includes(tagId))
-          continue
-        await tx
-          .update(gtdProjects)
-          .set({
-            defaultTagIds: current.filter(id => id !== tagId),
-            updatedAt: new Date(),
-          })
-          .where(eq(gtdProjects.id, project.id))
-      }
+      // Phase 1：project defaultTagIds 已弃用（project facet 全删），不再清理
 
       await TagsService.softDeleteTag(userId, tagId, tx)
     })

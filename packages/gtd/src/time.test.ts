@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { NOW } from './__tests__/fixtures'
-import { formatZonedYmd, inTimeSlice, isWallClockUnlocked, relativeDayToSlice, relativeToSlice, startOfZonedYmd } from './time'
+import { formatZonedYmd, formatZonedYmdHm, inTimeSlice, isWallClockUnlocked, relativeDayToSlice, relativeToSlice, startOfZonedYmd } from './time'
 
 const YESTERDAY = '2026-07-15T10:00:00.000Z'
 const TOMORROW = '2026-07-17T10:00:00.000Z'
@@ -46,6 +46,12 @@ describe('timeSlice geometry', () => {
     const shanghaiMidnight = new Date('2026-07-22T16:00:00.000Z')
     expect(formatZonedYmd(shanghaiMidnight, 'Asia/Shanghai')).toBe('2026-07-23')
     expect(formatZonedYmd(shanghaiMidnight, 'UTC')).toBe('2026-07-22')
+  })
+
+  it('formatZonedYmdHm：到分钟且按时区', () => {
+    const instant = new Date('2026-08-08T15:59:00.000Z')
+    expect(formatZonedYmdHm(instant, 'Asia/Shanghai')).toBe('2026-08-08 23:59')
+    expect(formatZonedYmdHm(instant, 'UTC')).toBe('2026-08-08 15:59')
   })
 
   it('startOfZonedYmd round-trip', () => {

@@ -1,5 +1,5 @@
-import type { KbDoc, KbDocSummary, KbNodeRow } from '@apis/kb-api'
-import { KB_DEFAULT_ID, KbApi } from '@apis/kb-api'
+import type { KbDoc, KbDocSummary } from '@apis/kb-api'
+import { KbApi } from '@apis/kb-api'
 import { TagsStore } from '@stores/tags-store'
 import { atom, getDefaultStore } from 'jotai'
 
@@ -54,9 +54,14 @@ function toSummary(doc: KbDoc): KbDocSummary {
 /** 文档编辑区互斥操作；同一时刻只跑一个 */
 export type KbMutationKind = 'save' | 'commit' | 'delete' | 'updateMeta'
 
+/**
+ * KB 客户端 store（Phase 2：仅文档）。
+ *
+ * 文件夹树已并入统一 dirs，归 DirStore（dirTreeAtom）；本 store 不再持有 nodes。
+ * 文档列表按 mountDirId 挂到 DirStore 树渲染（组件层组装）；refresh 只拉 docs。
+ */
 export class KbStore {
   static readonly userIdAtom = atom<string | undefined>(undefined)
-  static readonly nodesAtom = atom<KbNodeRow[]>([])
   static readonly docsAtom = atom<KbDocSummary[]>([])
   static readonly tagsAtom = TagsStore.tagsAtom
   static readonly selectedTagIdsAtom = atom<string[]>(readSelectedTagIds())
@@ -111,7 +116,6 @@ export class KbStore {
 
   static reset(): void {
     const store = KbStore.store()
-    store.set(KbStore.nodesAtom, [])
     store.set(KbStore.docsAtom, [])
     TagsStore.reset()
     store.set(KbStore.activeIdAtom, null)
@@ -158,12 +162,10 @@ export class KbStore {
     store.set(KbStore.isLoadingAtom, true)
     store.set(KbStore.errorAtom, null)
     try {
-      const [nodes, docs] = await Promise.all([
-        KbApi.listNodes(KB_DEFAULT_ID),
-        KbApi.listDocs(KB_DEFAULT_ID),
+      const [docs] = await Promise.all([
+        KbApi.listDocs(),
         TagsStore.refreshTags(),
       ])
-      store.set(KbStore.nodesAtom, nodes)
       store.set(KbStore.docsAtom, docs)
 
       const prevActive = store.get(KbStore.activeIdAtom)
@@ -190,18 +192,6 @@ export class KbStore {
     store.set(KbStore.localDirtyAtom, false)
     writeLs(LS_ACTIVE, id)
     void KbStore.loadDoc(id)
-  }
-
-  /** 按虚拟路径打开文档（引文深链 path=） */
-  static async selectByVdir(vdir: string): Promise<boolean> {
-    try {
-      const doc = await KbApi.getDocByVdir(KB_DEFAULT_ID, vdir)
-      KbStore.select(doc.id)
-      return true
-    }
-    catch {
-      return false
-    }
   }
 
   static async loadDoc(id: string): Promise<void> {
@@ -262,12 +252,12 @@ export class KbStore {
     await KbStore.mutate('save', () => KbStore.saveDraftBody())
   }
 
-  /** 更新元数据（tagIds/parentNodeId/name/visibility/pinned） */
+  /** 更新元数据（tagIds/mountDirId/name/visibility/pinned） */
   static async updateMeta(
     id: string,
     patch: {
       tagIds?: string[]
-      parentNodeId?: string | null
+      mountDirId?: string | null
       name?: string
       visibility?: string
       pinned?: boolean
@@ -322,7 +312,7 @@ export class KbStore {
 
   static async createBlank(): Promise<KbDoc> {
     const store = KbStore.store()
-    const doc = await KbApi.createDoc(KB_DEFAULT_ID, { name: '未命名', content: '' })
+    const doc = await KbApi.createDoc({ name: '未命名', content: '' })
     store.set(KbStore.docsAtom, prev => [toSummary(doc), ...prev])
     store.set(KbStore.activeIdAtom, doc.id)
     store.set(KbStore.activeDocAtom, doc)
@@ -344,72 +334,8 @@ export class KbStore {
     })
   }
 
-  // ---------- 文件夹节点 ----------
-
-  static async createFolder(name: string, parentId?: string | null): Promise<KbNodeRow> {
-    const store = KbStore.store()
-    store.set(KbStore.errorAtom, null)
-    try {
-      const node = await KbApi.createNode(KB_DEFAULT_ID, { name, parentId })
-      store.set(KbStore.nodesAtom, prev => [...prev, node])
-      return node
-    }
-    catch (e) {
-      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
-      throw e
-    }
-  }
-
-  static async renameFolder(id: string, name: string): Promise<void> {
-    const store = KbStore.store()
-    store.set(KbStore.errorAtom, null)
-    try {
-      const node = await KbApi.renameNode(id, name)
-      store.set(KbStore.nodesAtom, prev => prev.map(n => n.id === id ? node : n))
-      // 子树 vdir 已变：刷新文档摘要
-      const docs = await KbApi.listDocs(KB_DEFAULT_ID)
-      store.set(KbStore.docsAtom, docs)
-    }
-    catch (e) {
-      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
-      throw e
-    }
-  }
-
-  static async moveFolder(id: string, parentId: string | null): Promise<void> {
-    const store = KbStore.store()
-    store.set(KbStore.errorAtom, null)
-    try {
-      const node = parentId == null
-        ? await KbApi.moveNodeToRoot(id)
-        : await KbApi.moveNode(id, parentId)
-      store.set(KbStore.nodesAtom, prev => prev.map(n => n.id === id ? node : n))
-      const docs = await KbApi.listDocs(KB_DEFAULT_ID)
-      store.set(KbStore.docsAtom, docs)
-    }
-    catch (e) {
-      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
-      throw e
-    }
-  }
-
-  /** 删文件夹：子文件夹 cascade；子文档 parent 变 null（根级） */
-  static async removeFolder(id: string): Promise<void> {
-    const store = KbStore.store()
-    store.set(KbStore.errorAtom, null)
-    try {
-      await KbApi.deleteNode(id)
-      // 整棵节点树与文档 parent/vdir 可能批量变化，直接全量刷新
-      await KbStore.refresh()
-    }
-    catch (e) {
-      store.set(KbStore.errorAtom, e instanceof Error ? e.message : String(e))
-      throw e
-    }
-  }
-
-  /** 文档改挂载父级（跨文件夹 / 移根）；不做同级排序 */
-  static async moveDoc(id: string, parentNodeId: string | null): Promise<void> {
-    await KbStore.updateMeta(id, { parentNodeId })
+  /** 文档改挂载 dir（跨文件夹 / 移 Inbox）；零 Qdrant 写（认 id，setPayload 同步） */
+  static async moveDoc(id: string, mountDirId: string | null): Promise<void> {
+    await KbStore.updateMeta(id, { mountDirId })
   }
 }

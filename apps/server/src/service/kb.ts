@@ -15,10 +15,12 @@ import {
   retrieveAndRerank,
   setPayloadByDocId,
 } from '@agent/kb'
-import { and, desc, eq, inArray, isNull, not, or, sql } from 'drizzle-orm'
+import { dirVdir } from '@agent/project'
+import { and, desc, eq, inArray, isNull, not, sql } from 'drizzle-orm'
 import JSZip from 'jszip'
 import { db } from '../db/drizzle'
-import { kbChunks, kbDocTags, kbDocuments, kbNodes } from '../db/schema'
+import { dirs, kbChunks, kbDocTags, kbDocuments } from '../db/schema'
+import { ProjectService } from './project'
 import { TagsService } from './tags'
 
 const SUPPORTED_EXTENSIONS = new Set(['.md', '.markdown', '.docx', '.pdf', '.html', '.htm', '.txt'])
@@ -38,24 +40,17 @@ export class KbConflictError extends Error {
 
 export type KbIndexingStatus = 'draft' | 'indexing' | 'completed' | 'error'
 
-export interface KbNodeRow {
-  id: string
-  kbId: string
-  parentId: string | null
-  name: string
-  owner: string | null
-  visibility: string
-  sortOrder: number
-  createdAt: number
-  updatedAt: number
-}
-
 export interface KbDocSummary {
   id: string
+  userId: string
   kbId: string
-  parentNodeId: string | null
+  /** 挂载 dirs.id（权威位置）；null=未归位/Inbox */
+  mountDirId: string | null
+  /** 冗余缓存 = walkToProjectRoot(mountDirId)；Inbox→null */
+  projectId: string | null
   name: string
   filename: string | null
+  /** 派生展示缓存 = dirVdir(mountDir.vdir, name)；folder 改名/移动后可能软过期，client 据 dir 树重派生 */
   vdir: string | null
   tagIds: string[]
   owner: string | null
@@ -86,7 +81,7 @@ export interface KbIngestFile {
 export interface KbIngestResultItem {
   docId: string
   name: string
-  vdir: string | null
+  mountDirId: string | null
   skipped: boolean
 }
 
@@ -94,12 +89,6 @@ export interface KbIngestResultItem {
 
 function now(): number {
   return Date.now()
-}
-
-/** pg 唯一约束冲突（含 23505）。drizzle 把底层错误包在 cause 里。 */
-function isUniqueViolation(err: unknown): boolean {
-  const any = err as { code?: string, cause?: { code?: string } }
-  return any?.code === '23505' || any?.cause?.code === '23505'
 }
 
 /**
@@ -136,25 +125,13 @@ function sanitizeTextContent(text: string): string {
   return text.replaceAll('\0', '')
 }
 
-function nodeRow(row: typeof kbNodes.$inferSelect): KbNodeRow {
-  return {
-    id: row.id,
-    kbId: row.kbId,
-    parentId: row.parentId,
-    name: row.name,
-    owner: row.owner,
-    visibility: row.visibility,
-    sortOrder: row.sortOrder,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  }
-}
-
 function docSummary(row: typeof kbDocuments.$inferSelect): KbDocSummary {
   return {
     id: row.id,
+    userId: row.userId,
     kbId: row.kbId,
-    parentNodeId: row.parentNodeId,
+    mountDirId: row.mountDirId,
+    projectId: row.projectId,
     name: row.name,
     filename: row.filename,
     vdir: row.vdir,
@@ -209,292 +186,127 @@ async function attachTagIdsToDoc<T extends { id: string }>(
 }
 
 /**
- * 由父链 walk 派生 vdir。nodesMap 为该 kb 全部文件夹（id→row）。
- * 根级文档（parentId=null）→ vdir = name。
+ * 取挂载 dir 的 vdir + projectId（认 id 不认 name）。
+ * mountDirId null 或不在/非本人 → null（视为 Inbox：vdir=name，projectId=null）。
+ * 用 dirs.projectId 缓存（= walkToProjectRoot 派生，server 维护），无需再 walk。
  */
-function computeVdir(
-  parentId: string | null,
-  name: string,
-  nodesMap: Map<string, typeof kbNodes.$inferSelect>,
-): string {
-  const segments: string[] = []
-  const guard = new Set<string>()
-  let cur = parentId
-  while (cur != null && !guard.has(cur)) {
-    guard.add(cur)
-    const node = nodesMap.get(cur)
-    if (!node)
-      break
-    segments.unshift(node.name)
-    cur = node.parentId
-  }
-  segments.push(name)
-  return segments.join('/')
+async function loadMount(
+  mountDirId: string | null,
+  userId: string,
+): Promise<{ vdir: string, projectId: string } | null> {
+  if (!mountDirId)
+    return null
+  const [row] = await db
+    .select({ vdir: dirs.vdir, projectId: dirs.projectId })
+    .from(dirs)
+    .where(and(eq(dirs.id, mountDirId), eq(dirs.userId, userId), eq(dirs.deleted, false)))
+    .limit(1)
+  return row ? { vdir: row.vdir, projectId: row.projectId } : null
 }
 
-// ---------- kb_id 解析 ----------
+/**
+ * 收集 rootDirId 子树全部 live dir id（含自身）—— listDocs includeDescendants 用。
+ * 内存 BFS（结构靠 parentId 链，无 ltree）；只取 id/parentId 两列。
+ */
+async function subtreeMountDirIds(userId: string, rootDirId: string): Promise<Set<string>> {
+  const rows = await db
+    .select({ id: dirs.id, parentId: dirs.parentId })
+    .from(dirs)
+    .where(and(eq(dirs.userId, userId), eq(dirs.deleted, false)))
+  const childrenOf = new Map<string, string[]>()
+  for (const r of rows) {
+    if (r.parentId == null)
+      continue
+    const list = childrenOf.get(r.parentId) ?? []
+    list.push(r.id)
+    childrenOf.set(r.parentId, list)
+  }
+  const ids = new Set<string>()
+  const stack = [rootDirId]
+  while (stack.length > 0) {
+    const cur = stack.pop()!
+    if (ids.has(cur))
+      continue
+    ids.add(cur)
+    for (const child of childrenOf.get(cur) ?? [])
+      stack.push(child)
+  }
+  return ids
+}
+
+// ---------- KB service ----------
 
 export class KbService {
-  static resolveKbId(kbId?: string): string {
-    return kbId?.trim() || env.KB_COLLECTION
-  }
+  // ---------- vdir 重算（PG only，零 Qdrant 写） ----------
 
-  // ---------- 文件夹树 ----------
-
-  static async listNodes(kbId: string, owner?: string): Promise<KbNodeRow[]> {
-    const rows = await db
-      .select()
-      .from(kbNodes)
-      .where(and(eq(kbNodes.kbId, kbId), ...(owner != null ? [eq(kbNodes.owner, owner)] : [])))
-      .orderBy(kbNodes.sortOrder, kbNodes.name)
-    return rows.map(nodeRow)
-  }
-
-  static async getNode(id: string): Promise<KbNodeRow | null> {
-    const rows = await db.select().from(kbNodes).where(eq(kbNodes.id, id)).limit(1)
-    return rows[0] ? nodeRow(rows[0]) : null
-  }
-
-  static async createFolder(args: {
-    kbId: string
-    parentId?: string | null
-    name: string
-    owner?: string
-  }): Promise<KbNodeRow> {
-    const id = randomUUID()
-    const ts = now()
-    await db.insert(kbNodes).values({
-      id,
-      kbId: args.kbId,
-      parentId: args.parentId ?? null,
-      name: args.name,
-      owner: args.owner ?? null,
-      visibility: 'private',
-      permissions: {},
-      sortOrder: 0,
-      createdAt: ts,
-      updatedAt: ts,
-    })
-    const row = await KbService.getNode(id)
-    return row!
-  }
-
-  /**
-   * 重命名文件夹：改 name，一次 vdir 重算 + Qdrant setPayload。
-   * 同级重名 → KbConflictError(409)。
-   */
-  static async renameFolder(kbId: string, nodeId: string, name: string): Promise<KbNodeRow | null> {
-    const ts = now()
-    let updated: (typeof kbNodes.$inferSelect)[]
-    try {
-      updated = await db
-        .update(kbNodes)
-        .set({ updatedAt: ts, name })
-        .where(and(eq(kbNodes.id, nodeId), eq(kbNodes.kbId, kbId)))
-        .returning()
-    }
-    catch (err) {
-      if (isUniqueViolation(err))
-        throw new KbConflictError('a folder with the same name already exists at the target location')
-      throw err
-    }
-    if (!updated[0])
-      return null
-    await KbService.recomputeAllVdirs(kbId)
-    return nodeRow(updated[0])
-  }
-
-  /**
-   * 移动文件夹到指定父下。newParentId 若为自身或其后代 → KbConflictError。
-   * 同级重名 → KbConflictError(409)。
-   */
-  static async moveFolder(
-    kbId: string,
-    nodeId: string,
-    parentId: string,
-  ): Promise<KbNodeRow | null> {
-    await KbService.assertNoFolderCycle(kbId, nodeId, parentId)
-    const ts = now()
-    let updated: (typeof kbNodes.$inferSelect)[]
-    try {
-      updated = await db
-        .update(kbNodes)
-        .set({ updatedAt: ts, parentId })
-        .where(and(eq(kbNodes.id, nodeId), eq(kbNodes.kbId, kbId)))
-        .returning()
-    }
-    catch (err) {
-      if (isUniqueViolation(err))
-        throw new KbConflictError('a folder with the same name already exists at the target location')
-      throw err
-    }
-    if (!updated[0])
-      return null
-    await KbService.recomputeAllVdirs(kbId)
-    return nodeRow(updated[0])
-  }
-
-  /** 移动文件夹到根级（parent_id = null）。同级重名 → KbConflictError(409)。 */
-  static async moveFolderToRoot(kbId: string, nodeId: string): Promise<KbNodeRow | null> {
-    const ts = now()
-    let updated: (typeof kbNodes.$inferSelect)[]
-    try {
-      updated = await db
-        .update(kbNodes)
-        .set({ updatedAt: ts, parentId: null })
-        .where(and(eq(kbNodes.id, nodeId), eq(kbNodes.kbId, kbId)))
-        .returning()
-    }
-    catch (err) {
-      if (isUniqueViolation(err))
-        throw new KbConflictError('a folder with the same name already exists at the target location')
-      throw err
-    }
-    if (!updated[0])
-      return null
-    await KbService.recomputeAllVdirs(kbId)
-    return nodeRow(updated[0])
-  }
-
-  static async renameNode(kbId: string, nodeId: string, name: string): Promise<KbNodeRow | null> {
-    return KbService.renameFolder(kbId, nodeId, name)
-  }
-
-  static async moveNode(
-    kbId: string,
-    nodeId: string,
-    newParentId: string,
-  ): Promise<KbNodeRow | null> {
-    return KbService.moveFolder(kbId, nodeId, newParentId)
-  }
-
-  static async deleteFolder(kbId: string, nodeId: string): Promise<boolean> {
-    // 级联删子文件夹；其下文档 parent_node_id 被 SET NULL（变根级），重算 vdir + Qdrant。
-    const deleted = await db
-      .delete(kbNodes)
-      .where(and(eq(kbNodes.id, nodeId), eq(kbNodes.kbId, kbId)))
-      .returning({ id: kbNodes.id })
-    if (!deleted.length)
-      return false
-    await KbService.recomputeAllVdirs(kbId)
-    return true
-  }
-
-  /** newParentId 不能是 nodeId 自身或其任意后代。 */
-  private static async assertNoFolderCycle(
-    kbId: string,
-    nodeId: string,
-    newParentId: string | null,
-  ): Promise<void> {
-    if (newParentId == null)
-      return
-    if (newParentId === nodeId)
-      throw new KbConflictError('cannot move folder under itself')
-    const nodes = await db
-      .select({ id: kbNodes.id, parentId: kbNodes.parentId })
-      .from(kbNodes)
-      .where(eq(kbNodes.kbId, kbId))
-    const parentOf = new Map(nodes.map(n => [n.id, n.parentId]))
-    let cur: string | null = newParentId
-    const guard = new Set<string>()
-    while (cur != null && !guard.has(cur)) {
-      if (cur === nodeId)
-        throw new KbConflictError('cannot move folder under its descendant')
-      guard.add(cur)
-      cur = parentOf.get(cur) ?? null
-    }
-  }
-
-  /**
-   * 沿相对路径段 find-or-create 文件夹链，返回末位文件夹 id。
-   * 相对路径 → node id 映射的核心预处理。
-   */
-  static async ensureNodePath(args: {
-    kbId: string
-    segments: string[]
-    owner?: string
-  }): Promise<string | null> {
-    const { kbId, segments, owner } = args
-    let parentId: string | null = null
-    for (const seg of segments) {
-      if (!seg || seg === '.')
-        continue
-      if (seg === '..')
-        throw new KbConflictError(`invalid folder segment '..' (path escape not allowed)`)
-      const existing = await db
-        .select()
-        .from(kbNodes)
-        .where(and(
-          eq(kbNodes.kbId, kbId),
-          parentId == null ? isNull(kbNodes.parentId) : eq(kbNodes.parentId, parentId),
-          eq(kbNodes.name, seg),
-        ))
-        .limit(1)
-      if (existing[0]) {
-        parentId = existing[0].id
-        continue
-      }
-      const created = await KbService.createFolder({
-        kbId,
-        parentId,
-        name: seg,
-        ...(owner != null ? { owner } : {}),
-      })
-      parentId = created.id
-    }
-    return parentId
-  }
-
-  // ---------- vdir 重算 ----------
-
-  /** 重算单个文档的 vdir 缓存（parent/name 变更时）。 */
+  /** 重算单个文档的 vdir 展示缓存（mountDir/name 变更时）。不触 Qdrant（vdir 不进 payload）。 */
   static async recomputeVdir(docId: string): Promise<string | null> {
-    const doc = await db.select().from(kbDocuments).where(eq(kbDocuments.id, docId)).limit(1)
-    if (!doc[0])
+    const [doc] = await db.select().from(kbDocuments).where(eq(kbDocuments.id, docId)).limit(1)
+    if (!doc)
       return null
-    const nodes = await db.select().from(kbNodes).where(eq(kbNodes.kbId, doc[0].kbId))
-    const nodesMap = new Map(nodes.map(n => [n.id, n]))
-    const vdir = computeVdir(doc[0].parentNodeId, doc[0].name, nodesMap)
+    const mount = await loadMount(doc.mountDirId, doc.userId)
+    const vdir = dirVdir(mount?.vdir ?? null, doc.name)
     await db.update(kbDocuments).set({ vdir }).where(eq(kbDocuments.id, docId))
     return vdir
   }
 
   /**
-   * 重算整个 kb 所有文档的 vdir 缓存（文件夹结构性变更时），
-   * 并对已提交文档同步 Qdrant payload.vdir（不重 embed）。
+   * 重算某用户全部文档的 vdir 展示缓存（维护用，folder 改名/移动后可调刷新软过期缓存）。
+   * 纯 PG，不触 Qdrant。folder 操作走 ProjectService，dirs.vdir 已即时翻新；此方法补刷 docs.vdir。
    */
-  static async recomputeAllVdirs(kbId: string): Promise<void> {
-    const nodes = await db.select().from(kbNodes).where(eq(kbNodes.kbId, kbId))
-    const nodesMap = new Map(nodes.map(n => [n.id, n]))
-    const docs = await db.select({
-      id: kbDocuments.id,
-      parentNodeId: kbDocuments.parentNodeId,
-      name: kbDocuments.name,
-      indexingStatus: kbDocuments.indexingStatus,
-    }).from(kbDocuments).where(eq(kbDocuments.kbId, kbId))
+  static async recomputeAllVdirs(userId: string): Promise<void> {
+    const dirRows = await db
+      .select({ id: dirs.id, vdir: dirs.vdir })
+      .from(dirs)
+      .where(and(eq(dirs.userId, userId), eq(dirs.deleted, false)))
+    const vdirByDir = new Map(dirRows.map(d => [d.id, d.vdir]))
+    const docs = await db
+      .select({ id: kbDocuments.id, mountDirId: kbDocuments.mountDirId, name: kbDocuments.name })
+      .from(kbDocuments)
+      .where(eq(kbDocuments.userId, userId))
     if (!docs.length)
       return
-    const next = docs.map(d => ({
-      id: d.id,
-      vdir: computeVdir(d.parentNodeId, d.name, nodesMap),
-      indexingStatus: d.indexingStatus,
+    await Promise.all(docs.map((d) => {
+      const mv = d.mountDirId ? (vdirByDir.get(d.mountDirId) ?? null) : null
+      const vdir = dirVdir(mv, d.name)
+      return db.update(kbDocuments).set({ vdir }).where(eq(kbDocuments.id, d.id))
     }))
-    // 只更新 vdir 缓存，不动 updatedAt——文件夹结构性变更不算内容编辑，否则会冲掉"最近修改"排序
-    await Promise.all(next.map(d =>
-      db.update(kbDocuments).set({ vdir: d.vdir }).where(eq(kbDocuments.id, d.id)),
-    ))
-    await Promise.all(
-      next
-        .filter(d => d.indexingStatus === 'completed')
-        .map(d => setPayloadByDocId(kbId, d.id, { vdir: d.vdir })),
-    )
+  }
+
+  /**
+   * 跨 project move 后同步子树挂载文档的 projectId（PG + Qdrant setPayload，不重 embed）。
+   * 由 ProjectService.move 跨 project 时调用；project 域不直接触 Qdrant，经此委托。
+   */
+  static async syncProjectIdForSubtree(
+    userId: string,
+    subtreeDirIds: string[],
+    newProjectId: string,
+  ): Promise<void> {
+    if (!subtreeDirIds.length)
+      return
+    // PG：刷 kb_documents.projectId（mountDirId ∈ 子树）
+    await db
+      .update(kbDocuments)
+      .set({ projectId: newProjectId })
+      .where(and(eq(kbDocuments.userId, userId), inArray(kbDocuments.mountDirId, subtreeDirIds)))
+    // Qdrant：已索引文档 setPayload({project_id})（id 稳定，不重 embed）
+    const docs = await db
+      .select({ id: kbDocuments.id, kbId: kbDocuments.kbId })
+      .from(kbDocuments)
+      .where(and(
+        eq(kbDocuments.userId, userId),
+        inArray(kbDocuments.mountDirId, subtreeDirIds),
+        eq(kbDocuments.indexingStatus, 'completed'),
+      ))
+    await Promise.all(docs.map(d => setPayloadByDocId(d.kbId, d.id, { project_id: newProjectId })))
   }
 
   // ---------- 草稿 CRUD ----------
 
   static async createDraft(args: {
-    kbId: string
-    parentNodeId?: string | null
+    userId: string
+    kbId?: string
+    mountDirId?: string | null
     name: string
     content?: string
     owner?: string
@@ -506,21 +318,24 @@ export class KbService {
     const ts = now()
     const content = args.content ?? ''
     const draftHash = hashContent(content)
-    const nodes = await db.select().from(kbNodes).where(eq(kbNodes.kbId, args.kbId))
-    const nodesMap = new Map(nodes.map(n => [n.id, n]))
-    const vdir = computeVdir(args.parentNodeId ?? null, args.name, nodesMap)
+    const mountDirId = args.mountDirId ?? null
+    const mount = await loadMount(mountDirId, args.userId)
+    const vdir = dirVdir(mount?.vdir ?? null, args.name)
+    const projectId = mount?.projectId ?? null
 
     await db.insert(kbDocuments).values({
       id,
-      kbId: args.kbId,
-      parentNodeId: args.parentNodeId ?? null,
+      userId: args.userId,
+      kbId: args.kbId ?? 'kb_default',
+      mountDirId,
+      projectId,
       name: args.name,
       filename: args.filename ?? null,
       vdir,
       content,
       draftHash,
       publishedHash: null,
-      owner: args.owner ?? null,
+      owner: args.owner ?? args.userId,
       summary: null,
       keywords: [],
       toc: [],
@@ -534,14 +349,15 @@ export class KbService {
       indexedAt: null,
     })
 
-    if (args.owner) {
+    if (args.owner ?? args.userId) {
+      const owner = args.owner ?? args.userId
       if (args.tagIds?.length) {
-        await TagsService.setDocTagIds(id, args.owner, args.tagIds)
+        await TagsService.setDocTagIds(id, owner, args.tagIds)
       }
       else if (args.tags?.length) {
-        const nameMap = await TagsService.ensureByNames(args.owner, args.tags)
+        const nameMap = await TagsService.ensureByNames(owner, args.tags)
         const tagIds = args.tags.map(n => nameMap.get(n)).filter((tid): tid is string => !!tid)
-        await TagsService.setDocTagIds(id, args.owner, tagIds)
+        await TagsService.setDocTagIds(id, owner, tagIds)
       }
     }
 
@@ -554,50 +370,30 @@ export class KbService {
     return rows[0] ? attachTagIdsToDoc(docFull(rows[0])) : null
   }
 
-  /** 按精确 vdir 查找文档（引文深链 path=） */
-  static async getDocByVdir(args: {
-    kbId: string
-    vdir: string
-    owner?: string
-  }): Promise<KbDoc | null> {
-    const conditions = [
-      eq(kbDocuments.kbId, args.kbId),
-      eq(kbDocuments.vdir, args.vdir),
-    ]
-    if (args.owner != null)
-      conditions.push(eq(kbDocuments.owner, args.owner))
-    const rows = await db
-      .select()
-      .from(kbDocuments)
-      .where(and(...conditions))
-      .limit(1)
-    return rows[0] ? attachTagIdsToDoc(docFull(rows[0])) : null
-  }
-
   static async listDocs(args: {
-    kbId: string
+    userId: string
     tagId?: string
     owner?: string
-    vdirPrefix?: string
-    parentNodeId?: string | null
+    /** 仅列挂载到该 dir 的文档 */
+    dirId?: string
+    /** 含子树全部 dir 下文档（dirId 必填） */
+    includeDescendants?: boolean
   }): Promise<KbDocSummary[]> {
-    const conditions = [eq(kbDocuments.kbId, args.kbId)]
+    const conditions = [eq(kbDocuments.userId, args.userId)]
     if (args.owner != null)
       conditions.push(eq(kbDocuments.owner, args.owner))
     if (args.tagId != null) {
       conditions.push(sql`exists (select 1 from kb_doc_tags where doc_id = ${kbDocuments.id} and tag_id = ${args.tagId})`)
     }
-    if (args.vdirPrefix != null) {
-      const prefix = args.vdirPrefix
-      // 精确前缀：vdir = prefix 或 vdir LIKE 'prefix/%'，避免 notes 命中 notes2
-      conditions.push(or(eq(kbDocuments.vdir, prefix), sql`${kbDocuments.vdir} LIKE ${`${prefix}/%`}`)!)
-    }
-    if (args.parentNodeId !== undefined) {
-      conditions.push(
-        args.parentNodeId == null
-          ? isNull(kbDocuments.parentNodeId)
-          : eq(kbDocuments.parentNodeId, args.parentNodeId),
-      )
+    if (args.dirId != null) {
+      if (args.includeDescendants) {
+        const ids = await subtreeMountDirIds(args.userId, args.dirId)
+        conditions.push(inArray(kbDocuments.mountDirId, [...ids]))
+      }
+      else {
+        // dirId 精确 + Inbox(null) 不命中（Inbox 文档无 mountDirId，不走 dir 过滤）
+        conditions.push(eq(kbDocuments.mountDirId, args.dirId))
+      }
     }
 
     const rows = await db
@@ -644,29 +440,49 @@ export class KbService {
   }
 
   static async updateMeta(id: string, patch: KbMetaUpdate): Promise<KbDoc | null> {
+    const before = await db
+      .select()
+      .from(kbDocuments)
+      .where(eq(kbDocuments.id, id))
+      .limit(1)
+    if (!before[0])
+      return null
+    const prev = before[0]
+    const mountChanged = patch.mountDirId !== undefined && patch.mountDirId !== prev.mountDirId
+    const nameChanged = patch.name != null && patch.name !== prev.name
+
+    // mount 变 → 重 stamp projectId（认 id；不重 embed，稍后 setPayload 同步）
+    const newMount = mountChanged ? await loadMount(patch.mountDirId ?? null, prev.userId) : null
     const updated = await db
       .update(kbDocuments)
       .set({
         updatedAt: now(),
-        ...(patch.parentNodeId !== undefined ? { parentNodeId: patch.parentNodeId } : {}),
+        ...(patch.mountDirId !== undefined ? { mountDirId: patch.mountDirId } : {}),
         ...(patch.name != null ? { name: patch.name } : {}),
         ...(patch.owner !== undefined ? { owner: patch.owner } : {}),
         ...(patch.visibility != null ? { visibility: patch.visibility } : {}),
         ...(patch.pinned != null ? { pinned: patch.pinned } : {}),
+        ...(mountChanged ? { projectId: newMount?.projectId ?? null } : {}),
       })
       .where(eq(kbDocuments.id, id))
       .returning()
-    if (!updated[0])
+    let row = updated[0]
+    if (!row)
       return null
 
-    let row = updated[0]
-    // 位置/名称变 → 重算 vdir + Qdrant setPayload 同步（不重 embed）
-    if (patch.parentNodeId !== undefined || patch.name != null) {
+    // 位置/名称变 → 重算 vdir 展示缓存（PG only）
+    if (mountChanged || nameChanged) {
       const vdir = await KbService.recomputeVdir(id)
       if (vdir != null)
         row = { ...row, vdir }
-      if (row.indexingStatus === 'completed')
-        await setPayloadByDocId(row.kbId, id, { vdir: row.vdir })
+      // doc move（mountDirId 变）→ setPayload({mount_dir_id, project_id})，不重 embed
+      // name 改 → 零 Qdrant 写（id 稳定，vdir 不进 payload）
+      if (mountChanged && row.indexingStatus === 'completed') {
+        await setPayloadByDocId(row.kbId, id, {
+          mount_dir_id: row.mountDirId,
+          project_id: row.projectId,
+        })
+      }
     }
 
     if (patch.tagIds !== undefined && row.owner) {
@@ -680,19 +496,19 @@ export class KbService {
 
   static async removeDoc(id: string): Promise<boolean> {
     // 先取 chunk point ids，删 Qdrant；再删 PG 行（级联删 kb_chunks）。
-    const doc = await db
+    const [doc] = await db
       .select({ kbId: kbDocuments.kbId })
       .from(kbDocuments)
       .where(eq(kbDocuments.id, id))
       .limit(1)
-    if (!doc[0])
+    if (!doc)
       return false
     const chunks = await db
       .select({ id: kbChunks.id })
       .from(kbChunks)
       .where(eq(kbChunks.docId, id))
     if (chunks.length)
-      await deleteByPointIds(doc[0].kbId, chunks.map(c => c.id))
+      await deleteByPointIds(doc.kbId, chunks.map(c => c.id))
     const deleted = await db
       .delete(kbDocuments)
       .where(eq(kbDocuments.id, id))
@@ -759,7 +575,7 @@ export class KbService {
     doc: typeof kbDocuments.$inferSelect,
     skipEnrich: boolean,
   ): Promise<void> {
-    const kbId = doc.kbId
+    const kbId = doc.kbId // 全局 collection，仅标签用；Qdrant 忽略
     const id = doc.id
     const content = doc.content
 
@@ -782,7 +598,6 @@ export class KbService {
         filename: doc.filename ?? doc.name,
         content_hash: doc.draftHash ?? '',
         markdown: cleaned,
-        ...(doc.vdir ? { vdir: doc.vdir } : {}),
         ...(doc.owner ? { owner: doc.owner } : {}),
       })
       summary = enriched.summary ?? null
@@ -799,12 +614,13 @@ export class KbService {
       await deleteByPointIds(kbId, oldChunks.map(c => c.id))
     await db.delete(kbChunks).where(eq(kbChunks.docId, id))
 
-    // 4. embed + upsert（point id = chunk uuid，payload 含当前 vdir/owner/tag_ids）
+    // 4. embed + upsert（point id = chunk uuid，payload 含 mount_dir_id/project_id/owner/tag_ids）
     if (chunks.length) {
       await embedAndUpsert({
         kbId,
         docId: id,
-        ...(doc.vdir != null ? { vdir: doc.vdir } : {}),
+        ...(doc.mountDirId != null ? { mountDirId: doc.mountDirId } : {}),
+        ...(doc.projectId != null ? { projectId: doc.projectId } : {}),
         ...(doc.owner != null ? { owner: doc.owner } : {}),
         ...(tagIds.length ? { tagIds } : {}),
         chunks,
@@ -844,9 +660,9 @@ export class KbService {
   // ---------- 引入（markitdown → 草稿，不自动提交） ----------
 
   static async ingestFiles(args: {
-    kbId: string
+    userId: string
     files: KbIngestFile[]
-    parentNodeId?: string | null
+    mountDirId?: string | null
     owner?: string
     tags?: string[]
   }): Promise<KbIngestResultItem[]> {
@@ -869,26 +685,27 @@ export class KbService {
       const markdown = sanitizeTextContent(
         await loadDocumentMarkdown(file.buffer, file.filename),
       )
-      const cleaned = cleanMarkdown(markdown, { sourceDocId: 'pending', ...(args.parentNodeId ? {} : {}) })
+      const cleaned = cleanMarkdown(markdown, { sourceDocId: 'pending' })
       const draftHash = hashContent(cleaned)
       const name = path.parse(file.filename).name
+      const mountDirId = args.mountDirId ?? null
 
-      // 去重：同 parent+name 已存在
-      const existing = await db
+      // 去重：同 mountDirId+name 已存在
+      const [existing] = await db
         .select()
         .from(kbDocuments)
         .where(and(
-          eq(kbDocuments.kbId, args.kbId),
+          eq(kbDocuments.userId, args.userId),
           eq(kbDocuments.name, name),
-          args.parentNodeId == null
-            ? isNull(kbDocuments.parentNodeId)
-            : eq(kbDocuments.parentNodeId, args.parentNodeId),
+          mountDirId == null
+            ? isNull(kbDocuments.mountDirId)
+            : eq(kbDocuments.mountDirId, mountDirId),
         ))
         .limit(1)
 
-      if (existing[0]) {
-        if (existing[0].draftHash === draftHash) {
-          results.push({ docId: existing[0].id, name, vdir: existing[0].vdir, skipped: true })
+      if (existing) {
+        if (existing.draftHash === draftHash) {
+          results.push({ docId: existing.id, name, mountDirId: existing.mountDirId, skipped: true })
           continue
         }
         // 内容变了：更新草稿，回退 status
@@ -896,34 +713,36 @@ export class KbService {
           content: cleaned,
           draftHash,
           filename: file.filename,
-          indexingStatus: existing[0].indexingStatus === 'completed' ? 'draft' : existing[0].indexingStatus,
+          indexingStatus: existing.indexingStatus === 'completed' ? 'draft' : existing.indexingStatus,
           updatedAt: now(),
-        }).where(eq(kbDocuments.id, existing[0].id))
-        results.push({ docId: existing[0].id, name, vdir: existing[0].vdir, skipped: false })
+        }).where(eq(kbDocuments.id, existing.id))
+        results.push({ docId: existing.id, name, mountDirId: existing.mountDirId, skipped: false })
         continue
       }
 
       const doc = await KbService.createDraft({
-        kbId: args.kbId,
-        ...(args.parentNodeId != null ? { parentNodeId: args.parentNodeId } : {}),
+        userId: args.userId,
+        ...(mountDirId != null ? { mountDirId } : {}),
         name,
         content: cleaned,
         ...(args.owner != null ? { owner: args.owner } : {}),
         ...(args.tags ? { tags: args.tags } : {}),
         filename: file.filename,
       })
-      results.push({ docId: doc.id, name, vdir: doc.vdir, skipped: false })
+      results.push({ docId: doc.id, name, mountDirId: doc.mountDirId, skipped: false })
     }
     return results
   }
 
   /**
-   * 从 zip 压缩包导入草稿。按 zip 内相对路径还原目录树（挂根级），最多 {@link INGEST_PATH_MAX_DEPTH} 层子目录。
+   * 从 zip 压缩包导入草稿。按 zip 内相对路径还原目录树（挂到 mountDirId 下），最多 {@link INGEST_PATH_MAX_DEPTH} 层子目录。
    * 含 `..` 逃逸段的 entry 跳过（防 zip slip），不中断整批。
+   * 目录 find-or-create 走 ProjectService.createDir（复用统一 dirs 树，不再插 kb_nodes）。
    */
   static async ingestFromZip(args: {
-    kbId: string
+    userId: string
     zip: Buffer
+    mountDirId?: string | null
     owner?: string
     tags?: string[]
   }): Promise<KbIngestResultItem[]> {
@@ -955,18 +774,14 @@ export class KbService {
         const buffer = Buffer.from(await entry.async('uint8array'))
         const folderSegments = segments.slice(0, -1)
         const filename = segments[segments.length - 1]!
-        const parentNodeId = folderSegments.length
-          ? (await KbService.ensureNodePath({
-              kbId: args.kbId,
-              segments: folderSegments,
-              ...(args.owner != null ? { owner: args.owner } : {}),
-            })) ?? null
-          : null
+        const baseMountDirId = folderSegments.length
+          ? (await KbService.ensureDirPath(args.userId, args.mountDirId ?? null, folderSegments))
+          : args.mountDirId ?? null
 
         const items = await KbService.ingestFiles({
-          kbId: args.kbId,
+          userId: args.userId,
           files: [{ buffer, filename }],
-          ...(parentNodeId != null ? { parentNodeId } : {}),
+          ...(baseMountDirId != null ? { mountDirId: baseMountDirId } : {}),
           ...(args.owner != null ? { owner: args.owner } : {}),
           ...(args.tags ? { tags: args.tags } : {}),
         })
@@ -983,18 +798,50 @@ export class KbService {
     return results
   }
 
+  /**
+   * 沿相对路径段 find-or-create dir 链（复用统一 dirs 树），返回末位 dir id。
+   * find 走 dirs 直查；create 走 ProjectService.createDir（kind=dir，须有 project 祖先）。
+   * baseParentId 须为已存在 dir/project id；null 时首段无法 create（dir 不可为根）→ 抛错。
+   */
+  private static async ensureDirPath(
+    userId: string,
+    baseParentId: string | null,
+    segments: string[],
+  ): Promise<string | null> {
+    let parentId = baseParentId
+    for (const seg of segments) {
+      if (!seg || seg === '.')
+        continue
+      if (seg === '..')
+        throw new KbConflictError(`invalid folder segment '..' (path escape not allowed)`)
+      const cond = parentId == null
+        ? and(eq(dirs.userId, userId), isNull(dirs.parentId), eq(dirs.name, seg), eq(dirs.deleted, false))
+        : and(eq(dirs.userId, userId), eq(dirs.parentId, parentId), eq(dirs.name, seg), eq(dirs.deleted, false))
+      const [found] = await db.select({ id: dirs.id }).from(dirs).where(cond).limit(1)
+      if (found) {
+        parentId = found.id
+        continue
+      }
+      if (parentId == null)
+        throw new KbConflictError('zip 目录须挂到一个已存在的 project/dir 下（无法在根级新建 dir）')
+      const created = await ProjectService.createDir(userId, { parentId, name: seg })
+      parentId = created.id
+    }
+    return parentId
+  }
+
   static async ingestText(args: {
-    kbId: string
+    userId: string
     content: string
     name: string
-    parentNodeId?: string | null
+    mountDirId?: string | null
     owner?: string
     tags?: string[]
   }): Promise<KbDoc> {
     const cleaned = cleanMarkdown(args.content, { sourceDocId: 'pending' })
     return KbService.createDraft({
-      kbId: args.kbId,
-      ...(args.parentNodeId != null ? { parentNodeId: args.parentNodeId } : {}),
+      userId: args.userId,
+      ...(args.mountDirId != null ? { mountDirId: args.mountDirId } : {}),
       name: args.name,
       content: cleaned,
       ...(args.owner != null ? { owner: args.owner } : {}),
@@ -1004,14 +851,14 @@ export class KbService {
 
   /**
    * 检索
-   * @description 检索知识库，返回检索结果
+   * @description 检索知识库，返回检索结果（全局 collection，kbId 仅作分区标签忽略）
    */
   static async query(
     query: string,
-    kbId?: string,
+    _kbId?: string,
     req?: Omit<KbQueryRequest, 'query' | 'kbId'>,
   ) {
-    return retrieveAndRerank(KbService.resolveKbId(kbId), query, {
+    return retrieveAndRerank(env.KB_COLLECTION, query, {
       skipRerank: req?.options?.skipRerank === true,
       recallK: req?.options?.recallK ?? 60,
     })

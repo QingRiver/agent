@@ -9,20 +9,23 @@ import { isDateField, isNumericField, LEAF_OP, LOGIC_OP } from './schema'
  * DSL 求值引擎。吃 RowStore（行级），不再吃 GtdDocument。
  */
 
-/** 引擎求值上下文：仅需 rowStore（folder 字段需反查 project.folderId） */
+/** 引擎求值上下文：仅需 rowStore（project/folder 派生经 rowStore 投影槽注入） */
 export interface FilterEvalContext {
   rowStore: RowStore
 }
 
-/** 取 task 在某 field 上的原始值（过滤/排序共用） */
+/**
+ * 取 task 在某 field 上的原始值（过滤/排序共用）。
+ * PROJECT：注入 projectOf 优先，回退 task.data.projectId（server 派生缓存）。
+ * FOLDER（§8.1 改义）：mountDirId 指向 kind=dir 节点 → 取该 mountDirId；否则 null。
+ * 两者派生信息由 rowStore.projectOf / rowStore.isDirMount 注入（@agent/gtd 不依赖 @agent/project）。
+ */
 export function rawValue(task: EntityRowOf<'task'>, field: string, rowStore: RowStore): unknown {
   switch (field) {
     case FILTER_FIELD.STATUS: return task.data.status
-    case FILTER_FIELD.PROJECT: return task.data.projectId
-    case FILTER_FIELD.FOLDER: {
-      const proj = rowStore.findLive('project', task.data.projectId ?? '')
-      return proj?.data.folderId ?? null
-    }
+    case FILTER_FIELD.PROJECT: return rowStore.projectOf?.(task) ?? task.data.projectId
+    case FILTER_FIELD.FOLDER:
+      return rowStore.isDirMount?.(task) ? (task.data.mountDirId ?? null) : null
     case FILTER_FIELD.TAG: return rowStore.tagIdsOf(task.id)
     case FILTER_FIELD.DEFER_DATE: return task.data.deferDate
     case FILTER_FIELD.DUE_DATE: return task.data.dueDate

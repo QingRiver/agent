@@ -1,10 +1,12 @@
 /**
- * 清空知识库可见数据（PG docs/nodes/tags + Qdrant points），便于重新导入带结构内容。
+ * 清空知识库可见数据（PG docs/chunks/tags + Qdrant points），便于重新导入带结构内容。
+ *
+ * Phase 2 后 KB 不再拥有文件夹树（已并入统一 dirs，归 ProjectService）；本脚本不动 dirs。
  *
  * 用法（推荐经 devops）:
  *   pnpm devops e2e clear-kb --email you@example.com
  *   pnpm devops e2e clear-kb --owner <userId>
- *   pnpm devops e2e clear-kb --all                  # 整库 kbId（默认 env.KB_COLLECTION）
+ *   pnpm devops e2e clear-kb --all                  # 整库（全局 collection）
  *   pnpm devops e2e clear-kb --email x --dry-run
  *
  * 直接调用:
@@ -19,11 +21,11 @@ import {
   getQdrantClient,
   resolveCollectionName,
 } from '@agent/kb'
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { bootstrapDatabases } from '../src/db/bootstrap'
 import { closePool, pool } from '../src/db/client'
 import { db } from '../src/db/drizzle'
-import { kbChunks, kbDocTags, kbDocuments, kbNodes } from '../src/db/schema'
+import { kbChunks, kbDocTags, kbDocuments } from '../src/db/schema'
 
 const { values } = parseArgs({
   allowPositionals: true,
@@ -31,17 +33,16 @@ const { values } = parseArgs({
     'email': { type: 'string' },
     'owner': { type: 'string' },
     'all': { type: 'boolean', default: false },
-    'kb-id': { type: 'string' },
     'dry-run': { type: 'boolean', default: false },
     'help': { type: 'boolean', short: 'h', default: false },
   },
 })
 
 function printHelp(): void {
-  console.log(`用法: clear-kb (--email <addr> | --owner <userId> | --all) [--kb-id id] [--dry-run]
+  console.log(`用法: clear-kb (--email <addr> | --owner <userId> | --all) [--dry-run]
 
-按 owner 清空当前用户可见知识库（文档 / 文件夹 / 标签 + Qdrant），或 --all 清空整个 kbId。
-默认 kbId = env.KB_COLLECTION（通常 kb_default）。
+按 owner 清空当前用户可见知识库（文档 / 标签 + Qdrant），或 --all 清空整库。
+Phase 2 后 KB 文件夹树已并入 dirs，本脚本不清理 dirs。
 `)
 }
 
@@ -56,11 +57,11 @@ async function resolveOwnerId(email: string): Promise<string> {
   return id
 }
 
-async function clearByOwner(kbId: string, owner: string, dryRun: boolean): Promise<void> {
+async function clearByOwner(owner: string, dryRun: boolean): Promise<void> {
   const docs = await db
     .select({ id: kbDocuments.id })
     .from(kbDocuments)
-    .where(and(eq(kbDocuments.kbId, kbId), eq(kbDocuments.owner, owner)))
+    .where(eq(kbDocuments.owner, owner))
   const docIds = docs.map(d => d.id)
 
   const chunkRows = docIds.length
@@ -71,11 +72,6 @@ async function clearByOwner(kbId: string, owner: string, dryRun: boolean): Promi
     : []
   const chunkIds = chunkRows.map(c => c.id)
 
-  const nodeCountRows = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(kbNodes)
-    .where(and(eq(kbNodes.kbId, kbId), eq(kbNodes.owner, owner)))
-  const nodeCount = nodeCountRows[0]?.count ?? 0
   const tagLinkRows = docIds.length
     ? await db
         .select({ count: sql<number>`count(*)::int` })
@@ -84,8 +80,8 @@ async function clearByOwner(kbId: string, owner: string, dryRun: boolean): Promi
     : []
   const tagLinkCount = tagLinkRows[0]?.count ?? 0
 
-  console.log(`[clear-kb] kbId=${kbId} owner=${owner}`)
-  console.log(`[clear-kb] docs=${docIds.length} chunks=${chunkIds.length} nodes=${nodeCount} tagLinks=${tagLinkCount}`)
+  console.log(`[clear-kb] owner=${owner}`)
+  console.log(`[clear-kb] docs=${docIds.length} chunks=${chunkIds.length} tagLinks=${tagLinkCount}`)
 
   if (dryRun) {
     console.log('[clear-kb] dry-run，未写入')
@@ -93,11 +89,11 @@ async function clearByOwner(kbId: string, owner: string, dryRun: boolean): Promi
   }
 
   if (chunkIds.length)
-    await deleteByPointIds(kbId, chunkIds)
+    await deleteByPointIds(env.KB_COLLECTION, chunkIds)
 
   // 兜底：payload.owner 残留点（历史无 PG 行）
   const client = getQdrantClient()
-  const collectionName = resolveCollectionName(kbId)
+  const collectionName = resolveCollectionName(env.KB_COLLECTION)
   const exists = await client.collectionExists(collectionName)
   if (exists.exists) {
     await client.delete(collectionName, {
@@ -108,21 +104,16 @@ async function clearByOwner(kbId: string, owner: string, dryRun: boolean): Promi
     })
   }
 
-  if (docIds.length) {
-    await db.delete(kbDocuments).where(
-      and(eq(kbDocuments.kbId, kbId), eq(kbDocuments.owner, owner)),
-    )
-  }
-  await db.delete(kbNodes).where(and(eq(kbNodes.kbId, kbId), eq(kbNodes.owner, owner)))
+  if (docIds.length)
+    await db.delete(kbDocuments).where(eq(kbDocuments.owner, owner))
 
   console.log('[clear-kb] done')
 }
 
-async function clearAll(kbId: string, dryRun: boolean): Promise<void> {
+async function clearAll(dryRun: boolean): Promise<void> {
   const docs = await db
     .select({ id: kbDocuments.id })
     .from(kbDocuments)
-    .where(eq(kbDocuments.kbId, kbId))
   const docIds = docs.map(d => d.id)
   const chunkRows = docIds.length
     ? await db
@@ -130,12 +121,6 @@ async function clearAll(kbId: string, dryRun: boolean): Promise<void> {
         .from(kbChunks)
         .where(inArray(kbChunks.docId, docIds))
     : []
-
-  const nodeCountRows = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(kbNodes)
-    .where(eq(kbNodes.kbId, kbId))
-  const nodeCount = nodeCountRows[0]?.count ?? 0
   const tagLinkRows = docIds.length
     ? await db
         .select({ count: sql<number>`count(*)::int` })
@@ -144,8 +129,8 @@ async function clearAll(kbId: string, dryRun: boolean): Promise<void> {
     : []
   const tagLinkCount = tagLinkRows[0]?.count ?? 0
 
-  console.log(`[clear-kb] ALL kbId=${kbId}`)
-  console.log(`[clear-kb] docs=${docIds.length} chunks=${chunkRows.length} nodes=${nodeCount} tagLinks=${tagLinkCount}`)
+  console.log('[clear-kb] ALL')
+  console.log(`[clear-kb] docs=${docIds.length} chunks=${chunkRows.length} tagLinks=${tagLinkCount}`)
 
   if (dryRun) {
     console.log('[clear-kb] dry-run，未写入')
@@ -153,18 +138,17 @@ async function clearAll(kbId: string, dryRun: boolean): Promise<void> {
   }
 
   if (docIds.length)
-    await db.delete(kbDocuments).where(eq(kbDocuments.kbId, kbId))
-  await db.delete(kbNodes).where(eq(kbNodes.kbId, kbId))
+    await db.delete(kbDocuments)
 
-  // 整库重建 Qdrant collection，避免孤儿点
+  // 整库重建 Qdrant collection，避免孤儿点（全局 collection）
   const client = getQdrantClient()
-  const collectionName = resolveCollectionName(kbId)
+  const collectionName = resolveCollectionName(env.KB_COLLECTION)
   const exists = await client.collectionExists(collectionName)
   if (exists.exists) {
     await client.deleteCollection(collectionName)
     console.log(`[clear-kb] deleted qdrant collection ${collectionName}`)
   }
-  await ensureCollection(kbId)
+  await ensureCollection(env.KB_COLLECTION)
   console.log(`[clear-kb] recreated qdrant collection ${collectionName}`)
   console.log('[clear-kb] done')
 }
@@ -186,12 +170,11 @@ async function main(): Promise<void> {
   }
 
   await bootstrapDatabases()
-  const kbId = values['kb-id']?.trim() || env.KB_COLLECTION
   const dryRun = Boolean(values['dry-run'])
 
   try {
     if (values.all) {
-      await clearAll(kbId, dryRun)
+      await clearAll(dryRun)
       return
     }
     const owner = values.owner?.trim()
@@ -200,7 +183,7 @@ async function main(): Promise<void> {
       throw new Error('无法解析 owner')
     if (values.email)
       console.log(`[clear-kb] email=${values.email.trim()} → owner=${owner}`)
-    await clearByOwner(kbId, owner, dryRun)
+    await clearByOwner(owner, dryRun)
   }
   finally {
     await closePool()

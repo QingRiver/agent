@@ -1,3 +1,8 @@
+import type { Schemas } from '@qdrant/js-client-rest'
+
+/** Qdrant Filter 条件结构；召回 filter 骨架透传用（Phase 4 接作用域构造）。 */
+export type KbRecallFilter = Schemas['Filter']
+
 export {
   deleteByPointIds,
   ensureCollection,

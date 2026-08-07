@@ -1,13 +1,7 @@
 import type { InferRequestType, InferResponseType } from 'hono/client'
 import { api, successData } from './api-client'
 
-/** 默认知识库 id（与后端 env.KB_COLLECTION 默认值一致）；多知识库时由调用方传入 */
-export const KB_DEFAULT_ID = 'kb_default'
-
 type Kb = typeof api.kb
-
-export type KbNodesResponse = InferResponseType<Kb['nodes']['list']['$post'], 200>
-export type KbNodeRow = KbNodesResponse['nodes'][number]
 
 export type KbDocsResponse = InferResponseType<Kb['documents']['list']['$post'], 200>
 export type KbDocSummary = KbDocsResponse['docs'][number]
@@ -24,42 +18,20 @@ type KbQueryBody = InferRequestType<Kb['query']['$post']>['json']
 export type KbQueryOptions = NonNullable<KbQueryBody['options']>
 
 export class KbApi {
-  // ---------- 节点 ----------
-
-  static async listNodes(kbId: string) {
-    const res = await api.kb.nodes.list.$post({ json: { kbId } })
-    return (await successData(res)).nodes
-  }
-
-  static async createNode(kbId: string, body: { name: string, parentId?: string | null }) {
-    const res = await api.kb.nodes.create.$post({ json: { kbId, ...body } })
-    return (await successData(res)).node
-  }
-
-  static async renameNode(id: string, name: string) {
-    const res = await api.kb.nodes[':id'].rename.$post({ param: { id }, json: { name } })
-    return (await successData(res)).node
-  }
-
-  static async moveNode(id: string, parentId: string) {
-    const res = await api.kb.nodes[':id'].move.$post({ param: { id }, json: { parentId } })
-    return (await successData(res)).node
-  }
-
-  static async moveNodeToRoot(id: string) {
-    const res = await api.kb.nodes[':id']['move-to-root'].$post({ param: { id } })
-    return (await successData(res)).node
-  }
-
-  static async deleteNode(id: string) {
-    const res = await api.kb.nodes[':id'].delete.$post({ param: { id } })
-    await successData(res)
-  }
-
   // ---------- 文档 ----------
 
-  static async listDocs(kbId: string) {
-    const res = await api.kb.documents.list.$post({ json: { kbId } })
+  static async listDocs(opts?: {
+    dirId?: string
+    includeDescendants?: boolean
+    tagId?: string
+  }) {
+    const res = await api.kb.documents.list.$post({
+      json: {
+        ...(opts?.dirId != null ? { dirId: opts.dirId } : {}),
+        ...(opts?.includeDescendants === true ? { includeDescendants: true } : {}),
+        ...(opts?.tagId != null ? { tagId: opts.tagId } : {}),
+      },
+    })
     return (await successData(res)).docs
   }
 
@@ -68,21 +40,23 @@ export class KbApi {
     return (await successData(res)).doc
   }
 
-  static async getDocByVdir(kbId: string, vdir: string) {
-    const res = await api.kb.documents['by-vdir'].$post({ json: { kbId, vdir } })
-    return (await successData(res)).doc
-  }
-
   static async createDoc(
-    kbId: string,
     body: {
       name: string
       content?: string
       tagIds?: string[]
-      parentNodeId?: string | null
+      /** 挂载 dirs.id；null/缺省=Inbox */
+      mountDirId?: string | null
     },
   ) {
-    const res = await api.kb.documents.create.$post({ json: { kbId, ...body } })
+    const res = await api.kb.documents.create.$post({
+      json: {
+        name: body.name,
+        ...(body.mountDirId != null ? { mountDirId: body.mountDirId } : {}),
+        ...(body.content != null ? { content: body.content } : {}),
+        tagIds: body.tagIds ?? [],
+      },
+    })
     return (await successData(res)).doc
   }
 
@@ -95,7 +69,8 @@ export class KbApi {
     id: string,
     body: {
       tagIds?: string[]
-      parentNodeId?: string | null
+      /** 挂载 dirs.id；null=移到 Inbox。位置变 → 零重 embed，仅 setPayload 同步 id */
+      mountDirId?: string | null
       name?: string
       visibility?: string
       pinned?: boolean
@@ -124,28 +99,26 @@ export class KbApi {
 
   /** 多文件上传（multipart）。tags 后端按逗号分隔字符串解析 */
   static async ingestFiles(
-    kbId: string,
     files: File[],
-    opts?: { parentNodeId?: string, tags?: string[] },
+    opts?: { mountDirId?: string, tags?: string[] },
   ) {
     // hono client 的 form 须为普通对象（会自行 new FormData）；传 FormData 实例时 Object.entries 为空
     const res = await api.kb.ingest.files.$post({
       form: {
         files,
-        kbId,
-        ...(opts?.parentNodeId != null ? { parentNodeId: opts.parentNodeId } : {}),
+        ...(opts?.mountDirId != null ? { mountDirId: opts.mountDirId } : {}),
         ...(opts?.tags?.length ? { tags: opts.tags.join(',') } : {}),
       },
     })
     return (await successData(res)).items
   }
 
-  /** zip 压缩包上传（multipart），按包内目录结构还原成文件夹树 */
-  static async ingestZip(kbId: string, file: File, opts?: { tags?: string[] }) {
+  /** zip 压缩包上传（multipart），按包内目录结构还原成 dirs 子树（挂到 mountDirId 下） */
+  static async ingestZip(file: File, opts?: { mountDirId?: string, tags?: string[] }) {
     const res = await api.kb.ingest.zip.$post({
       form: {
         file,
-        kbId,
+        ...(opts?.mountDirId != null ? { mountDirId: opts.mountDirId } : {}),
         ...(opts?.tags?.length ? { tags: opts.tags.join(',') } : {}),
       },
     })
@@ -153,25 +126,30 @@ export class KbApi {
   }
 
   static async ingestText(
-    kbId: string,
     body: {
       content: string
       name: string
-      parentNodeId?: string | null
+      mountDirId?: string | null
       tags?: string[]
     },
   ) {
-    const res = await api.kb.ingest.text.$post({ json: { kbId, ...body } })
+    const res = await api.kb.ingest.text.$post({
+      json: {
+        content: body.content,
+        name: body.name,
+        ...(body.mountDirId != null ? { mountDirId: body.mountDirId } : {}),
+        tags: body.tags ?? [],
+      },
+    })
     return (await successData(res)).doc
   }
 
   // ---------- 检索 ----------
 
   /** 对已提交 chunk 做 RAG 召回（与 kbGraph 同路径）。options 透传 retrieveAndRerank 检索选项 */
-  static async query(kbId: string, query: string, options?: KbQueryOptions) {
+  static async query(query: string, options?: KbQueryOptions) {
     const res = await api.kb.query.$post({
       json: {
-        kbId,
         query,
         ...(options != null ? { options } : {}),
       },

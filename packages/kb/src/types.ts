@@ -6,8 +6,6 @@ export const KbChunkSchema = z.object({
   page_number: z.number().int().optional(),
   heading_path: z.array(z.string()),
   raw_text: z.string(),
-  /** 文档虚拟路径（Qdrant payload / 引文深链） */
-  vdir: z.string().optional(),
 })
 
 export type KbChunk = z.infer<typeof KbChunkSchema>
@@ -17,7 +15,6 @@ export const KbDocumentMetaSchema = z.object({
   filename: z.string(),
   content_hash: z.string(),
   tags: z.array(z.string()).default([]),
-  vdir: z.string().optional(),
   owner: z.string().optional(),
   summary: z.string().optional(),
   keywords: z.array(z.string()).default([]),
@@ -44,6 +41,4 @@ export interface KbCitation {
   page_number?: number
   heading_path: string[]
   excerpt: string
-  /** 有则深链用 path=；否则回退 doc= */
-  vdir?: string
 }

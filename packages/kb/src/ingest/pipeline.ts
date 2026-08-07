@@ -10,7 +10,8 @@ import { upsertChunks } from '../qdrant'
 export async function embedAndUpsert(args: {
   kbId: string
   docId: string
-  vdir?: string
+  mountDirId?: string
+  projectId?: string
   owner?: string
   tagIds?: string[]
   chunks: KbChunk[]
@@ -27,7 +28,8 @@ export async function embedAndUpsert(args: {
       pointId: pointIds[index] ?? randomUUID(),
       chunk,
       docId,
-      ...(meta.vdir !== undefined ? { vdir: meta.vdir } : {}),
+      ...(meta.mountDirId !== undefined ? { mountDirId: meta.mountDirId } : {}),
+      ...(meta.projectId !== undefined ? { projectId: meta.projectId } : {}),
       ...(meta.owner !== undefined ? { owner: meta.owner } : {}),
       ...(meta.tagIds ? { tagIds: meta.tagIds } : {}),
       denseVector: vectors[index] ?? [],

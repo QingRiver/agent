@@ -1,42 +1,28 @@
-import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { bigint, boolean, index, integer, jsonb, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
 import { tags } from './tags'
-
-/**
- * 虚拟路径树的文件夹节点。文档（kb_documents）通过 parent_node_id 挂在节点下，
- * vdir 由父链 walk 派生并缓存到 kb_documents.vdir。文件夹身份（id）与名字/位置解耦，
- * 重命名/移动文件夹只动一行 + 后代 vdir 重算，不触向量。
- */
-export const kbNodes = pgTable('kb_nodes', {
-  id: text('id').primaryKey(),
-  kbId: text('kb_id').notNull(),
-  parentId: text('parent_id').references((): AnyPgColumn => kbNodes.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  owner: text('owner'),
-  visibility: text('visibility').notNull().default('private'),
-  permissions: jsonb('permissions').notNull().default({}),
-  sortOrder: integer('sort_order').notNull().default(0),
-  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
-  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
-}, table => [
-  index('idx_kb_nodes_kb_parent').on(table.kbId, table.parentId),
-  index('idx_kb_nodes_owner').on(table.kbId, table.owner),
-  // 同级不重名：真实唯一约束见迁移 uniq_kb_nodes_parent_name
-  // (kb_id, COALESCE(parent_id, ''), name) — PG 中 NULL≠NULL，不能用 (kb_id, parent_id, name) 裸 unique
-])
 
 /**
  * 文档事实源：草稿正文 + 元数据 + 提交状态机。
  * id（uuid）= chunk 关联用 source_doc_id，与路径/内容解耦。
  * 草稿/提交分离：saveDraft 只动 content/draft_hash/updated_at；commit 才跑 chunk+enrich+embed+Qdrant。
+ *
+ * Phase 2：并入统一 dirs 树（废弃 kb_nodes）。
+ * - mountDirId = 挂载到 dirs.id（权威位置，无 FK 靠 server stamp 校验存活，同 task 模式）；null=未归位/Inbox
+ * - projectId = walkToProjectRoot(mountDirId) 冗余缓存（server 维护，非 LWW）
+ * - userId = 属主隔离（对齐 dirs.userId）；kbId 降为分区标签不再驱动树隔离/collection
+ * - vdir = 派生展示缓存（mountDir.vdir + '/' + name，不进 Qdrant payload）
  */
 export const kbDocuments = pgTable('kb_documents', {
   id: text('id').primaryKey(),
-  kbId: text('kb_id').notNull(),
-  parentNodeId: text('parent_node_id').references(() => kbNodes.id, { onDelete: 'set null' }),
+  userId: text('user_id').notNull(),
+  kbId: text('kb_id').notNull().default('kb_default'),
+  /** 挂载到 dirs.id（权威位置）；null=未归位/Inbox。无 FK——dir 存活由 server stamp 校验修正 */
+  mountDirId: text('mount_dir_id'),
+  /** 冗余缓存 = walkToProjectRoot(mountDirId)（server 维护，非 LWW）；Inbox→null */
+  projectId: text('project_id'),
   name: text('name').notNull(),
   filename: text('filename'),
-  /** 派生缓存：父链 name 拼接 + 自身 name；移动/重命名时重算（纯字符串，不 embed） */
+  /** 派生展示缓存：mountDir.vdir + '/' + name；移动/重命名时重算（纯字符串，不 embed，不进 Qdrant payload） */
   vdir: text('vdir'),
   /** 草稿正文 markdown 全文（事实源，编辑/预览/当前文档上下文用） */
   content: text('content').notNull().default(''),
@@ -56,10 +42,11 @@ export const kbDocuments = pgTable('kb_documents', {
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
   indexedAt: bigint('indexed_at', { mode: 'number' }),
 }, table => [
-  index('idx_kb_docs_kb_owner').on(table.kbId, table.owner),
-  index('idx_kb_docs_kb_parent').on(table.kbId, table.parentNodeId),
-  index('idx_kb_docs_kb_vdir').on(table.kbId, table.vdir),
-  index('idx_kb_docs_kb_list').on(table.kbId, table.pinned, table.updatedAt),
+  index('idx_kb_docs_user_owner').on(table.userId, table.owner),
+  index('idx_kb_docs_user_mount').on(table.userId, table.mountDirId),
+  index('idx_kb_docs_user_project').on(table.userId, table.projectId),
+  index('idx_kb_docs_user_vdir').on(table.userId, table.vdir),
+  index('idx_kb_docs_user_list').on(table.userId, table.pinned, table.updatedAt),
 ])
 
 /** 文档 ↔ 公共标签（tag id）。 */

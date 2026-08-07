@@ -2,15 +2,18 @@
  * 行级同步模型的 Zod 执行契约（wire 格式即落库格式）。
  *
  * EntityRow 贯通 Client / wire / Postgres（同形）；GtdDocument 仅导入导出边界。
- * 复用 ./schema 的实体子对象（FolderSchema/TaskSchema/RepeatRuleSchema 等，.omit 派生行 data）
+ * 复用 ./schema 的实体子对象（TaskSchema/RepeatRuleSchema 等，.omit 派生行 data）
  * 与 ./types 枚举（经 schema.ts 的 z.enum 派生）。
+ *
+ * Phase 1（统一 dirs 树）：folder/project entity 退出 sync（归属改 dirs 表 + 在线 API）；
+ * task 加 mountDirId（权威挂载，LWW）；projectId 退出 LWW（server 派生冗余缓存，patch 不含，
+ * row 只读下发）；task 移动走 upsert patch（删 move command）；删 delete_folder/delete_project
+ * command（删 dir 走在线 API）。
  */
 import { z } from 'zod'
 import {
   AttachmentSchema,
-  FolderSchema,
   PerspectiveSchema,
-  ProjectSchema,
   RepeatRuleSchema,
   TagSchema,
   TaskSchema,
@@ -19,19 +22,15 @@ import {
 /** id：DB text；不强制 UUID（task_tag 用复合「taskId|tagId」） */
 const id = z.string().min(1)
 const datetime = z.string().datetime()
-const fractionalOrder = z.number()
 
 // ---------------- 行 data（EntityRow.data；不含 envelope id） ----------------
 
-/** folder 行 data */
-export const FolderRowDataSchema = FolderSchema.omit({ id: true })
 /** tag 行 data */
 export const TagRowDataSchema = TagSchema.omit({ id: true })
-/** project 行 data */
-export const ProjectRowDataSchema = ProjectSchema.omit({ id: true })
 /**
  * task 行 data：无 tagIds / attachmentIds（标签与附件走独立 task_tag / attachment 行）；
  * repeatRule 内联（与 DB repeat_rule jsonb 一致），repeatRuleId != null 时 repeatRule 应存在。
+ * 含 mountDirId（权威挂载，LWW）+ projectId（server 派生冗余缓存，只读下发）。
  */
 export const TaskRowDataSchema = TaskSchema
   .omit({ id: true, tagIds: true, attachmentIds: true })
@@ -54,23 +53,11 @@ const EntityRowBase = {
   deleted: z.boolean(),
 }
 
-export const FolderEntityRowSchema = z.object({
-  ...EntityRowBase,
-  entity: z.literal('folder'),
-  id,
-  data: FolderRowDataSchema,
-})
 export const TagEntityRowSchema = z.object({
   ...EntityRowBase,
   entity: z.literal('tag'),
   id,
   data: TagRowDataSchema,
-})
-export const ProjectEntityRowSchema = z.object({
-  ...EntityRowBase,
-  entity: z.literal('project'),
-  id,
-  data: ProjectRowDataSchema,
 })
 export const TaskEntityRowSchema = z.object({
   ...EntityRowBase,
@@ -103,17 +90,13 @@ export const TaskTagEntityRowSchema = z
 
 export const SyncEntitySchema = z.enum([
   'task',
-  'project',
-  'folder',
   'tag',
   'perspective',
   'attachment',
   'task_tag',
 ])
 export const EntityRowSchema = z.discriminatedUnion('entity', [
-  FolderEntityRowSchema,
   TagEntityRowSchema,
-  ProjectEntityRowSchema,
   TaskEntityRowSchema,
   PerspectiveEntityRowSchema,
   AttachmentEntityRowSchema,
@@ -128,12 +111,17 @@ const MutationBase = {
   clientTs: datetime,
 }
 
-/** upsert.patch = 对应行 data 的 Partial；tagIds / attachmentIds 不在此处，由 task_tag / attachment 行表达 */
+/**
+ * task upsert patch：排除 projectId（server 派生冗余缓存，非 LWW，client 不可 push）。
+ * mountDirId 在 patch 范围内（权威挂载，LWW）；parentId/order 等亦 LWW。
+ * tagIds / attachmentIds 不在此处，由 task_tag / attachment 行表达。
+ */
+export const TaskUpsertPatchSchema = TaskRowDataSchema.omit({ projectId: true }).partial()
 export const TaskUpsertMutationSchema = z.object({
   ...MutationBase,
   entity: z.literal('task'),
   op: z.literal('upsert'),
-  patch: TaskRowDataSchema.partial().optional(),
+  patch: TaskUpsertPatchSchema.optional(),
 })
 export const TaskDeleteMutationSchema = z.object({
   ...MutationBase,
@@ -149,28 +137,6 @@ export const TaskTagUpsertMutationSchema = z.object({
 export const TaskTagDeleteMutationSchema = z.object({
   ...MutationBase,
   entity: z.literal('task_tag'),
-  op: z.literal('delete'),
-})
-export const ProjectUpsertMutationSchema = z.object({
-  ...MutationBase,
-  entity: z.literal('project'),
-  op: z.literal('upsert'),
-  patch: ProjectRowDataSchema.partial().optional(),
-})
-export const ProjectDeleteMutationSchema = z.object({
-  ...MutationBase,
-  entity: z.literal('project'),
-  op: z.literal('delete'),
-})
-export const FolderUpsertMutationSchema = z.object({
-  ...MutationBase,
-  entity: z.literal('folder'),
-  op: z.literal('upsert'),
-  patch: FolderRowDataSchema.partial().optional(),
-})
-export const FolderDeleteMutationSchema = z.object({
-  ...MutationBase,
-  entity: z.literal('folder'),
   op: z.literal('delete'),
 })
 export const TagUpsertMutationSchema = z.object({
@@ -212,10 +178,6 @@ export const GtdMutationSchema = z.union([
   TaskDeleteMutationSchema,
   TaskTagUpsertMutationSchema,
   TaskTagDeleteMutationSchema,
-  ProjectUpsertMutationSchema,
-  ProjectDeleteMutationSchema,
-  FolderUpsertMutationSchema,
-  FolderDeleteMutationSchema,
   TagUpsertMutationSchema,
   TagDeleteMutationSchema,
   PerspectiveUpsertMutationSchema,
@@ -239,27 +201,6 @@ export const DropCommandSchema = z.object({
   type: z.literal('drop'),
   taskId: id,
 })
-export const MoveCommandSchema = z.object({
-  ...CommandBase,
-  type: z.literal('move'),
-  taskId: id,
-  /** 目标位置全必填，消灭 optional+nullable 双态；null = Inbox / 顶层（有效语义值） */
-  payload: z.object({
-    projectId: id.nullable(),
-    parentId: id.nullable(),
-    order: fractionalOrder,
-  }),
-})
-export const DeleteFolderCommandSchema = z.object({
-  ...CommandBase,
-  type: z.literal('delete_folder'),
-  payload: z.object({ folderId: id }),
-})
-export const DeleteProjectCommandSchema = z.object({
-  ...CommandBase,
-  type: z.literal('delete_project'),
-  payload: z.object({ projectId: id }),
-})
 export const DeleteTagCommandSchema = z.object({
   ...CommandBase,
   type: z.literal('delete_tag'),
@@ -269,9 +210,6 @@ export const DeleteTagCommandSchema = z.object({
 export const GtdCommandSchema = z.discriminatedUnion('type', [
   CompleteCommandSchema,
   DropCommandSchema,
-  MoveCommandSchema,
-  DeleteFolderCommandSchema,
-  DeleteProjectCommandSchema,
   DeleteTagCommandSchema,
 ])
 
@@ -303,9 +241,7 @@ export type EntityRow = z.infer<typeof EntityRowSchema>
 export type EntityRowOf<E extends SyncEntity> = Extract<EntityRow, { entity: E }>
 export type EntityDataOf<E extends SyncEntity> = EntityRowOf<E>['data']
 
-export type FolderEntityRow = z.infer<typeof FolderEntityRowSchema>
 export type TagEntityRow = z.infer<typeof TagEntityRowSchema>
-export type ProjectEntityRow = z.infer<typeof ProjectEntityRowSchema>
 export type TaskEntityRow = z.infer<typeof TaskEntityRowSchema>
 export type PerspectiveEntityRow = z.infer<typeof PerspectiveEntityRowSchema>
 export type AttachmentEntityRow = z.infer<typeof AttachmentEntityRowSchema>
@@ -315,6 +251,7 @@ export type GtdMutation = z.infer<typeof GtdMutationSchema>
 export type UpsertMutation = Extract<GtdMutation, { op: 'upsert' }>
 export type DeleteMutation = Extract<GtdMutation, { op: 'delete' }>
 export type TaskUpsertMutation = z.infer<typeof TaskUpsertMutationSchema>
+export type TaskUpsertPatch = z.infer<typeof TaskUpsertPatchSchema>
 export type TaskDeleteMutation = z.infer<typeof TaskDeleteMutationSchema>
 export type TaskTagUpsertMutation = z.infer<typeof TaskTagUpsertMutationSchema>
 export type TaskTagDeleteMutation = z.infer<typeof TaskTagDeleteMutationSchema>
@@ -322,9 +259,6 @@ export type TaskTagDeleteMutation = z.infer<typeof TaskTagDeleteMutationSchema>
 export type GtdCommand = z.infer<typeof GtdCommandSchema>
 export type CompleteCommand = z.infer<typeof CompleteCommandSchema>
 export type DropCommand = z.infer<typeof DropCommandSchema>
-export type MoveCommand = z.infer<typeof MoveCommandSchema>
-export type DeleteFolderCommand = z.infer<typeof DeleteFolderCommandSchema>
-export type DeleteProjectCommand = z.infer<typeof DeleteProjectCommandSchema>
 export type DeleteTagCommand = z.infer<typeof DeleteTagCommandSchema>
 
 export type PushRequest = z.infer<typeof PushRequestSchema>

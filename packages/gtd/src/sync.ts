@@ -1,15 +1,12 @@
 import type {
   CompleteCommand,
-  DeleteFolderCommand,
   DeleteMutation,
-  DeleteProjectCommand,
   DeleteTagCommand,
   DropCommand,
   EntityRow,
   EntityRowOf,
   GtdCommand,
   GtdMutation,
-  MoveCommand,
   PullResponse,
   PushRequest,
   PushResponse,
@@ -34,9 +31,7 @@ import { EXPLICIT_STATUS } from './types'
 // re-export wire 契约（sync.ts 是 sync 模块入口）
 export type {
   CompleteCommand,
-  DeleteFolderCommand,
   DeleteMutation,
-  DeleteProjectCommand,
   DeleteTagCommand,
   DropCommand,
   EntityDataOf,
@@ -44,7 +39,6 @@ export type {
   EntityRowOf,
   GtdCommand,
   GtdMutation,
-  MoveCommand,
   PullResponse,
   PushRequest,
   PushResponse,
@@ -157,9 +151,6 @@ function applyCommand(
   return match(cmd)
     .with({ type: 'complete' }, c => applyComplete(c, rows, nextSyncId))
     .with({ type: 'drop' }, c => applyDrop(c, rows, nextSyncId))
-    .with({ type: 'move' }, c => applyMove(c, rows, nextSyncId))
-    .with({ type: 'delete_folder' }, c => applyDeleteFolder(c, rows, nextSyncId))
-    .with({ type: 'delete_project' }, c => applyDeleteProject(c, rows, nextSyncId))
     .with({ type: 'delete_tag' }, c => applyDeleteTag(c, rows, nextSyncId))
     .exhaustive()
 }
@@ -309,97 +300,6 @@ function applyDrop(
   return 'applied'
 }
 
-/** move：改 task 的 projectId/parentId/order（引用校验）。 */
-function applyMove(
-  cmd: MoveCommand,
-  rows: EntityRow[],
-  nextSyncId: () => number,
-): ApplyResult {
-  const taskId = cmd.taskId
-  const task = findLive(rows, 'task', taskId)
-  if (!task) {
-    throw new Error(`task ${taskId} not found`)
-  }
-  const { projectId, parentId, order } = cmd.payload
-  if (projectId != null && !findLive(rows, 'project', projectId)) {
-    throw new Error(`project ${projectId} not found`)
-  }
-  if (parentId != null && !findLive(rows, 'task', parentId)) {
-    throw new Error(`parent task ${parentId} not found`)
-  }
-  task.data.projectId = projectId
-  task.data.parentId = parentId
-  task.data.order = order
-  task.syncId = nextSyncId()
-  return 'applied'
-}
-
-/** delete_folder：软删 folder + 其下 project folderId 置 null（各推进 syncId）。 */
-function applyDeleteFolder(
-  cmd: DeleteFolderCommand,
-  rows: EntityRow[],
-  nextSyncId: () => number,
-): ApplyResult {
-  const { folderId } = cmd.payload
-  const folder = findLive(rows, 'folder', folderId)
-  if (!folder) {
-    throw new Error(`folder ${folderId} not found`)
-  }
-  folder.deleted = true
-  folder.syncId = nextSyncId()
-  for (const r of rows) {
-    if (r.entity === 'project' && r.data.folderId === folderId && !r.deleted) {
-      r.data.folderId = null
-      r.syncId = nextSyncId()
-    }
-  }
-  return 'applied'
-}
-
-/** delete_project：软删 project + 递归软删子 task 子树（各推进 syncId）。 */
-function applyDeleteProject(
-  cmd: DeleteProjectCommand,
-  rows: EntityRow[],
-  nextSyncId: () => number,
-): ApplyResult {
-  const { projectId } = cmd.payload
-  const project = findLive(rows, 'project', projectId)
-  if (!project) {
-    throw new Error(`project ${projectId} not found`)
-  }
-  project.deleted = true
-  project.syncId = nextSyncId()
-
-  /** 当前未软删的 task 行，用于级联算出待删子树。 */
-  const liveTasks = rows.filter((r): r is EntityRowOf<'task'> =>
-    r.entity === 'task' && !r.deleted)
-  const toDelete = new Set<string>()
-  for (const t of liveTasks) {
-    if (t.data.projectId === projectId) {
-      toDelete.add(t.id)
-    }
-  }
-  // 递归：parentId 在删除集合的子 task
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const t of liveTasks) {
-      const parentId = t.data.parentId
-      if (!toDelete.has(t.id) && typeof parentId === 'string' && toDelete.has(parentId)) {
-        toDelete.add(t.id)
-        changed = true
-      }
-    }
-  }
-  for (const t of liveTasks) {
-    if (toDelete.has(t.id)) {
-      t.deleted = true
-      t.syncId = nextSyncId()
-    }
-  }
-  return 'applied'
-}
-
 /** delete_tag：软删 tag + 软删所有该 tagId 的 task_tag 关联行（各推进 syncId）。 */
 function applyDeleteTag(
   cmd: DeleteTagCommand,
@@ -509,17 +409,17 @@ function applyMutationUpsert(
 }
 
 /**
- * 普通字段 upsert 的引用完整性校验（projectId/parentId/taskId/tagId 存在且未软删）；违规 throw。
+ * 普通字段 upsert 的引用完整性校验（parentId/taskId/tagId 存在且未软删）；违规 throw。
+ * projectId 不校验——它是 server 派生冗余缓存（非 LWW，patch 不含）。
+ * mountDirId 不在纯函数层校验——指向 dirs 表（@agent/gtd 不依赖 @agent/project），
+ * 引用存活由 server 落库层 stamp 校验修正（死引用→置 null→Inbox）。
  * ts-pattern 按 entity 模式匹配收窄 patch 类型，字段直接 string，无需 cast。
  */
 function assertMutationPatch(mut: UpsertMutation, rows: EntityRow[]): void {
   void match(mut)
     .with({ entity: 'task' }, (m) => {
       const patch = m.patch ?? {}
-      const { projectId, parentId } = patch
-      if (projectId != null && !findLive(rows, 'project', projectId)) {
-        throw new Error(`project ${projectId} not found`)
-      }
+      const { parentId } = patch
       if (parentId != null && !findLive(rows, 'task', parentId)) {
         throw new Error(`parent task ${parentId} not found`)
       }
@@ -534,6 +434,6 @@ function assertMutationPatch(mut: UpsertMutation, rows: EntityRow[]): void {
       }
     })
     .otherwise(() => {
-      // 其他 entity upsert：暂不校验引用（原型可接受，接 HTTP 前补 project.folderId 等）
+      // 其他 entity upsert：暂不校验引用
     })
 }

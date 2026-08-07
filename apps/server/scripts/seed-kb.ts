@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   const kbId = env.KB_COLLECTION
   const buffer = Buffer.from(await readFile(FIXTURE))
   const items = await KbService.ingestFiles({
-    kbId,
+    userId: SEED_OWNER,
     files: [{ buffer, filename: 'e2e-policy.md' }],
     owner: SEED_OWNER,
     tags: ['seed'],
@@ -34,10 +34,10 @@ async function main(): Promise<void> {
     throw new Error('ingestFiles 未返回文档')
 
   if (item.skipped) {
-    console.log('[devops/e2e/kb] draft already up-to-date', item.docId, item.vdir)
+    console.log('[devops/e2e/kb] draft already up-to-date', item.docId, item.mountDirId)
   }
   else {
-    console.log('[devops/e2e/kb] drafted', item.docId, item.vdir)
+    console.log('[devops/e2e/kb] drafted', item.docId, item.mountDirId)
   }
 
   const doc = await KbService.getDoc(item.docId)

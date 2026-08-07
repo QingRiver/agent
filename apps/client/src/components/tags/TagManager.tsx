@@ -79,6 +79,8 @@ export function TagManager({ open, onClose }: TagManagerProps) {
       await TagsStore.create(name, newColor)
       setNewName('')
       setNewColor(undefined)
+      // REST 建标会推进 gtd sync clock；拉一把让侧栏 rowStore.liveTags 跟上
+      void GtdStore.flushSave().catch(() => {})
     }
     catch (e) {
       setError(e instanceof Error ? e.message : String(e))

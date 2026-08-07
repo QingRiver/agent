@@ -9,9 +9,7 @@ import {
   field,
   findRow,
   makeCommand,
-  makeFolderRow,
   makeMutation,
-  makeProjectRow,
   makeState,
   makeTagRow,
   makeTaskRow,
@@ -405,7 +403,7 @@ describe('applyPush: rejected', () => {
   it('mutation 引用不存在实体 → 该条 rejected，其余继续', () => {
     const state = makeState([makeTaskRow('t1', { flagged: false }, { syncId: 1 })])
     const { response, state: next } = push(state, [
-      makeMutation({ id: 'm1', entity: 'task', entityId: 't2', patch: { projectId: 'p-nope' } }),
+      makeMutation({ id: 'm1', entity: 'task', entityId: 't2', patch: { parentId: 'nope' } }),
       makeMutation({ id: 'm2', entityId: 't1', patch: { flagged: true } }),
     ])
     expect(response.rejected.map(r => r.id)).toContain('m1')
@@ -443,7 +441,7 @@ describe('applyPush: rejected', () => {
   it('mutation 违规不分配 syncId（被拒条目不占版本号）', () => {
     const state = makeState([makeTaskRow('t1', { flagged: false }, { syncId: 1 })])
     const { state: next } = push(state, [
-      makeMutation({ id: 'm1', entity: 'task', entityId: 't2', patch: { projectId: 'p-nope' } }),
+      makeMutation({ id: 'm1', entity: 'task', entityId: 't2', patch: { parentId: 'nope' } }),
     ])
     expect(next.clock).toBe(state.clock)
   })
@@ -504,42 +502,6 @@ describe('applyPush: changes 返回', () => {
 // ============================================================
 
 describe('applyPush: 级联软删', () => {
-  it('delete_folder: folder 软删 + 其下 project folderId 置 null（各推进 syncId 进 changes）', () => {
-    const state = makeState([
-      makeFolderRow('f1', {}, { syncId: 1 }),
-      makeProjectRow('p1', { folderId: 'f1' }, { syncId: 2 }),
-      makeProjectRow('p2', { folderId: 'f1' }, { syncId: 3 }),
-    ])
-    const { response, state: next } = push(state, [], [
-      makeCommand({ id: 'c1', type: 'delete_folder', payload: { folderId: 'f1' } }),
-    ])
-    expect(findRow(next.rows, 'folder', 'f1')?.deleted).toBe(true)
-    const p1 = findRow(next.rows, 'project', 'p1')
-    const p2 = findRow(next.rows, 'project', 'p2')
-    expect(field<string>(p1, 'folderId')).toBeNull()
-    expect(field<string>(p2, 'folderId')).toBeNull()
-    expect(p1?.syncId).toBeGreaterThan(2)
-    expect(p2?.syncId).toBeGreaterThan(3)
-    expect(findRow(response.changes, 'project', 'p1')).toBeDefined()
-    expect(findRow(response.changes, 'project', 'p2')).toBeDefined()
-  })
-
-  it('delete_project: project 软删 + 子 task 递归软删进 changes', () => {
-    const state = makeState([
-      makeProjectRow('p1', {}, { syncId: 1 }),
-      makeTaskRow('t1', { projectId: 'p1' }, { syncId: 2 }),
-      makeTaskRow('t2', { projectId: 'p1', parentId: 't1' }, { syncId: 3 }),
-    ])
-    const { response, state: next } = push(state, [], [
-      makeCommand({ id: 'c1', type: 'delete_project', payload: { projectId: 'p1' } }),
-    ])
-    expect(findRow(next.rows, 'project', 'p1')?.deleted).toBe(true)
-    expect(findRow(next.rows, 'task', 't1')?.deleted).toBe(true)
-    expect(findRow(next.rows, 'task', 't2')?.deleted).toBe(true)
-    expect(findRow(response.changes, 'task', 't1')?.deleted).toBe(true)
-    expect(findRow(response.changes, 'task', 't2')?.deleted).toBe(true)
-  })
-
   it('delete_tag: tag 软删 + 关联 task_tag 行软删', () => {
     const state = makeState([
       makeTagRow('g1', {}, { syncId: 1 }),

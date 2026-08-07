@@ -1,3 +1,4 @@
+import type { KbRecallFilter } from '../qdrant'
 import type { SparseProvider } from '../sparse'
 import type { RetrievedChunk } from '../types'
 import { env } from '@agent/env'
@@ -11,6 +12,8 @@ export interface HybridRetrieveOptions {
   query: string
   recallK?: number
   sparseProvider?: SparseProvider
+  /** Qdrant filter（召回作用域）；骨架，Phase 4 接作用域构造 */
+  filter?: KbRecallFilter
 }
 
 /** 混合召回 */
@@ -19,6 +22,7 @@ export async function hybridRetrieve(
 ): Promise<RetrievedChunk[]> {
   const recallK = options.recallK ?? env.KB_RECALL_K
   const sparseProvider = options.sparseProvider ?? defaultSparseProvider
+  const filter = options.filter
 
   const [denseVector, sparseHits] = await Promise.all([
     embedQuery(options.query),
@@ -26,10 +30,11 @@ export async function hybridRetrieve(
       kbId: options.kbId,
       query: options.query,
       limit: recallK,
+      ...(filter ? { filter } : {}),
     }),
   ])
 
-  const denseHits = await denseSearch(options.kbId, denseVector, recallK)
+  const denseHits = await denseSearch(options.kbId, denseVector, recallK, filter)
   return rrfFusion([denseHits, sparseHits], recallK)
 }
 

@@ -3,7 +3,6 @@ import {
   EXPLICIT_STATUS,
   FORECAST_STRIP_ORDER,
   FORECAST_STRIP_TEXT,
-  GROUP_TYPE,
   renderPerspective,
   SORT_FIELD,
   stripToForecastOptions,
@@ -33,7 +32,9 @@ import {
 } from '@dnd-kit/sortable'
 import { useGtd } from '@hooks/useGtd'
 import { cn } from '@lib/utils'
+import { DirStore } from '@stores/dir-store'
 import { GtdStore, resolvePerspective } from '@stores/gtd-store'
+import { useAtomValue } from 'jotai'
 import { Settings2 } from 'lucide-react'
 import { useState } from 'react'
 import { GtdTaskRow } from './GtdTaskRow'
@@ -122,7 +123,6 @@ export function GtdTaskList() {
     addInboxTask,
     addProjectTask,
     reorderTask,
-    patchProject,
     toggleForecastStripSegment,
     patchForecastSignals,
   } = useGtd()
@@ -133,20 +133,22 @@ export function GtdTaskList() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
+  const dirsById = useAtomValue(DirStore.dirsByIdAtom)
   const perspective = resolvePerspective(rowStore, selection)
   const isForecast = selection.kind === 'perspective' && selection.id === 'forecast'
-  const selectedProject = selection.kind === 'project'
-    ? rowStore.findLive('project', selection.id) ?? null
+  // Phase 1：project/folder 退出 GTD sync，名称来自 DirStore dirsById 投影
+  const selectedDir = (selection.kind === 'project' || selection.kind === 'folder')
+    ? dirsById.get(selection.id) ?? null
     : null
 
   function resolveTitle() {
     if (selection.kind === 'perspective')
       return perspective.name
-    if (selection.kind === 'project')
-      return selectedProject?.data.name ?? '项目'
+    if (selection.kind === 'project' || selection.kind === 'folder')
+      return selectedDir?.name ?? (selection.kind === 'project' ? '项目' : '文件夹')
     if (selection.kind === 'tag')
       return rowStore.findLive('tag', selection.id)?.data.name ?? '标签'
-    return rowStore.findLive('folder', selection.id)?.data.name ?? '文件夹'
+    return '文件夹'
   }
   const title = resolveTitle()
   const liveTasks = rowStore.liveTasks()
@@ -227,27 +229,6 @@ export function GtdTaskList() {
               {isLoading ? '加载中…' : `${activeCount} 个活跃任务`}
             </p>
           </div>
-          {selectedProject && (
-            <div className="flex shrink-0 rounded-lg border border-border bg-muted p-0.5">
-              {([
-                [GROUP_TYPE.SEQUENTIAL, '顺序'],
-                [GROUP_TYPE.PARALLEL, '并行'],
-                [GROUP_TYPE.SINGLE_ACTION, '清单'],
-              ] as const).map(([type, label]) => (
-                <button
-                  key={type}
-                  type="button"
-                  className={cn(
-                    'h-8 rounded-md px-3 text-xs text-muted-foreground transition-colors',
-                    selectedProject.data.type === type && 'bg-accent text-accent-foreground',
-                  )}
-                  onClick={() => patchProject(selectedProject.id, { type })}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
           {isForecast && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -329,14 +310,14 @@ export function GtdTaskList() {
           if (
             !task
             || !overTask
-            || task.data.projectId !== overTask.data.projectId
+            || task.data.mountDirId !== overTask.data.mountDirId
             || task.data.parentId !== overTask.data.parentId
           ) {
             return
           }
           const siblings = liveTasks
             .filter(t =>
-              t.data.projectId === task.data.projectId && t.data.parentId === task.data.parentId,
+              t.data.mountDirId === task.data.mountDirId && t.data.parentId === task.data.parentId,
             )
             .map(taskShape)
             .sort((a, b) => a.order - b.order)

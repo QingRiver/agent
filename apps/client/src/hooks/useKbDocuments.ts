@@ -1,8 +1,9 @@
+import { DirStore } from '@stores/dir-store'
 import { KbStore } from '@stores/kb-store'
 import { useAtomValue } from 'jotai'
 
 export function useKbDocuments() {
-  const nodes = useAtomValue(KbStore.nodesAtom)
+  const dirTree = useAtomValue(DirStore.dirTreeAtom)
   const docs = useAtomValue(KbStore.docsAtom)
   const filteredDocs = useAtomValue(KbStore.filteredDocsAtom)
   const tags = useAtomValue(KbStore.tagsAtom)
@@ -18,8 +19,8 @@ export function useKbDocuments() {
   const localDirty = useAtomValue(KbStore.localDirtyAtom)
 
   return {
-    /** 文档树节点列表 */
-    nodes,
+    /** 统一 dirs 树（DirStore.dirTreeAtom）；文件夹即 dirs */
+    dirTree,
     /** 文档列表 */
     docs,
     /** 过滤后的文档列表 */
@@ -68,15 +69,20 @@ export function useKbDocuments() {
     createBlank: KbStore.createBlank,
     /** 删除文档 */
     remove: KbStore.remove,
-    /** 创建文件夹 */
-    createFolder: KbStore.createFolder,
-    /** 重命名文件夹 */
-    renameFolder: KbStore.renameFolder,
-    /** 移动文件夹 */
-    moveFolder: KbStore.moveFolder,
-    /** 删除文件夹 */
-    removeFolder: KbStore.removeFolder,
-    /** 移动文档 */
+    /** 创建文件夹：parentId=null → 建项目根；否则建 dir 子节点 */
+    createFolder: (name: string, parentId: string | null) =>
+      parentId == null ? DirStore.createProject(name) : DirStore.createDir(parentId, name),
+    /** 重命名文件夹（走 DirStore） */
+    renameFolder: DirStore.rename,
+    /** 移动文件夹（走 DirStore；null 不应到达，canMoveFolderTo 已挡） */
+    moveFolder: async (id: string, parentId: string | null) => {
+      if (parentId == null)
+        return
+      await DirStore.move(id, parentId)
+    },
+    /** 删除文件夹（走 DirStore；空校验，不级联） */
+    removeFolder: DirStore.delete,
+    /** 移动文档（改挂载 dir；零 Qdrant 写，认 id） */
     moveDoc: KbStore.moveDoc,
   }
 }

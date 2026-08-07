@@ -33,7 +33,6 @@ function formatChunks(chunks: RetrievedChunk[]): string {
         heading_path: c.heading_path,
         excerpt: '',
         ...(c.page_number !== undefined ? { page_number: c.page_number } : {}),
-        ...(c.vdir !== undefined ? { vdir: c.vdir } : {}),
       })
       const mdLink = `[${index}](${href})`
       return `[${index}] 引用请写 \`${mdLink}\`\n${c.raw_text}`

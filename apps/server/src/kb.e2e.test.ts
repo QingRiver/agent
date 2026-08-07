@@ -5,17 +5,16 @@ import { fileURLToPath } from 'node:url'
 import { env } from '@agent/env'
 import {
   embedQuery,
-  getQdrantClient,
   hybridRetrieve,
-  resolveCollectionName,
   retrieveAndRerank,
 } from '@agent/kb'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db } from './db/drizzle'
 import { migrateAppSchema } from './db/migrate'
-import { kbDocuments, kbNodes } from './db/schema'
+import { dirs, kbDocuments } from './db/schema'
 import { KbService } from './service/kb'
+import { ProjectService } from './service/project'
 
 const runE2e = process.env.E2E === '1'
 const FIXTURE = path.resolve(
@@ -23,21 +22,20 @@ const FIXTURE = path.resolve(
   '../../../packages/kb/fixtures/e2e-policy.md',
 )
 const OWNER = 'kb-e2e-owner'
-const KB_ID = `kb_e2e_${Date.now().toString(36)}`
 
 async function cleanup(): Promise<void> {
-  await db.delete(kbDocuments).where(eq(kbDocuments.kbId, KB_ID))
-  await db.delete(kbNodes).where(eq(kbNodes.kbId, KB_ID))
-  const client = getQdrantClient()
-  const name = resolveCollectionName(KB_ID)
-  if ((await client.collectionExists(name)).exists)
-    await client.deleteCollection(name)
+  await db.delete(kbDocuments).where(eq(kbDocuments.userId, OWNER))
+  await db.delete(dirs).where(eq(dirs.userId, OWNER))
 }
 
 describe.runIf(runE2e)('kb e2e（业务流：草稿 → 提交 → 检索）', () => {
+  let projectId: string
+
   beforeAll(async () => {
     await migrateAppSchema()
     await cleanup()
+    const proj = await ProjectService.createProject(OWNER, { name: `e2e-${Date.now().toString(36)}` })
+    projectId = proj.id
   })
 
   afterAll(async () => {
@@ -69,10 +67,11 @@ describe.runIf(runE2e)('kb e2e（业务流：草稿 → 提交 → 检索）', (
 
     const buffer = Buffer.from(await readFile(FIXTURE))
     const items = await KbService.ingestFiles({
-      kbId: KB_ID,
+      userId: OWNER,
       files: [{ buffer, filename: 'e2e-policy.md' }],
       owner: OWNER,
       tags: ['e2e'],
+      mountDirId: projectId,
     })
     expect(items).toHaveLength(1)
     expect(items[0]!.skipped).toBe(false)
@@ -89,17 +88,17 @@ describe.runIf(runE2e)('kb e2e（业务流：草稿 → 提交 → 检索）', (
     expect(recommitted.indexingStatus).toBe('completed')
     expect(recommitted.draftHash).toBe(recommitted.publishedHash)
 
-    const listed = await KbService.listDocs({ kbId: KB_ID, owner: OWNER })
+    const listed = await KbService.listDocs({ userId: OWNER, owner: OWNER })
     expect(listed.some(d => d.id === docId)).toBe(true)
 
     const hybrid = await hybridRetrieve({
-      kbId: KB_ID,
+      kbId: env.KB_COLLECTION,
       query: 'SKU-9001 是什么',
       recallK: 5,
     })
     expect(hybrid.some(chunk => chunk.raw_text.includes('SKU-9001'))).toBe(true)
 
-    const reranked = await retrieveAndRerank(KB_ID, '工号 E12345 负责什么', {
+    const reranked = await retrieveAndRerank(env.KB_COLLECTION, '工号 E12345 负责什么', {
       skipRerank: false,
       recallK: env.KB_RECALL_K,
     })

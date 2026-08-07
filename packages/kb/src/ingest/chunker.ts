@@ -111,13 +111,18 @@ export async function chunkMarkdown(
 function splitByHeadings(markdown: string): Section[] {
   const lines = markdown.split('\n')
   const sections: Section[] = []
+  /** 按下标对应 heading level-1；跳级时用 '' 占位，flush 时滤掉，避免稀疏数组 → JSON null */
   const headingStack: string[] = []
   let currentBody: string[] = []
 
   const flush = () => {
     const body = currentBody.join('\n').trim()
-    if (body)
-      sections.push({ heading_path: [...headingStack], body })
+    if (body) {
+      sections.push({
+        heading_path: headingStack.filter(s => s !== ''),
+        body,
+      })
+    }
     currentBody = []
   }
 
@@ -125,8 +130,11 @@ function splitByHeadings(markdown: string): Section[] {
     const heading = parseHeading(line)
     if (heading) {
       flush()
+      // 去掉本级及更深；再补齐跳过的中间级，最后 push 标题（禁止 headingStack[i]= 造洞）
       headingStack.splice(heading.level - 1)
-      headingStack[heading.level - 1] = heading.title
+      while (headingStack.length < heading.level - 1)
+        headingStack.push('')
+      headingStack.push(heading.title)
       continue
     }
     currentBody.push(line)

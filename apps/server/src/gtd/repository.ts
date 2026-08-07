@@ -1,10 +1,8 @@
 import type {
   Attachment,
-  Folder,
   GtdDocument,
   GtdRepository,
   Perspective,
-  Project,
   RepeatRule,
   Tag,
   Task,
@@ -13,22 +11,16 @@ import { and, eq, inArray, notInArray, sql } from 'drizzle-orm'
 import { db } from '../db/drizzle'
 import {
   gtdAttachments,
-  gtdFolders,
   gtdPerspectives,
-  gtdProjects,
   gtdTasks,
   gtdTaskTags,
   tags,
 } from '../db/schema'
 import {
   attachmentToRow,
-  folderToRow,
   perspectiveToRow,
-  projectToRow,
   rowToAttachment,
-  rowToFolder,
   rowToPerspective,
-  rowToProject,
   rowToRepeatRule,
   rowToTag,
   rowToTask,
@@ -51,26 +43,16 @@ function aggregateDocMeta(timestamps: string[]): { createdAt: string, updatedAt:
 }
 
 function collectDocTimestamps(
-  folders: Folder[],
   tags: Tag[],
-  projects: Project[],
   tasks: Task[],
   attachments: Attachment[],
   perspectives: Perspective[] = [],
 ): string[] {
   const stamps: string[] = []
-  for (const f of folders) {
-    stamps.push(f.createdAt)
-    if (f.updatedAt)
-      stamps.push(f.updatedAt)
-  }
   for (const t of tags) {
     stamps.push(t.createdAt)
     if (t.updatedAt)
       stamps.push(t.updatedAt)
-  }
-  for (const p of projects) {
-    stamps.push(p.createdAt, p.updatedAt)
   }
   for (const t of tasks) {
     stamps.push(t.createdAt, t.updatedAt)
@@ -93,10 +75,8 @@ function collectDocTimestamps(
  */
 export class DrizzleGtdRepository implements GtdRepository {
   async loadDocument(userId: string): Promise<GtdDocument> {
-    const [folders, tagRows, projects, perspectives, tasks] = await Promise.all([
-      db.select().from(gtdFolders).where(eq(gtdFolders.userId, userId)),
+    const [tagRows, perspectives, tasks] = await Promise.all([
       db.select().from(tags).where(and(eq(tags.userId, userId), eq(tags.deleted, false))),
-      db.select().from(gtdProjects).where(eq(gtdProjects.userId, userId)),
       db.select().from(gtdPerspectives).where(eq(gtdPerspectives.userId, userId)),
       db.select().from(gtdTasks).where(eq(gtdTasks.userId, userId)),
     ])
@@ -136,14 +116,10 @@ export class DrizzleGtdRepository implements GtdRepository {
       rowToTask(row, tagIdsByTask.get(row.id) ?? [], attachmentIdsByTask.get(row.id) ?? []),
     )
 
-    const folderEntities = folders.map(rowToFolder)
     const tagEntities = tagRows.map(rowToTag)
-    const projectEntities = projects.map(rowToProject)
     const perspectiveEntities = perspectives.map(rowToPerspective)
     const meta = aggregateDocMeta(collectDocTimestamps(
-      folderEntities,
       tagEntities,
-      projectEntities,
       taskEntities,
       attachmentEntities,
       perspectiveEntities,
@@ -152,8 +128,9 @@ export class DrizzleGtdRepository implements GtdRepository {
     return {
       version: '1',
       meta: { ...meta, schemaVersion: SCHEMA_VERSION },
-      folders: folderEntities,
-      projects: projectEntities,
+      // Phase 1：folder/project 退出 sync（统一 dirs 树在线 API），恒空
+      folders: [],
+      projects: [],
       tags: tagEntities,
       tasks: taskEntities,
       perspectives: perspectiveEntities,
@@ -168,11 +145,8 @@ export class DrizzleGtdRepository implements GtdRepository {
       // 差量：删 userId 现有行（CASCADE 清 task_tags/attachments）
       await tx.delete(gtdTasks).where(eq(gtdTasks.userId, userId))
       await tx.delete(gtdPerspectives).where(eq(gtdPerspectives.userId, userId))
-      await tx.delete(gtdProjects).where(eq(gtdProjects.userId, userId))
-      await tx.delete(gtdFolders).where(eq(gtdFolders.userId, userId))
+      // Phase 1：folder/project 退出 sync（dirs 树在线 API），doc.folders/projects 恒空，跳过
       // tags 为跨域共享表：仅 upsert doc 中的标签，不整表删除
-      if (doc.folders.length)
-        await tx.insert(gtdFolders).values(doc.folders.map(f => folderToRow(f, userId)))
       if (doc.tags.length) {
         for (const tag of doc.tags) {
           const row = tagToRow(tag, userId)
@@ -187,8 +161,6 @@ export class DrizzleGtdRepository implements GtdRepository {
           })
         }
       }
-      if (doc.projects.length)
-        await tx.insert(gtdProjects).values(doc.projects.map(p => projectToRow(p, userId)))
       if (doc.tasks.length) {
         const ruleById = new Map(doc.repeatRules.map(r => [r.id, r] as const))
         await tx.insert(gtdTasks).values(
@@ -234,6 +206,7 @@ export class DrizzleGtdRepository implements GtdRepository {
           target: gtdTasks.id,
           set: {
             projectId: row.projectId,
+            mountDirId: row.mountDirId,
             parentId: row.parentId,
             name: row.name,
             note: row.note,
@@ -279,69 +252,6 @@ export class DrizzleGtdRepository implements GtdRepository {
     await db
       .delete(gtdTasks)
       .where(and(eq(gtdTasks.userId, userId), eq(gtdTasks.id, taskId)))
-  }
-
-  async getProject(userId: string, projectId: string): Promise<Project | null> {
-    const [project] = await db
-      .select()
-      .from(gtdProjects)
-      .where(and(eq(gtdProjects.userId, userId), eq(gtdProjects.id, projectId)))
-      .limit(1)
-    return project ? rowToProject(project) : null
-  }
-
-  async saveProject(userId: string, project: Project): Promise<void> {
-    const row = projectToRow(project, userId)
-    await db
-      .insert(gtdProjects)
-      .values(row)
-      .onConflictDoUpdate({
-        target: gtdProjects.id,
-        set: {
-          folderId: row.folderId,
-          name: row.name,
-          note: row.note,
-          sortOrder: row.sortOrder,
-          status: row.status,
-          type: row.type,
-          defaultDeferOffset: row.defaultDeferOffset,
-          defaultDueOffset: row.defaultDueOffset,
-          defaultTagIds: row.defaultTagIds,
-          flagged: row.flagged,
-          review: row.review,
-          nextReviewDate: row.nextReviewDate,
-          updatedAt: row.updatedAt,
-        },
-      })
-  }
-
-  async deleteProject(userId: string, projectId: string): Promise<void> {
-    await db
-      .delete(gtdProjects)
-      .where(and(eq(gtdProjects.userId, userId), eq(gtdProjects.id, projectId)))
-  }
-
-  async saveFolder(userId: string, folder: Folder): Promise<void> {
-    const row = folderToRow(folder, userId)
-    await db
-      .insert(gtdFolders)
-      .values(row)
-      .onConflictDoUpdate({
-        target: gtdFolders.id,
-        set: {
-          parentId: row.parentId,
-          name: row.name,
-          sortOrder: row.sortOrder,
-          status: row.status,
-          updatedAt: row.updatedAt,
-        },
-      })
-  }
-
-  async deleteFolder(userId: string, folderId: string): Promise<void> {
-    await db
-      .delete(gtdFolders)
-      .where(and(eq(gtdFolders.userId, userId), eq(gtdFolders.id, folderId)))
   }
 
   async saveTag(userId: string, tag: Tag): Promise<void> {

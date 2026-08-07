@@ -26,7 +26,6 @@ export interface EnrichDocumentInput {
   content_hash: string
   markdown: string
   tags?: string[]
-  vdir?: string
   owner?: string
 }
 
@@ -53,7 +52,6 @@ export async function enrichDocument(input: EnrichDocumentInput): Promise<KbDocu
     filename: input.filename,
     content_hash: input.content_hash,
     tags: input.tags ?? [],
-    vdir: input.vdir,
     owner: input.owner,
     summary: enriched?.summary ?? '',
     keywords: enriched?.keywords ?? [],

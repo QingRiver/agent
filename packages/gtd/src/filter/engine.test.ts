@@ -1,9 +1,9 @@
-import type { EntityRow, EntityRowOf } from '../sync-schema'
+import type { EntityRow } from '../sync-schema'
 import type { FilterEvalContext } from './engine'
 import type { FilterNode } from './schema'
 import { describe, expect, it } from 'vitest'
 import { NOW } from '../__tests__/fixtures'
-import { makeProjectRow, makeTaskRow, makeTaskTagRow } from '../__tests__/sync-fixtures'
+import { makeTaskRow, makeTaskTagRow } from '../__tests__/sync-fixtures'
 import { RowStore } from '../rows'
 import { EXPLICIT_STATUS } from '../types'
 import { evalNode, matchFilter } from './engine'
@@ -74,11 +74,15 @@ describe('evalNode - 叶子: project/folder/tag (some/empty)', () => {
     const t = makeTaskRow('t1')
     expect(evalNode(t, leaf(FILTER_FIELD.TAG, LEAF_OP.EMPTY), ctx())).toBe(true)
   })
-  it('folder 通过 project 反查命中', () => {
-    const t = makeTaskRow('t1', { projectId: 'p1' })
-    const p = makeProjectRow('p1', { folderId: 'f1' }) as EntityRowOf<'project'>
-    const c = ctx([t, p])
-    expect(evalNode(t, leaf(FILTER_FIELD.FOLDER, LEAF_OP.SOME, ['f1']), c)).toBe(true)
+  it('folder 命中（mountDirId 指向 dir，§8.1 改义）', () => {
+    const t = makeTaskRow('t1', { mountDirId: 'd1' })
+    const c: FilterEvalContext = { rowStore: new RowStore([t], { isDirMount: () => true }) }
+    expect(evalNode(t, leaf(FILTER_FIELD.FOLDER, LEAF_OP.SOME, ['d1']), c)).toBe(true)
+  })
+  it('folder 不命中（mountDirId 指向 project 根，非 dir）', () => {
+    const t = makeTaskRow('t1', { mountDirId: 'p1' })
+    const c: FilterEvalContext = { rowStore: new RowStore([t], { isDirMount: () => false }) }
+    expect(evalNode(t, leaf(FILTER_FIELD.FOLDER, LEAF_OP.SOME, ['p1']), c)).toBe(false)
   })
 })
 
