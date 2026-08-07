@@ -82,7 +82,6 @@ function toItem(task: EntityRowOf<'task'>, ctx: RenderContext): RenderItem {
     ctx.now,
     ctx.tree,
     ctx.dueSoonIntervalMs,
-    ctx.rowStore.liveProjects(),
     ctx.statusCache,
   )
   return {
@@ -110,7 +109,6 @@ function sortBlockTasks(
     ctx.now,
     ctx.tree,
     ctx.dueSoonIntervalMs,
-    ctx.rowStore.liveProjects(),
     ctx.statusCache,
   )
   const sorted = [...tasks]

@@ -172,7 +172,9 @@ export const TaskSchema = z
     id: uuid,
     name: z.string().min(1).describe('动作名'),
     note: z.string().nullable().describe('备注'),
-    projectId: uuid.nullable().describe('所属 Project id；null = Inbox 顶层'),
+    /** server 派生冗余缓存 = walkToProjectRoot(mountDirId)；只读、非 LWW，client 不可 push */
+    projectId: uuid.nullable().describe('所属 Project id（server 派生冗余缓存，只读）；null = Inbox'),
+    mountDirId: uuid.nullable().describe('挂载 dir id（权威）；null = Inbox。task 经此挂载到统一 dirs 树节点'),
     parentId: uuid.nullable().describe('父 Task id（action group 子项）；null = 项目顶层 action'),
     order: fractionalOrder,
     status: ExplicitStatusSchema.describe('显式状态；Task 不应取 on_hold（由不变量约束）'),

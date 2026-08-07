@@ -41,7 +41,6 @@ function buildLinkedContext(state: KbStateType): string {
         heading_path: c.heading_path,
         excerpt: '',
         ...(c.page_number !== undefined ? { page_number: c.page_number } : {}),
-        ...(c.vdir !== undefined ? { vdir: c.vdir } : {}),
       })
       const heading = c.heading_path.length ? c.heading_path.join(' > ') : '正文'
       return `[${index}] (${heading}) 引用请写 \`${`[${index}](${href})`}\`\n${c.raw_text}`

@@ -1,12 +1,12 @@
+import { TaskUpsertPatchSchema } from '@agent/gtd'
 import { eq, like } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db } from '../db/drizzle'
 import { migrateAppSchema } from '../db/migrate'
 import {
+  dirs,
   gtdAttachments,
-  gtdFolders,
   gtdPerspectives,
-  gtdProjects,
   gtdSyncClocks,
   gtdSyncMutations,
   gtdTasks,
@@ -23,9 +23,8 @@ async function cleanup(): Promise<void> {
   await db.delete(gtdAttachments).where(eq(gtdAttachments.userId, USER_ID))
   await db.delete(gtdTasks).where(eq(gtdTasks.userId, USER_ID))
   await db.delete(gtdPerspectives).where(eq(gtdPerspectives.userId, USER_ID))
-  await db.delete(gtdProjects).where(eq(gtdProjects.userId, USER_ID))
   await db.delete(tags).where(eq(tags.userId, USER_ID))
-  await db.delete(gtdFolders).where(eq(gtdFolders.userId, USER_ID))
+  await db.delete(dirs).where(eq(dirs.userId, USER_ID))
   await db.delete(gtdSyncMutations).where(eq(gtdSyncMutations.userId, USER_ID))
   await db.delete(gtdSyncClocks).where(eq(gtdSyncClocks.userId, USER_ID))
 }
@@ -42,11 +41,56 @@ async function cleanupLeaked(): Promise<void> {
   await db.delete(gtdAttachments).where(like(gtdAttachments.userId, pattern))
   await db.delete(gtdTasks).where(like(gtdTasks.userId, pattern))
   await db.delete(gtdPerspectives).where(like(gtdPerspectives.userId, pattern))
-  await db.delete(gtdProjects).where(like(gtdProjects.userId, pattern))
   await db.delete(tags).where(like(tags.userId, pattern))
-  await db.delete(gtdFolders).where(like(gtdFolders.userId, pattern))
+  await db.delete(dirs).where(like(dirs.userId, pattern))
   await db.delete(gtdSyncMutations).where(like(gtdSyncMutations.userId, pattern))
   await db.delete(gtdSyncClocks).where(like(gtdSyncClocks.userId, pattern))
+}
+
+/** 插入 dir 行（Phase 1 统一 dirs 树：project 根 / dir 子节点） */
+async function insertDir(row: {
+  id: string
+  parentId: string | null
+  kind: 'project' | 'dir'
+  name: string
+  projectId: string
+  vdir: string
+  sortOrder?: number
+}): Promise<void> {
+  await db.insert(dirs).values({
+    id: row.id,
+    userId: USER_ID,
+    parentId: row.parentId,
+    kind: row.kind,
+    name: row.name,
+    sortOrder: row.sortOrder ?? 0,
+    projectId: row.projectId,
+    vdir: row.vdir,
+    ownerId: USER_ID,
+  })
+}
+
+/** 构造 task upsert patch（Phase 1：mountDirId 权威挂载，projectId 退出 LWW 不在 patch） */
+function taskPatch(overrides: Partial<Record<string, unknown>> & { name: string }): Record<string, unknown> {
+  return {
+    status: 'active',
+    flagged: false,
+    parentId: null,
+    order: 0,
+    groupType: null,
+    deferDate: null,
+    dueDate: null,
+    completedAt: null,
+    droppedAt: null,
+    estimateMinutes: null,
+    repeatRuleId: null,
+    repeatRule: undefined,
+    repeatedFromTaskId: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    note: null,
+    ...overrides,
+  }
 }
 
 describe('sync-repository e2e (push/pull 落库)', () => {
@@ -72,7 +116,6 @@ describe('sync-repository e2e (push/pull 落库)', () => {
             name: '买菜',
             status: 'active',
             flagged: false,
-            projectId: null,
             parentId: null,
             order: 0,
             groupType: null,
@@ -118,7 +161,6 @@ describe('sync-repository e2e (push/pull 落库)', () => {
             name: '每周复盘',
             status: 'active',
             flagged: true,
-            projectId: null,
             parentId: null,
             order: 0,
             groupType: null,
@@ -238,7 +280,6 @@ describe('sync-repository e2e (push/pull 落库)', () => {
             name: '幂等测试',
             status: 'active',
             flagged: false,
-            projectId: null,
             parentId: null,
             order: 0,
             groupType: null,
@@ -297,7 +338,7 @@ describe('sync-repository e2e (push/pull 落库)', () => {
         entity: 'task',
         entityId: id,
         op: 'upsert',
-        patch: { name, status: 'active', flagged: false, projectId: null, parentId: null, order: 0, groupType: null, deferDate: null, dueDate: null, completedAt: null, droppedAt: null, estimateMinutes: null, repeatRuleId: null, repeatedFromTaskId: null, createdAt: NOW, updatedAt: NOW, note: null },
+        patch: { name, status: 'active', flagged: false, parentId: null, order: 0, groupType: null, deferDate: null, dueDate: null, completedAt: null, droppedAt: null, estimateMinutes: null, repeatRuleId: null, repeatedFromTaskId: null, createdAt: NOW, updatedAt: NOW, note: null },
         clientTs: NOW,
       }],
       commands: [],
@@ -322,5 +363,82 @@ describe('sync-repository e2e (push/pull 落库)', () => {
       await db.delete(gtdSyncClocks).where(eq(gtdSyncClocks.userId, UID))
       await db.delete(gtdSyncMutations).where(eq(gtdSyncMutations.userId, UID))
     }
+  })
+
+  // ---------------- Phase 1：mountDirId 权威挂载 + projectId server 派生 ----------------
+
+  it(`mountDirId → server 派生 projectId（project 根 + 子 dir 均回溯根）`, async () => {
+    // 建 project 根 + 一级 dir 子节点
+    await insertDir({ id: 'dp1', parentId: null, kind: 'project', name: 'P1', projectId: 'dp1', vdir: 'P1', sortOrder: 0 })
+    await insertDir({ id: 'dd1', parentId: 'dp1', kind: 'dir', name: 'F1', projectId: 'dp1', vdir: 'P1/F1', sortOrder: 0 })
+
+    // task 挂到 project 根
+    await applyPushToPg(USER_ID, {
+      mutations: [{
+        id: 'm-mount-root',
+        entity: 'task',
+        entityId: 't-mount-root',
+        op: 'upsert',
+        patch: taskPatch({ name: '挂到根', mountDirId: 'dp1' }),
+        clientTs: NOW,
+      }],
+      commands: [],
+      lastSyncId: 0,
+    })
+    // task 挂到子 dir
+    await applyPushToPg(USER_ID, {
+      mutations: [{
+        id: 'm-mount-sub',
+        entity: 'task',
+        entityId: 't-mount-sub',
+        op: 'upsert',
+        patch: taskPatch({ name: '挂到子目录', mountDirId: 'dd1' }),
+        clientTs: NOW,
+      }],
+      commands: [],
+      lastSyncId: 0,
+    })
+
+    const pullRes = await pullFromPg(USER_ID, 0)
+    const rootTask = pullRes.changes.find(r => r.entity === 'task' && r.id === 't-mount-root') as
+      { data: { mountDirId: string | null, projectId: string | null } } | undefined
+    const subTask = pullRes.changes.find(r => r.entity === 'task' && r.id === 't-mount-sub') as
+      { data: { mountDirId: string | null, projectId: string | null } } | undefined
+
+    // mountDirId 原样落库（权威）；projectId = walkToProjectRoot 派生 = project 根 id
+    expect(rootTask?.data.mountDirId).toBe('dp1')
+    expect(rootTask?.data.projectId).toBe('dp1')
+    expect(subTask?.data.mountDirId).toBe('dd1')
+    expect(subTask?.data.projectId).toBe('dp1')
+  })
+
+  it(`死 mountDirId（指向不存在 dir）+ 顶层 task → server 修正为 null（Inbox）`, async () => {
+    // mountDirId 指向不存在的 dir；parentId=null（顶层）→ stamp 应置 mountDirId=null + projectId=null
+    await applyPushToPg(USER_ID, {
+      mutations: [{
+        id: 'm-dead-mount',
+        entity: 'task',
+        entityId: 't-dead-mount',
+        op: 'upsert',
+        patch: taskPatch({ name: '死挂载', mountDirId: 'nonexistent-dir' }),
+        clientTs: NOW,
+      }],
+      commands: [],
+      lastSyncId: 0,
+    })
+
+    const pullRes = await pullFromPg(USER_ID, 0)
+    const task = pullRes.changes.find(r => r.entity === 'task' && r.id === 't-dead-mount') as
+      { data: { mountDirId: string | null, projectId: string | null } } | undefined
+
+    expect(task?.data.mountDirId).toBeNull()
+    expect(task?.data.projectId).toBeNull()
+  })
+
+  it(`projectId 退出 LWW：TaskUpsertPatchSchema omit → patch 含 projectId 被 zod 剥离（不可 push）`, () => {
+    // projectId 退出 LWW：schema .omit({projectId:true})，zod 默认 strip 未知键
+    const parsed = TaskUpsertPatchSchema.parse({ projectId: 'should-be-stripped', name: '保留' })
+    expect('projectId' in parsed).toBe(false)
+    expect((parsed as { name: string }).name).toBe('保留')
   })
 })

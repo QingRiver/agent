@@ -27,6 +27,7 @@
     "@agent/graph": "workspace:*",
     "@agent/gtd": "workspace:*",
     "@agent/kb": "workspace:*",
+    "@agent/project": "workspace:*",
     "@agent/proto": "workspace:*",
     "@copilotkit/runtime": "catalog:",
     "@hono/node-server": "catalog:",

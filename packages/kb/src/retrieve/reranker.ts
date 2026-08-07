@@ -1,3 +1,4 @@
+import type { KbRecallFilter } from '../qdrant'
 import type { RetrievedChunk } from '../types'
 import { env } from '@agent/env'
 import { z } from 'zod'
@@ -24,14 +25,22 @@ export type KbQueryOptions = z.infer<typeof KbQueryOptionsSchema>
 /** retrieveAndRerank 的检索选项（字段全必填，默认值由调用方给出）；由 KbQueryOptionsSchema.required() 派生 */
 export type RerankRetrieveOptions = z.infer<ReturnType<typeof KbQueryOptionsSchema.required>>
 
+/**
+ * 检索 + 重排。
+ * @param kbId 全局 collection 标签（已废弃隔离，仅留分区标签）
+ * @param query 查询文本
+ * @param options 检索选项（skipRerank/recallK）
+ * @param filter Qdrant filter（召回作用域）；骨架，Phase 4 接作用域构造，Phase 2 不启用。
+ */
 export async function retrieveAndRerank(
   kbId: string,
   query: string,
   options: RerankRetrieveOptions,
+  filter?: KbRecallFilter,
 ): Promise<RerankRetrieveResult> {
   const recallK = options.recallK
 
-  const recalled = await hybridRetrieve({ kbId, query, recallK })
+  const recalled = await hybridRetrieve({ kbId, query, recallK, ...(filter ? { filter } : {}) })
   if (!recalled.length) {
     return {
       chunks: [],

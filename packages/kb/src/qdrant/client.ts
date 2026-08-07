@@ -55,23 +55,19 @@ export interface UpsertChunkInput {
   chunk: KbChunk
   /** 文档稳定 id（= source_doc_id = kb_documents.id） */
   docId: string
-  vdir?: string
+  /** 挂载 dirs.id（子树召回 id 过滤；认 id 不认 name） */
+  mountDirId?: string
+  /** 冗余缓存 project 根 id（project 级召回单值过滤） */
+  projectId?: string
   owner?: string
   tagIds?: string[]
   denseVector: number[]
 }
 
-export async function upsertChunks(
-  kbId: string,
-  items: UpsertChunkInput[],
-): Promise<void> {
-  if (!items.length)
-    return
-
-  const client = getQdrantClient()
-  const collectionName = await ensureCollection(kbId)
-
-  const points = items.map(({ pointId, chunk, docId, vdir, owner, tagIds, denseVector }) => ({
+/** 由单条 chunk 输入构造 Qdrant upsert point（id/vector/payload）；纯函数，便于单测 payload 形状。 */
+export function buildUpsertPoint(item: UpsertChunkInput) {
+  const { pointId, chunk, docId, mountDirId, projectId, owner, tagIds, denseVector } = item
+  return {
     id: pointId,
     vector: {
       [DENSE_VECTOR_NAME]: denseVector,
@@ -87,11 +83,25 @@ export async function upsertChunks(
       raw_text: chunk.raw_text,
       heading_path: chunk.heading_path,
       ...(chunk.page_number !== undefined ? { page_number: chunk.page_number } : {}),
-      ...(vdir !== undefined ? { vdir } : {}),
+      ...(mountDirId !== undefined ? { mount_dir_id: mountDirId } : {}),
+      ...(projectId !== undefined ? { project_id: projectId } : {}),
       ...(owner !== undefined ? { owner } : {}),
       ...(tagIds ? { tag_ids: tagIds } : {}),
     },
-  }))
+  }
+}
+
+export async function upsertChunks(
+  kbId: string,
+  items: UpsertChunkInput[],
+): Promise<void> {
+  if (!items.length)
+    return
+
+  const client = getQdrantClient()
+  const collectionName = await ensureCollection(kbId)
+
+  const points = items.map(buildUpsertPoint)
 
   await client.upsert(collectionName, { wait: true, points })
 }
@@ -116,8 +126,9 @@ export async function deleteByPointIds(kbId: string, pointIds: string[]): Promis
 }
 
 /**
- * 按文档 id 批量更新 payload（如移动文档后同步 vdir）。
- * 只改 payload，不重 embed。未传字段保持原值。
+ * 按文档 id 批量更新 payload（认 id 不认 name）。
+ * 只改 payload，不重 embed：doc move → setPayload({mount_dir_id, project_id})；
+ * 跨 project move 子树 → setPayload({project_id})。未传字段保持原值。
  */
 export async function setPayloadByDocId(
   kbId: string,
@@ -147,9 +158,6 @@ export function payloadToRetrievedChunk(
   rank?: number,
 ): import('../types').RetrievedChunk {
   const pageNumber = typeof payload.page_number === 'number' ? payload.page_number : undefined
-  const vdir = typeof payload.vdir === 'string' && payload.vdir.length > 0
-    ? payload.vdir
-    : undefined
   return {
     chunk_id: String(payload.chunk_id ?? ''),
     source_doc_id: String(payload.source_doc_id ?? ''),
@@ -157,7 +165,6 @@ export function payloadToRetrievedChunk(
     raw_text: String(payload.raw_text ?? ''),
     score,
     ...(pageNumber !== undefined ? { page_number: pageNumber } : {}),
-    ...(vdir !== undefined ? { vdir } : {}),
     ...(rank !== undefined ? { rank } : {}),
   }
 }

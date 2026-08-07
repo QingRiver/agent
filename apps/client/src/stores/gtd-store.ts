@@ -9,7 +9,6 @@ import type {
   GtdMutation,
   Perspective,
   PerspectiveInput,
-  Project,
   RepeatRule,
   SyncEntity,
   Tag,
@@ -19,13 +18,11 @@ import type { SyncStatus } from '../gtd/sync-engine'
 import {
   AVAILABILITY_FILTER,
   builtinPerspectives,
-  computeNextReviewDate,
   DEFAULT_FORECAST_SIGNALS,
   DEFAULT_FORECAST_STRIP,
   dematerialize,
   EXPLICIT_STATUS,
   FILTER_FIELD,
-  FOLDER_STATUS,
   FORECAST_STRIP_ORDER,
   GROUP_TYPE,
   LEAF_OP,
@@ -36,7 +33,6 @@ import {
   PLANNED_MODE,
   reindexSiblings,
   REPEAT_ANCHOR,
-  REVIEW_INTERVAL,
   RowStore,
   serialize,
   shouldReindex,
@@ -51,6 +47,7 @@ import { atom, getDefaultStore } from 'jotai'
 import { isContiguousStripSelection, toggleForecastStrip } from '../gtd/forecast-strip'
 import { applyLocal as applyRows, loadRows, mergeChanges, persistAndQueue } from '../gtd/row-store'
 import { SyncEngine } from '../gtd/sync-engine'
+import { DirStore } from './dir-store'
 
 const DUE_SOON_MS = 2 * 24 * 60 * 60 * 1000
 const LS_SELECTION = 'gtd.selection'
@@ -205,12 +202,16 @@ function writeForecastSignals(signals: ForecastSignalOptions): void {
   }
 }
 
-function perspectiveValidationContext(store: RowStore) {
+/** 透视校验上下文：projects/folders 来自 dirs 树（Phase 1 统一树），tags 来自 RowStore */
+function perspectiveValidationContext(
+  store: RowStore,
+  dirs: { projects: { id: string, name: string }[], folders: { id: string, name: string, parentId: string | null }[] },
+) {
   return {
     now: new Date(),
     timeZone: new Intl.DateTimeFormat().resolvedOptions().timeZone,
-    projects: store.liveProjects().map(p => ({ id: p.id, name: p.data.name })),
-    folders: store.liveFolders().map(f => ({ id: f.id, name: f.data.name, parentId: f.data.parentId })),
+    projects: dirs.projects,
+    folders: dirs.folders,
     tags: store.liveTags().map(t => ({ id: t.id, name: t.data.name })),
     builtinPerspectiveIds: builtinPerspectives().map(p => p.id),
   }
@@ -282,37 +283,27 @@ function tShape(s: EntityRowOf<'task'>) {
   return { id: s.id, ...s.data }
 }
 
-/** 软删某 project 任务子树下的附件（delete_project command 不级联 attachment，invariant 需要附件不悬空） */
-function cascadeAttachmentDeletes(store: RowStore, subtreeTaskIds: Set<string>): GtdMutation[] {
-  const items: GtdMutation[] = []
-  for (const a of store.liveAttachments()) {
-    if (subtreeTaskIds.has(a.data.taskId)) {
-      items.push(deleteMut('attachment', a.id))
-    }
+/**
+ * 重排 dir 同级（fractional order）：按 parentId 过滤同级 → targetOrder 算新 sortOrder +
+ * 受影响兄弟 → DirStore.reorderBatch 单次落库。project 根（parentId=null）与 dir 子节点统一走此。
+ */
+async function reorderDirSibling(
+  id: string,
+  target: { beforeId: string | null, afterId: string | null },
+  parentId: string | null,
+): Promise<void> {
+  const dirs = getDefaultStore().get(DirStore.dirsAtom)
+  const siblings = dirs
+    .filter(d => d.id !== id && d.parentId === parentId)
+    .map(d => ({ id: d.id, order: d.sortOrder }))
+  const result = targetOrder(siblings, target.beforeId, target.afterId)
+  const updates: { id: string, sortOrder: number }[] = [{ id, sortOrder: result.order }]
+  for (const sib of siblings) {
+    const order = result.reindexed.get(sib.id)
+    if (order != null)
+      updates.push({ id: sib.id, sortOrder: order })
   }
-  return items
-}
-
-/** 计算某 project 下 live task 子树（含子孙），供级联附件清理 */
-function projectTaskSubtree(store: RowStore, projectId: string): Set<string> {
-  const liveTasks = store.liveTasks()
-  const ids = new Set<string>()
-  for (const t of liveTasks) {
-    if (t.data.projectId === projectId)
-      ids.add(t.id)
-  }
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const t of liveTasks) {
-      const parentId = t.data.parentId
-      if (!ids.has(t.id) && typeof parentId === 'string' && ids.has(parentId)) {
-        ids.add(t.id)
-        changed = true
-      }
-    }
-  }
-  return ids
+  await DirStore.reorderBatch(updates)
 }
 
 // ---------------- Store ----------------
@@ -342,7 +333,16 @@ function maxSyncId(rows: EntityRow[]): number {
 export class GtdStore {
   static readonly userIdAtom = atom<string | undefined>(undefined)
   static readonly rowsAtom = atom<EntityRow[]>([])
-  static readonly rowStoreAtom = atom(get => new RowStore(get(GtdStore.rowsAtom)))
+  static readonly rowStoreAtom = atom((get) => {
+    // 注入 dirs 派生投影：projectOf（walkToProjectRoot）+ isDirMount（FOLDER 改义）。
+    // 捕获 dirsById 值（非 get），rowStoreAtom 依赖 dirsAtom → dirs 变即重算 RowStore。
+    const dirsById = get(DirStore.dirsByIdAtom)
+    return new RowStore(get(GtdStore.rowsAtom), {
+      projectOf: task => DirStore.projectOf(dirsById, task.data.mountDirId),
+      isDirMount: task => DirStore.isDirMount(dirsById, task.data.mountDirId),
+    })
+  })
+
   static readonly selectionAtom = atom<GtdSelection>(readSelection())
   static readonly forecastStripAtom = atom<ForecastStripKey[]>(readForecastStrip())
   static readonly forecastSignalsAtom = atom<ForecastSignalOptions>(readForecastSignals())
@@ -547,9 +547,9 @@ export class GtdStore {
       const data = {
         name: trimmed,
         note: null,
-        projectId: null,
+        mountDirId: null,
         parentId: null,
-        order: nextOrder(store.liveTasks().filter(t => t.data.projectId == null && t.data.parentId == null).map(tShape)),
+        order: nextOrder(store.liveTasks().filter(t => t.data.mountDirId == null && t.data.parentId == null).map(tShape)),
         status: EXPLICIT_STATUS.ACTIVE,
         groupType: null,
         deferDate: null,
@@ -577,11 +577,11 @@ export class GtdStore {
     GtdStore.applyLocal((store) => {
       const now = nowIso()
       const id = newId()
-      const siblings = store.liveTasks().filter(t => t.data.projectId === projectId && t.data.parentId == null).map(tShape)
+      const siblings = store.liveTasks().filter(t => t.data.mountDirId === projectId && t.data.parentId == null).map(tShape)
       const data = {
         name: trimmed,
         note: null,
-        projectId,
+        mountDirId: projectId,
         parentId: null,
         order: nextOrder(siblings),
         status: EXPLICIT_STATUS.ACTIVE,
@@ -612,7 +612,7 @@ export class GtdStore {
       const parent = store.findLive('task', parentId)
       if (!parent)
         throw new Error('父任务不存在')
-      if (!parent.data.projectId)
+      if (!parent.data.mountDirId)
         throw new Error('Inbox 任务需先移入项目，才能添加子任务')
       const now = nowIso()
       const id = newId()
@@ -620,7 +620,7 @@ export class GtdStore {
       const data = {
         name: trimmed,
         note: null,
-        projectId: parent.data.projectId,
+        mountDirId: parent.data.mountDirId,
         parentId,
         order: nextOrder(children),
         status: EXPLICIT_STATUS.ACTIVE,
@@ -651,10 +651,10 @@ export class GtdStore {
       const task = store.findLive('task', taskId)
       if (!task)
         throw new Error('任务不存在')
-      if (!task.data.projectId)
+      if (!task.data.mountDirId)
         throw new Error('Inbox 任务不能缩进')
       const siblings = sortedByOrder(store.liveTasks().filter(t =>
-        t.data.projectId === task.data.projectId && t.data.parentId === task.data.parentId,
+        t.data.mountDirId === task.data.mountDirId && t.data.parentId === task.data.parentId,
       ).map(tShape))
       const index = siblings.findIndex(t => t.id === taskId)
       const parent = index > 0 ? siblings[index - 1]! : null
@@ -662,8 +662,9 @@ export class GtdStore {
         throw new Error('当前任务前面没有可作为父级的任务')
       const now = nowIso()
       const children = store.liveTasks().filter(t => t.data.parentId === parent.id && t.id !== taskId).map(tShape)
-      const items: Array<GtdMutation | GtdCommand> = [
-        cmd({ type: 'move', taskId, payload: { projectId: parent.projectId, parentId: parent.id, order: nextOrder(children) } }),
+      // task 移动走 upsert patch（move command 已删）；mountDirId 不变（同 project 内缩进）
+      const items: GtdMutation[] = [
+        upsertMut('task', taskId, { parentId: parent.id, order: nextOrder(children), updatedAt: now }),
       ]
       if (!parent.groupType)
         items.push(upsertMut('task', parent.id, { groupType: GROUP_TYPE.PARALLEL, updatedAt: now }))
@@ -681,14 +682,14 @@ export class GtdStore {
       if (!task || !parent)
         throw new Error('当前任务已经是项目顶层任务')
       const parentSiblings = sortedByOrder(store.liveTasks().filter(t =>
-        t.data.projectId === parent.data.projectId && t.data.parentId === parent.data.parentId && t.id !== taskId,
+        t.data.mountDirId === parent.data.mountDirId && t.data.parentId === parent.data.parentId && t.id !== taskId,
       ).map(tShape))
       const parentIndex = parentSiblings.findIndex(t => t.id === parent.id)
       const after = parentIndex >= 0 ? parentSiblings[parentIndex + 1] ?? null : null
       const remainingChildren = store.liveTasks().filter(t => t.data.parentId === parent.id && t.id !== taskId)
       const now = nowIso()
-      const items: Array<GtdMutation | GtdCommand> = [
-        cmd({ type: 'move', taskId, payload: { projectId: parent.data.projectId, parentId: parent.data.parentId, order: orderBetween(parent.data.order, after?.order ?? null) } }),
+      const items: GtdMutation[] = [
+        upsertMut('task', taskId, { parentId: parent.data.parentId, order: orderBetween(parent.data.order, after?.order ?? null), updatedAt: now }),
       ]
       if (remainingChildren.length === 0)
         items.push(upsertMut('task', parent.id, { groupType: null, updatedAt: now }))
@@ -715,13 +716,13 @@ export class GtdStore {
         throw new Error('任务不存在')
       const siblings = store.liveTasks().filter(t =>
         t.id !== taskId
-        && t.data.projectId === task.data.projectId
+        && t.data.mountDirId === task.data.mountDirId
         && t.data.parentId === task.data.parentId,
       ).map(tShape)
       const result = targetOrder(siblings, target.beforeId, target.afterId)
       const now = nowIso()
-      const items: Array<GtdMutation | GtdCommand> = [
-        cmd({ type: 'move', taskId, payload: { projectId: task.data.projectId, parentId: task.data.parentId, order: result.order } }),
+      const items: GtdMutation[] = [
+        upsertMut('task', taskId, { parentId: task.data.parentId, order: result.order, updatedAt: now }),
       ]
       for (const sib of siblings) {
         const order = result.reindexed.get(sib.id)
@@ -875,10 +876,11 @@ export class GtdStore {
   // ---------- Perspectives ----------
 
   static addPerspective(input: PerspectiveInput): boolean {
+    const dirs = GtdStore.store().get(DirStore.validationRefsAtom)
     return GtdStore.applyLocal((store) => {
       const result = validatePerspectiveInput(
         input,
-        perspectiveValidationContext(store),
+        perspectiveValidationContext(store, dirs),
         { mode: 'persist' },
       )
       if (!result.ok)
@@ -903,12 +905,13 @@ export class GtdStore {
   }
 
   static patchPerspective(id: string, input: PerspectiveInput): boolean {
+    const dirs = GtdStore.store().get(DirStore.validationRefsAtom)
     return GtdStore.applyLocal((store) => {
       if (!store.livePerspectives().some(p => p.id === id))
         throw new Error('自定义透视不存在')
       const result = validatePerspectiveInput(
         input,
-        perspectiveValidationContext(store),
+        perspectiveValidationContext(store, dirs),
         { mode: 'persist', perspectiveId: id },
       )
       if (!result.ok)
@@ -936,109 +939,38 @@ export class GtdStore {
       GtdStore.setSelection({ kind: 'perspective', id: 'forecast' })
   }
 
-  // ---------- Projects ----------
+  // ---------- Projects / Dirs（在线 Dir API，project=根=纯命名作用域） ----------
+  // Phase 1：project/folder 退出 sync，CRUD 走 DirStore（DirApi）。project facet 全弃用
+  // （type/status/review/default_*/flagged/note 删）；project 仅剩 name（rename）。
 
-  static addProject(name: string, folderId: string | null = null): void {
+  /** 创建 project 根（kind=project，parentId=null） */
+  static async addProject(name: string): Promise<void> {
     const trimmed = name.trim()
     if (!trimmed)
       return
-    GtdStore.applyLocal((store) => {
-      const now = nowIso()
-      const id = newId()
-      const data = {
-        name: trimmed,
-        note: null,
-        folderId,
-        order: nextOrder(store.liveProjects().filter(p => p.data.folderId === folderId).map(p => ({ id: p.id, order: p.data.order }))),
-        status: 'active',
-        type: GROUP_TYPE.SEQUENTIAL,
-        defaultDeferOffset: null,
-        defaultDueOffset: null,
-        defaultTagIds: [],
-        flagged: false,
-        review: {
-          enabled: true,
-          interval: REVIEW_INTERVAL.WEEKLY,
-          customDays: null,
-          lastReviewDate: null,
-          nextReviewDate: now,
-          needsReview: false,
-        },
-        createdAt: now,
-        updatedAt: now,
-      }
-      return [upsertMut('project', id, data)]
-    })
+    await DirStore.createProject(trimmed)
   }
 
-  static patchProject(projectId: string, patch: Partial<Project>): void {
-    GtdStore.applyLocal(() => {
-      const { id: _id, ...rest } = patch
-      return [upsertMut('project', projectId, { ...rest, updatedAt: nowIso() })]
-    })
+  /** 改名（project/dir 统一走 DirApi.rename） */
+  static async renameDir(id: string, name: string): Promise<void> {
+    await DirStore.rename(id, name.trim())
   }
 
-  static holdProject(projectId: string): void {
-    GtdStore.applyLocal(() => [upsertMut('project', projectId, { status: EXPLICIT_STATUS.ON_HOLD, updatedAt: nowIso() })])
+  /** 删 dir/project（须空：无子 dir + 无挂载 task；v1 不级联） */
+  static async removeProject(id: string): Promise<void> {
+    await DirStore.delete(id)
   }
 
-  static resumeProject(projectId: string): void {
-    GtdStore.applyLocal(() => [upsertMut('project', projectId, { status: EXPLICIT_STATUS.ACTIVE, updatedAt: nowIso() })])
+  /** 移动 dir 到新父（跨 project 级联子树 dirs + task projectId） */
+  static async moveDir(id: string, newParentId: string, sortOrder?: number): Promise<void> {
+    await DirStore.move(id, newParentId, sortOrder)
   }
 
-  static markProjectReviewed(projectId: string): void {
-    GtdStore.applyLocal((store) => {
-      const project = store.findLive('project', projectId)
-      if (!project)
-        throw new Error('项目不存在')
-      const now = new Date()
-      const nextReviewDate = computeNextReviewDate(project.data.review, now)
-      return [upsertMut('project', projectId, {
-        review: {
-          ...project.data.review,
-          lastReviewDate: now.toISOString(),
-          nextReviewDate,
-          needsReview: false,
-        },
-        updatedAt: now.toISOString(),
-      })]
-    })
-  }
-
-  static removeProject(projectId: string): void {
-    GtdStore.applyLocal((store) => {
-      if (!store.findLive('project', projectId))
-        throw new Error('项目不存在')
-      const subtree = projectTaskSubtree(store, projectId)
-      const items: Array<GtdMutation | GtdCommand> = [
-        cmd({ type: 'delete_project', payload: { projectId } }),
-        ...cascadeAttachmentDeletes(store, subtree),
-      ]
-      return items
-    })
-  }
-
-  static reorderProject(
-    projectId: string,
+  static async reorderProject(
+    id: string,
     target: { beforeId: string | null, afterId: string | null },
-  ): void {
-    GtdStore.applyLocal((store) => {
-      const project = store.findLive('project', projectId)
-      if (!project)
-        throw new Error('项目不存在')
-      const siblings = store.liveProjects().filter(p =>
-        p.id !== projectId && p.data.folderId === project.data.folderId,
-      ).map(p => ({ id: p.id, order: p.data.order }))
-      const result = targetOrder(siblings, target.beforeId, target.afterId)
-      const now = nowIso()
-      const items: GtdMutation[] = [upsertMut('project', projectId, { order: result.order, updatedAt: now })]
-      for (const sib of siblings) {
-        const order = result.reindexed.get(sib.id)
-        if (order != null)
-          items.push(upsertMut('project', sib.id, { order, updatedAt: now }))
-      }
-      return items
-    })
+  ): Promise<void> {
+    await reorderDirSibling(id, target, null)
   }
 
   // ---------- Tags ----------
@@ -1068,78 +1000,34 @@ export class GtdStore {
   }
 
   static removeTag(tagId: string): void {
-    GtdStore.applyLocal((store) => {
+    GtdStore.applyLocal(() => {
+      // Phase 1：project defaultTagIds 已弃用（facet 全删），仅删 tag
       const items: Array<GtdMutation | GtdCommand> = [cmd({ type: 'delete_tag', payload: { tagId } })]
-      const now = nowIso()
-      for (const p of store.liveProjects()) {
-        if (p.data.defaultTagIds.includes(tagId)) {
-          items.push(upsertMut('project', p.id, { defaultTagIds: p.data.defaultTagIds.filter(t => t !== tagId), updatedAt: now }))
-        }
-      }
       return items
     })
   }
 
-  // ---------- Folders ----------
+  // ---------- Dirs（folder 退出 sync，dir 子节点走 Dir API） ----------
 
-  static addFolder(name: string, parentId: string | null = null): void {
+  /** 创建 dir 子节点（kind=dir，须有 parent） */
+  static async addFolder(name: string, parentId: string): Promise<void> {
     const trimmed = name.trim()
     if (!trimmed)
       return
-    GtdStore.applyLocal((store) => {
-      const now = nowIso()
-      const id = newId()
-      const data = {
-        name: trimmed,
-        parentId,
-        order: nextOrder(store.liveFolders().filter(f => f.data.parentId === parentId).map(f => ({ id: f.id, order: f.data.order }))),
-        status: FOLDER_STATUS.ACTIVE,
-        createdAt: now,
-        updatedAt: null,
-      }
-      return [upsertMut('folder', id, data)]
-    })
+    await DirStore.createDir(parentId, trimmed)
   }
 
-  static reorderFolder(
-    folderId: string,
+  static async reorderFolder(
+    id: string,
     target: { beforeId: string | null, afterId: string | null },
-  ): void {
-    GtdStore.applyLocal((store) => {
-      const folder = store.findLive('folder', folderId)
-      if (!folder)
-        throw new Error('文件夹不存在')
-      const siblings = store.liveFolders().filter(f =>
-        f.id !== folderId && f.data.parentId === folder.data.parentId,
-      ).map(f => ({ id: f.id, order: f.data.order }))
-      const result = targetOrder(siblings, target.beforeId, target.afterId)
-      const now = nowIso()
-      const items: GtdMutation[] = [upsertMut('folder', folderId, { order: result.order, updatedAt: now })]
-      for (const sib of siblings) {
-        const order = result.reindexed.get(sib.id)
-        if (order != null)
-          items.push(upsertMut('folder', sib.id, { order, updatedAt: now }))
-      }
-      return items
-    })
+  ): Promise<void> {
+    // folder=dir：需查其 parentId 定位同级。reorderDirSibling 内部按 parentId 过滤同级。
+    const dir = GtdStore.store().get(DirStore.dirsByIdAtom).get(id)
+    await reorderDirSibling(id, target, dir?.parentId ?? null)
   }
 
-  static removeFolder(folderId: string): void {
-    GtdStore.applyLocal((store) => {
-      if (!store.findLive('folder', folderId))
-        throw new Error('文件夹不存在')
-      // 递归收集子孙 folder（delete_folder command 软删 folder + 其下 project folderId 置 null）
-      const removeIds = new Set<string>()
-      const collect = (id: string) => {
-        removeIds.add(id)
-        for (const f of store.liveFolders()) {
-          if (f.data.parentId === id)
-            collect(f.id)
-        }
-      }
-      collect(folderId)
-      return [...removeIds].map(id => cmd({ type: 'delete_folder', payload: { folderId: id } }))
-    })
+  static async removeFolder(id: string): Promise<void> {
+    await DirStore.delete(id)
   }
 
   // ---------- 导入 / 导出 ----------
@@ -1222,12 +1110,13 @@ function remapDocIds(doc: GtdDocument): GtdDocument {
   }
 }
 
-/** 导入行的 apply 顺序：folders → projects → tags → perspectives → attachments → tasks（父先子后）→ task_tag */
+/**
+ * 导入行的 apply 顺序：tags → perspectives → attachments → tasks（父先子后）→ task_tag
+ *（Phase 1：project/folder 退出 GTD sync，导入导出留待 Dir API 后续支持）
+ */
 function orderImportRows(rows: EntityRow[]): EntityRow[] {
   const byEntity = <E extends SyncEntity>(e: E) =>
     rows.filter((r): r is EntityRowOf<E> => r.entity === e)
-  const folders = byEntity('folder')
-  const projects = byEntity('project')
   const tags = byEntity('tag')
   const perspectives = byEntity('perspective')
   const attachments = byEntity('attachment')
@@ -1251,5 +1140,5 @@ function orderImportRows(rows: EntityRow[]): EntityRow[] {
   }
   for (const t of tasks)
     visit(t)
-  return [...folders, ...projects, ...tags, ...perspectives, ...attachments, ...ordered, ...taskTags]
+  return [...tags, ...perspectives, ...attachments, ...ordered, ...taskTags]
 }

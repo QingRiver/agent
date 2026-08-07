@@ -40,16 +40,12 @@ function detectCycle(
 export function validateInvariants(rowStore: RowStore): InvariantViolation[] {
   const violations: InvariantViolation[] = []
   const tasks = rowStore.liveTasks()
-  const projects = rowStore.liveProjects()
-  const folders = rowStore.liveFolders()
   const tags = rowStore.liveTags()
   const attachments = rowStore.liveAttachments()
 
   const taskIds = new Set(tasks.map(t => t.id))
-  const projectIds = new Set(projects.map(p => p.id))
   const tagIds = new Set(tags.map(t => t.id))
   const attachmentIds = new Set(attachments.map(a => a.id))
-  const folderIds = new Set(folders.map(f => f.id))
   const repeatRuleIds = new Set<string>()
   for (const t of tasks) {
     if (t.data.repeatRule) {
@@ -61,14 +57,13 @@ export function validateInvariants(rowStore: RowStore): InvariantViolation[] {
     if (t.data.status === EXPLICIT_STATUS.ON_HOLD) {
       violations.push({ code: 'task_on_hold', message: `Task ${t.id} 不应处于 on_hold`, entityId: t.id })
     }
-    if (t.data.projectId && !projectIds.has(t.data.projectId)) {
-      violations.push({ code: 'broken_reference', message: `Task ${t.id} projectId 悬空`, entityId: t.id })
-    }
+    // projectId 是 server 派生冗余缓存（非 LWW），不在此校验；位置权威在 mountDirId。
     if (t.data.parentId && !taskIds.has(t.data.parentId)) {
       violations.push({ code: 'broken_reference', message: `Task ${t.id} parentId 悬空`, entityId: t.id })
     }
-    if (t.data.parentId && !t.data.projectId) {
-      violations.push({ code: 'invalid_inbox', message: `Task ${t.id} 有 parent 但无 project`, entityId: t.id })
+    // 子任务继承父挂载：有 parentId 必有 mountDirId（Inbox 顶层无 parent）
+    if (t.data.parentId && !t.data.mountDirId) {
+      violations.push({ code: 'invalid_inbox', message: `Task ${t.id} 有 parent 但无 mountDirId`, entityId: t.id })
     }
     for (const tagId of rowStore.tagIdsOf(t.id)) {
       if (!tagIds.has(tagId)) {
@@ -125,24 +120,10 @@ export function validateInvariants(rowStore: RowStore): InvariantViolation[] {
     }
   }
 
-  const folderParentOf = new Map(folders.map(f => [f.id, f.data.parentId]))
-  for (const f of folders) {
-    if (f.data.parentId && !folderIds.has(f.data.parentId)) {
-      violations.push({
-        code: 'broken_reference',
-        message: `Folder ${f.id} parentId 悬空`,
-        entityId: f.id,
-      })
-    }
-    const cycle = detectCycle(f.id, folderParentOf, 'Folder')
-    if (cycle) {
-      violations.push(cycle)
-    }
-  }
-
+  // 同级 order 唯一：按 mountDirId（位置权威）+ parentId 分组，而非已弃用的 projectId 缓存
   const orderKeys = new Set<string>()
   for (const t of tasks) {
-    const key = `${t.data.projectId ?? ''}|${t.data.parentId ?? ''}|${t.data.order}`
+    const key = `${t.data.mountDirId ?? ''}|${t.data.parentId ?? ''}|${t.data.order}`
     if (orderKeys.has(key)) {
       violations.push({ code: 'duplicate_order', message: `Task ${t.id} 同级 order 重复`, entityId: t.id })
     }

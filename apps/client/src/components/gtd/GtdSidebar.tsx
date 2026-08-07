@@ -1,7 +1,8 @@
-import type { FolderTree, PerspectiveInput } from '@agent/gtd'
+import type { PerspectiveInput } from '@agent/gtd'
+import type { DirTreeNode } from '@agent/project'
 import type { GtdSelection } from '@stores/gtd-store'
 import type { ReactNode } from 'react'
-import { buildFolderTree, builtinPerspectives, EXPLICIT_STATUS, sortTags } from '@agent/gtd'
+import { builtinPerspectives, sortTags } from '@agent/gtd'
 import { GtdPerspectiveEditor } from '@components/gtd/GtdPerspectiveEditor'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
@@ -23,6 +24,8 @@ import { CSS } from '@dnd-kit/utilities'
 import { useGtd } from '@hooks/useGtd'
 import { downloadFile } from '@lib/downloadFile'
 import { cn } from '@lib/utils'
+import { DirStore } from '@stores/dir-store'
+import { useAtomValue } from 'jotai'
 import {
   CalendarDays,
   CheckCircle2,
@@ -119,65 +122,50 @@ function SortableNavItem({
   )
 }
 
-function FolderNodes({
+/**
+ * 统一 dirs 树递归渲染（Phase 1：project 根 + dir 子节点合并为单一 dirs 表）。
+ * project 根 → selection.kind='project'；dir 子节点 → selection.kind='folder'。
+ * 每层同级用独立 SortableContext，DnD 按 `kind:id` 前缀分发到 reorderProject/reorderFolder。
+ */
+function DirSubtree({
   nodes,
   depth,
   selection,
-  projects,
   onSelect,
 }: {
-  nodes: FolderTree['roots']
+  nodes: DirTreeNode[]
   depth: number
   selection: GtdSelection
-  projects: Array<{ id: string, name: string, folderId: string | null, status: string }>
   onSelect: (sel: GtdSelection) => void
 }) {
+  const items = nodes.map(n => `${n.dir.kind === 'project' ? 'project' : 'folder'}:${n.dir.id}`)
   return (
-    <>
-      <SortableContext
-        items={nodes.map(node => `folder:${node.folder.id}`)}
-        strategy={verticalListSortingStrategy}
-      >
-        {nodes.map((node) => {
-          const folderProjects = projects.filter(p => p.folderId === node.folder.id)
-          return (
-            <div key={node.folder.id}>
-              <SortableNavItem
-                sortableId={`folder:${node.folder.id}`}
-                active={selection.kind === 'folder' && selection.id === node.folder.id}
-                icon={Folder}
-                label={node.folder.data.name}
-                indent={depth}
-                onClick={() => onSelect({ kind: 'folder', id: node.folder.id })}
-              />
-              <SortableContext
-                items={folderProjects.map(p => `project:${p.id}`)}
-                strategy={verticalListSortingStrategy}
-              >
-                {folderProjects.map(p => (
-                  <SortableNavItem
-                    key={p.id}
-                    sortableId={`project:${p.id}`}
-                    active={selection.kind === 'project' && selection.id === p.id}
-                    icon={Layers}
-                    label={p.name}
-                    indent={depth + 1}
-                    onClick={() => onSelect({ kind: 'project', id: p.id })}
-                  />
-                ))}
-              </SortableContext>
-              <FolderNodes
-                nodes={node.children}
+    <SortableContext items={items} strategy={verticalListSortingStrategy}>
+      {nodes.map((n) => {
+        const kind = n.dir.kind === 'project' ? 'project' : 'folder'
+        const sid = `${kind}:${n.dir.id}`
+        return (
+          <div key={n.dir.id}>
+            <SortableNavItem
+              sortableId={sid}
+              active={selection.kind === kind && selection.id === n.dir.id}
+              icon={kind === 'project' ? Layers : Folder}
+              label={n.dir.name}
+              indent={depth}
+              onClick={() => onSelect({ kind, id: n.dir.id })}
+            />
+            {n.children.length > 0 && (
+              <DirSubtree
+                nodes={n.children}
                 depth={depth + 1}
                 selection={selection}
-                projects={projects}
                 onSelect={onSelect}
               />
-            </div>
-          )
-        })}
-      </SortableContext>
-    </>
+            )}
+          </div>
+        )
+      })}
+    </SortableContext>
   )
 }
 
@@ -210,28 +198,16 @@ export function GtdSidebar() {
   )
 
   const perspectives = builtinPerspectives()
-  const projects = rowStore.liveProjects().map(p => ({
-    id: p.id,
-    name: p.data.name,
-    folderId: p.data.folderId,
-    status: p.data.status,
-    order: p.data.order,
-  }))
+  const dirs = useAtomValue(DirStore.dirsAtom)
+  const dirsById = useAtomValue(DirStore.dirsByIdAtom)
+  const dirTree = useAtomValue(DirStore.dirTreeAtom)
   const flatTags = sortTags(rowStore.liveTags())
-  const folders = rowStore.liveFolders().map(f => ({
-    id: f.id,
-    name: f.data.name,
-    parentId: f.data.parentId,
-    order: f.data.order,
-  }))
-  const folderTree = buildFolderTree(rowStore.liveFolders())
-  const rootProjects = projects
-    .filter(p => p.folderId == null && p.status !== EXPLICIT_STATUS.DELETED)
-    .sort((a, b) => a.order - b.order)
-  const activeProjects = projects
-    .filter(p => p.status !== EXPLICIT_STATUS.DELETED)
-    .sort((a, b) => a.order - b.order)
   const customPerspectives = rowStore.livePerspectives().map(p => ({ id: p.id, name: p.data.name }))
+
+  // dir 子节点必须有父，新建文件夹挂到当前选中的 project/folder 下；无选中则禁用
+  const selectedDirId = (selection.kind === 'project' || selection.kind === 'folder')
+    ? selection.id
+    : null
 
   const syncLabel = syncStatus === 'syncing'
     ? '同步中…'
@@ -259,29 +235,20 @@ export function GtdSidebar() {
         const [overKind, overId] = String(over.id).split(':')
         if (!id || !overId || kind !== overKind)
           return
-        const source = kind === 'project'
-          ? projects
-          : folders
-        const entity = source.find(item => item.id === id)
-        const overEntity = source.find(item => item.id === overId)
-        if (!entity || !overEntity)
+        const a = dirsById.get(id)
+        const b = dirsById.get(overId)
+        if (!a || !b || a.parentId !== b.parentId)
           return
-        const parentOf = (item: typeof entity) => {
-          if ('folderId' in item)
-            return item.folderId
-          return item.parentId
-        }
-        if (parentOf(entity) !== parentOf(overEntity))
-          return
-        const siblings = source
-          .filter(item => parentOf(item) === parentOf(entity))
-          .sort((a, b) => a.order - b.order)
+        const siblings = dirs
+          .filter(d => d.parentId === a.parentId)
+          .map(d => ({ id: d.id, order: d.sortOrder }))
+          .sort((x, y) => x.order - y.order)
         const moved = arrayMove(
           siblings,
-          siblings.findIndex(item => item.id === id),
-          siblings.findIndex(item => item.id === overId),
+          siblings.findIndex(s => s.id === id),
+          siblings.findIndex(s => s.id === overId),
         )
-        const index = moved.findIndex(item => item.id === id)
+        const index = moved.findIndex(s => s.id === id)
         const target = {
           beforeId: moved[index - 1]?.id ?? null,
           afterId: moved[index + 1]?.id ?? null,
@@ -403,35 +370,19 @@ export function GtdSidebar() {
             项目
           </div>
           <div className="mb-3 space-y-0.5">
-            <FolderNodes
-              nodes={folderTree.roots}
+            <DirSubtree
+              nodes={dirTree.roots}
               depth={0}
               selection={selection}
-              projects={activeProjects}
               onSelect={setSelection}
             />
-            <SortableContext
-              items={rootProjects.map(p => `project:${p.id}`)}
-              strategy={verticalListSortingStrategy}
-            >
-              {rootProjects.map(p => (
-                <SortableNavItem
-                  key={p.id}
-                  sortableId={`project:${p.id}`}
-                  active={selection.kind === 'project' && selection.id === p.id}
-                  icon={Layers}
-                  label={p.name}
-                  onClick={() => setSelection({ kind: 'project', id: p.id })}
-                />
-              ))}
-            </SortableContext>
             <div className="flex gap-1 px-1 pt-1">
               <Input
                 value={projectName}
                 onChange={e => setProjectName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && projectName.trim()) {
-                    addProject(projectName)
+                    void addProject(projectName)
                     setProjectName('')
                   }
                 }}
@@ -446,7 +397,7 @@ export function GtdSidebar() {
                 onClick={() => {
                   if (!projectName.trim())
                     return
-                  addProject(projectName)
+                  void addProject(projectName)
                   setProjectName('')
                 }}
               >
@@ -456,14 +407,15 @@ export function GtdSidebar() {
             <div className="flex gap-1 px-1">
               <Input
                 value={folderName}
+                disabled={!selectedDirId}
                 onChange={e => setFolderName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && folderName.trim()) {
-                    addFolder(folderName)
+                  if (e.key === 'Enter' && folderName.trim() && selectedDirId) {
+                    void addFolder(folderName, selectedDirId)
                     setFolderName('')
                   }
                 }}
-                placeholder="新文件夹"
+                placeholder={selectedDirId ? '新文件夹（挂到选中节点下）' : '先选中一个项目/文件夹'}
                 className="h-9 border-border bg-transparent text-xs"
               />
               <Button
@@ -471,10 +423,11 @@ export function GtdSidebar() {
                 variant="ghost"
                 size="sm"
                 className="h-9 w-9 p-0"
+                disabled={!selectedDirId || !folderName.trim()}
                 onClick={() => {
-                  if (!folderName.trim())
+                  if (!folderName.trim() || !selectedDirId)
                     return
-                  addFolder(folderName)
+                  void addFolder(folderName, selectedDirId)
                   setFolderName('')
                 }}
               >

@@ -1,3 +1,4 @@
+import { DirSync } from '@components/gtd/DirSync'
 import { GtdInspector } from '@components/gtd/GtdInspector'
 import { GtdSidebar } from '@components/gtd/GtdSidebar'
 import { GtdSync } from '@components/gtd/GtdSync'
@@ -14,6 +15,7 @@ function GtdPage() {
   return (
     <>
       <GtdSync />
+      <DirSync />
       <GtdLayout
         sidebar={<GtdSidebar />}
         inspector={<GtdInspector />}

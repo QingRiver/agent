@@ -1,3 +1,5 @@
+import type { PerspectiveEntityRef } from '@agent/gtd'
+import type { DirDto } from '@apis/dir-api'
 import { EXPLICIT_STATUS, GROUP_TYPE, PLANNED_MODE } from '@agent/gtd'
 import { GTD_TIME_END_OF_DAY, GTD_TIME_START_OF_DAY, startOfLocalDayIso } from '@components/gtd/gtd-datetime'
 import { GtdDateTimeField } from '@components/gtd/GtdDateTimeField'
@@ -7,6 +9,8 @@ import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
 import { Select } from '@components/ui/select'
 import { useGtd } from '@hooks/useGtd'
+import { DirStore } from '@stores/dir-store'
+import { useAtomValue } from 'jotai'
 import { useState } from 'react'
 
 export function GtdInspector() {
@@ -29,30 +33,31 @@ export function GtdInspector() {
     setTaskGroupType,
     setTaskRepeat,
     setTaskTags,
-    patchProject,
-    holdProject,
-    resumeProject,
-    markProjectReviewed,
+    renameDir,
     removeProject,
+    removeFolder,
     selectProjectForInspector,
   } = useGtd()
   const [childName, setChildName] = useState('')
 
+  const dirsById = useAtomValue(DirStore.dirsByIdAtom)
+  const projectRoots = useAtomValue(DirStore.projectRefsAtom) as PerspectiveEntityRef[]
+
   const task = selectedTaskId ? rowStore.findLive('task', selectedTaskId) : null
-  const projectId = selectedProjectId
-    ?? (selection.kind === 'project' ? selection.id : null)
-    ?? task?.data.projectId
-    ?? null
-  const project = projectId && !task
-    ? rowStore.findLive('project', projectId)
-    : (selectedProjectId ? rowStore.findLive('project', selectedProjectId) : null)
-  const taskChildren = task ? rowStore.liveTasks().filter(t => t.data.parentId === task.id) : []
-  const repeatRule = task?.data.repeatRule ?? null
+  // Phase 1：project/folder 退出 GTD sync，dir 信息来自 DirStore（dirsById 投影）
+  const dirId = selectedProjectId
+    ?? ((selection.kind === 'project' || selection.kind === 'folder') ? selection.id : null)
+  const dir = !task && dirId ? dirsById.get(dirId) ?? null : null
 
   if (task) {
     const done = task.data.status === EXPLICIT_STATUS.COMPLETED
     const dropped = task.data.status === EXPLICIT_STATUS.CANCELLED
     const tagIds = rowStore.tagIdsOf(task.id)
+    const taskChildren = rowStore.liveTasks().filter(t => t.data.parentId === task.id)
+    const repeatRule = task.data.repeatRule ?? null
+    // projectId 退出 LWW（server 派生），此处按 mountDirId 派生展示；改项目 = 改 mountDirId
+    const derivedProjectId = DirStore.projectOf(dirsById, task.data.mountDirId)
+    const mounted = task.data.mountDirId != null
 
     return (
       <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card">
@@ -80,12 +85,13 @@ export function GtdInspector() {
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">项目</Label>
             <Select
-              value={task.data.projectId ?? ''}
-              onChange={e => patchTask(task.id, { projectId: e.target.value || null })}
+              value={derivedProjectId ?? ''}
+              disabled={!!task.data.parentId}
+              onChange={e => patchTask(task.id, { mountDirId: e.target.value || null })}
             >
               <option value="">收件箱</option>
-              {rowStore.liveProjects().map(p => (
-                <option key={p.id} value={p.id}>{p.data.name}</option>
+              {projectRoots.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </Select>
           </div>
@@ -191,7 +197,7 @@ export function GtdInspector() {
                 type="button"
                 variant="outline"
                 className="h-9 flex-1"
-                disabled={!task.data.projectId}
+                disabled={!mounted}
                 onClick={() => indentTask(task.id)}
               >
                 缩进
@@ -209,8 +215,8 @@ export function GtdInspector() {
             <div className="flex gap-2">
               <Input
                 value={childName}
-                disabled={!task.data.projectId}
-                placeholder={task.data.projectId ? '添加子任务…' : '先将任务移入项目'}
+                disabled={!mounted}
+                placeholder={mounted ? '添加子任务…' : '先将任务移入项目'}
                 onChange={e => setChildName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && childName.trim()) {
@@ -222,7 +228,7 @@ export function GtdInspector() {
               <Button
                 type="button"
                 className="h-9 shrink-0"
-                disabled={!task.data.projectId || !childName.trim()}
+                disabled={!mounted || !childName.trim()}
                 onClick={() => {
                   addChildTask(task.id, childName)
                   setChildName('')
@@ -274,85 +280,16 @@ export function GtdInspector() {
     )
   }
 
-  if (project) {
-    const onHold = project.data.status === EXPLICIT_STATUS.ON_HOLD
+  if (dir) {
     return (
-      <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card">
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">项目</span>
-          {selection.kind !== 'project' && (
-            <button
-              type="button"
-              className="text-[10px] text-muted-foreground hover:text-foreground"
-              onClick={() => selectProjectForInspector(project.id)}
-            >
-              聚焦
-            </button>
-          )}
-        </div>
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">名称</Label>
-            <Input
-              value={project.data.name}
-              onChange={e => patchProject(project.id, { name: e.target.value || project.data.name })}
-              className="border-border bg-muted"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">备注</Label>
-            <textarea
-              value={project.data.note ?? ''}
-              onChange={e => patchProject(project.id, { note: e.target.value || null })}
-              rows={4}
-              className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">类型</Label>
-            <Select
-              value={project.data.type}
-              onChange={e =>
-                patchProject(project.id, { type: e.target.value as typeof project.data.type })}
-            >
-              <option value="sequential">顺序</option>
-              <option value="parallel">并行</option>
-              <option value="singleAction">单动作清单</option>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">文件夹</Label>
-            <Select
-              value={project.data.folderId ?? ''}
-              onChange={e => patchProject(project.id, { folderId: e.target.value || null })}
-            >
-              <option value="">无</option>
-              {rowStore.liveFolders().map(f => (
-                <option key={f.id} value={f.id}>{f.data.name}</option>
-              ))}
-            </Select>
-          </div>
-          <div className="flex flex-wrap gap-2 pt-2">
-            {onHold
-              ? (
-                  <Button type="button" className="h-9" variant="outline" onClick={() => resumeProject(project.id)}>
-                    恢复
-                  </Button>
-                )
-              : (
-                  <Button type="button" className="h-9" variant="outline" onClick={() => holdProject(project.id)}>
-                    暂停
-                  </Button>
-                )}
-            <Button type="button" className="h-9" variant="outline" onClick={() => markProjectReviewed(project.id)}>
-              标记已回顾
-            </Button>
-            <Button type="button" className="h-9" variant="ghost" onClick={() => removeProject(project.id)}>
-              删除项目
-            </Button>
-          </div>
-        </div>
-      </aside>
+      <DirInspector
+        key={dir.id}
+        dir={dir}
+        onRename={renameDir}
+        onDelete={dir.kind === 'project' ? removeProject : removeFolder}
+        onFocus={dir.kind === 'project' ? () => selectProjectForInspector(dir.id) : undefined}
+        showFocus={selection.kind !== 'project' && selectedProjectId == null}
+      />
     )
   }
 
@@ -360,6 +297,74 @@ export function GtdInspector() {
     <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card">
       <div className="flex flex-1 items-center justify-center px-4 text-center text-sm text-muted-foreground">
         选择任务或项目以编辑详情
+      </div>
+    </aside>
+  )
+}
+
+/**
+ * Dir 检视器（project 根 / dir 子节点通用）。
+ * Phase 1：project facet 全弃用，仅剩重命名 + 删除。重命名走在线 API，按 blur/Enter 提交
+ * （避免逐键请求）；dir 切换靠 key 重置本地名状态。
+ */
+function DirInspector({
+  dir,
+  onRename,
+  onDelete,
+  onFocus,
+  showFocus,
+}: {
+  dir: DirDto
+  onRename: (id: string, name: string) => void
+  onDelete: (id: string) => void
+  onFocus?: () => void
+  showFocus: boolean
+}) {
+  const [name, setName] = useState(dir.name)
+
+  const commit = () => {
+    const trimmed = name.trim()
+    if (trimmed && trimmed !== dir.name)
+      onRename(dir.id, trimmed)
+    else
+      setName(dir.name)
+  }
+
+  return (
+    <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {dir.kind === 'project' ? '项目' : '文件夹'}
+        </span>
+        {showFocus && onFocus && (
+          <button
+            type="button"
+            className="text-[10px] text-muted-foreground hover:text-foreground"
+            onClick={onFocus}
+          >
+            聚焦
+          </button>
+        )}
+      </div>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">名称</Label>
+          <Input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter')
+                commit()
+            }}
+            className="border-border bg-muted"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Button type="button" className="h-9" variant="ghost" onClick={() => onDelete(dir.id)}>
+            删除
+          </Button>
+        </div>
       </div>
     </aside>
   )

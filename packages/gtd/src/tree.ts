@@ -13,17 +13,6 @@ export interface TaskTree {
   byId: Map<string, TaskNode>
 }
 
-export interface FolderNode {
-  folder: EntityRowOf<'folder'>
-  parent: FolderNode | null
-  children: FolderNode[]
-}
-
-export interface FolderTree {
-  roots: FolderNode[]
-  byId: Map<string, FolderNode>
-}
-
 const byOrder = (a: { order: number }, b: { order: number }) => a.order - b.order
 
 /** 由扁平 tasks 按 parentId 构建树（根为 parentId 为 null 或悬空的顶层 action） */
@@ -45,31 +34,6 @@ export function buildTaskTree(tasks: EntityRowOf<'task'>[]): TaskTree {
     }
   }
   const sortNode = (a: TaskNode, b: TaskNode) => byOrder(a.task.data, b.task.data)
-  roots.sort(sortNode)
-  for (const node of byId.values())
-    node.children.sort(sortNode)
-  return { roots, byId }
-}
-
-/** 由扁平 folders 按 parentId 构建 Folder 树 */
-export function buildFolderTree(folders: EntityRowOf<'folder'>[]): FolderTree {
-  const byId = new Map<string, FolderNode>()
-  for (const folder of folders)
-    byId.set(folder.id, { folder, parent: null, children: [] })
-  const roots: FolderNode[] = []
-  for (const folder of folders) {
-    const node = byId.get(folder.id)!
-    const parentId = folder.data.parentId
-    if (parentId && byId.has(parentId)) {
-      const parent = byId.get(parentId)!
-      node.parent = parent
-      parent.children.push(node)
-    }
-    else {
-      roots.push(node)
-    }
-  }
-  const sortNode = (a: FolderNode, b: FolderNode) => byOrder(a.folder.data, b.folder.data)
   roots.sort(sortNode)
   for (const node of byId.values())
     node.children.sort(sortNode)

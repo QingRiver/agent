@@ -1,6 +1,7 @@
-import type { KbNodeRow } from '@apis/kb-api'
-import { KB_DEFAULT_ID, KbApi } from '@apis/kb-api'
+import type { DirDto } from '@apis/dir-api'
+import { KbApi } from '@apis/kb-api'
 import { Button } from '@components/ui/button'
+import { DirStore } from '@stores/dir-store'
 import { KbStore } from '@stores/kb-store'
 import { useAtomValue } from 'jotai'
 import { ClipboardPaste, FolderUp, Loader2, Upload, X } from 'lucide-react'
@@ -18,41 +19,42 @@ interface FolderPick {
   path: string
 }
 
-/** 把 kb_nodes（全是文件夹）按 parentId 链 walk 成 {id, path} 列表，根级 id=null */
-function flattenFolders(nodes: KbNodeRow[]): FolderPick[] {
-  const byId = new Map(nodes.map(n => [n.id, n]))
+/** 把 dirs（project + dir）按 parentId 链 walk 成 {id, path} 列表，根级 id=null */
+function flattenFolders(dirs: DirDto[]): FolderPick[] {
+  const byId = new Map(dirs.map(d => [d.id, d]))
   const pathOf = (id: string): string => {
     const segs: string[] = []
     let cur: string | null = id
     const guard = new Set<string>()
     while (cur != null && !guard.has(cur)) {
       guard.add(cur)
-      const n = byId.get(cur)
-      if (!n)
+      const d = byId.get(cur)
+      if (!d)
         break
-      segs.unshift(n.name)
-      cur = n.parentId
+      segs.unshift(d.name)
+      cur = d.parentId
     }
     return segs.join('/')
   }
-  return [{ id: null, path: '根级' }, ...nodes.map(n => ({ id: n.id, path: pathOf(n.id) }))]
+  return [{ id: null, path: '根级（Inbox）' }, ...dirs.map(d => ({ id: d.id, path: pathOf(d.id) }))]
 }
 
 interface ResultRow {
   docId: string
   name: string
-  vdir: string | null
+  mountPath: string | null
   skipped: boolean
 }
 
 export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
   'use no memo'
 
-  const nodes = useAtomValue(KbStore.nodesAtom)
-  const folders = flattenFolders(nodes)
+  const dirs = useAtomValue(DirStore.dirsAtom)
+  const folders = flattenFolders(dirs)
+  const pathById = new Map(dirs.map(d => [d.id, folders.find(f => f.id === d.id)?.path ?? null]))
 
   const [tab, setTab] = useState<Tab>('files')
-  const [parentNodeId, setParentNodeId] = useState<string | null>(null)
+  const [mountDirId, setMountDirId] = useState<string | null>(null)
   const [tags, setTags] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -83,6 +85,12 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
     setTextContent('')
   }
 
+  function toMountPath(id: string | null | undefined): string | null {
+    if (id == null)
+      return '根级（Inbox）'
+    return pathById.get(id) ?? null
+  }
+
   async function onImport() {
     setError(null)
     setResults([])
@@ -92,7 +100,7 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
     const selectedZip = zipFile
     const trimmedTextName = textName.trim()
     const tagArr = parseTags()
-    const parent = parentNodeId ?? undefined
+    const mount = mountDirId ?? undefined
 
     if (tab === 'files' && selected.length === 0) {
       setError('请选择文件')
@@ -120,48 +128,48 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
       if (tab === 'files') {
         if (zips.length === 1) {
           // 误在「上传」里选了 zip → 自动走目录还原路径
-          const items = await KbApi.ingestZip(KB_DEFAULT_ID, zips[0]!, {
+          const items = await KbApi.ingestZip(zips[0]!, {
             ...(tagArr ? { tags: tagArr } : {}),
           })
           setResults(items.map(i => ({
             docId: i.docId,
             name: i.name,
-            vdir: i.vdir,
+            mountPath: toMountPath(i.mountDirId),
             skipped: i.skipped,
           })))
         }
         else {
-          const items = await KbApi.ingestFiles(KB_DEFAULT_ID, others, {
-            ...(parent != null ? { parentNodeId: parent } : {}),
+          const items = await KbApi.ingestFiles(others, {
+            ...(mount != null ? { mountDirId: mount } : {}),
             ...(tagArr ? { tags: tagArr } : {}),
           })
           setResults(items.map(i => ({
             docId: i.docId,
             name: i.name,
-            vdir: i.vdir,
+            mountPath: toMountPath(i.mountDirId),
             skipped: i.skipped,
           })))
         }
       }
       else if (tab === 'zip') {
-        const items = await KbApi.ingestZip(KB_DEFAULT_ID, selectedZip!, {
+        const items = await KbApi.ingestZip(selectedZip!, {
           ...(tagArr ? { tags: tagArr } : {}),
         })
         setResults(items.map(i => ({
           docId: i.docId,
           name: i.name,
-          vdir: i.vdir,
+          mountPath: toMountPath(i.mountDirId),
           skipped: i.skipped,
         })))
       }
       else {
-        const doc = await KbApi.ingestText(KB_DEFAULT_ID, {
+        const doc = await KbApi.ingestText({
           content: textContent,
           name: trimmedTextName,
-          ...(parent != null ? { parentNodeId: parent } : {}),
+          ...(mount != null ? { mountDirId: mount } : {}),
           ...(tagArr ? { tags: tagArr } : {}),
         })
-        setResults([{ docId: doc.id, name: doc.name, vdir: doc.vdir, skipped: false }])
+        setResults([{ docId: doc.id, name: doc.name, mountPath: toMountPath(doc.mountDirId), skipped: false }])
       }
       await KbStore.refresh()
     }
@@ -239,8 +247,8 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
           <label className="block">
             <span className="mb-1 block text-xs text-muted-foreground">目标文件夹</span>
             <select
-              value={parentNodeId ?? ''}
-              onChange={e => setParentNodeId(e.target.value || null)}
+              value={mountDirId ?? ''}
+              onChange={e => setMountDirId(e.target.value || null)}
               className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:border-border"
             >
               {folders.map(f => (
@@ -332,7 +340,7 @@ export function KbImportDialog({ open, onClose }: KbImportDialogProps) {
                   className="flex items-center gap-2 rounded-md border border-border bg-muted px-2 py-1.5"
                 >
                   <span className="min-w-0 flex-1 truncate text-sm text-foreground">{r.name}</span>
-                  {r.vdir && <span className="truncate text-xs text-muted-foreground">{r.vdir}</span>}
+                  {r.mountPath && <span className="truncate text-xs text-muted-foreground">{r.mountPath}</span>}
                   {r.skipped && <span className="text-xs text-amber-700 dark:text-amber-400">跳过</span>}
                   <button
                     type="button"

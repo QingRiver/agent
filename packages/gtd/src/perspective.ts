@@ -5,7 +5,6 @@ import type {
   ComputedStatus,
   GroupKey,
   Perspective,
-  Project,
   SortKey,
 } from './schema'
 import type { EntityRowOf } from './sync-schema'
@@ -13,7 +12,6 @@ import type { TaskTree } from './tree'
 import { computeStatus } from './availability'
 import { FILTER_FIELD, LEAF_OP, matchFilter, rawValue } from './filter'
 import { defaultForecastOptions, renderForecast } from './forecast'
-import { needsReview } from './review'
 import { buildTaskTree, taskDepth } from './tree'
 import {
   AVAILABILITY_FILTER,
@@ -58,7 +56,6 @@ function taskComputed(task: EntityRowOf<'task'>, ctx: RenderContext): ComputedSt
     ctx.now,
     ctx.tree,
     ctx.dueSoonIntervalMs,
-    ctx.rowStore.liveProjects(),
     ctx.statusCache,
   )
 }
@@ -95,25 +92,15 @@ export function applyBaseFilter(
   })
 }
 
-/** 内置透视额外过滤（非通用 DSL；forecast 不经此函数） */
+/** 内置透视额外过滤（非通用 DSL；forecast 不经此函数）。Phase 1：review 透视移除。 */
 export function applyBuiltinFilter(
   tasks: EntityRowOf<'task'>[],
   perspective: Perspective,
-  rowStore: RowStore,
-  now: Date,
-  _dueSoonIntervalMs: number,
 ): EntityRowOf<'task'>[] {
   switch (perspective.id) {
     case 'inbox':
-      return tasks.filter(t => t.data.projectId === null && t.data.parentId === null)
-    case 'review':
-      return tasks.filter((t) => {
-        if (!t.data.projectId) {
-          return false
-        }
-        const project = rowStore.findLive('project', t.data.projectId)
-        return project ? needsReview(project.data as unknown as Project, now) : false
-      })
+      // Inbox = mountDirId null（位置权威），且无 parent（顶层）
+      return tasks.filter(t => t.data.mountDirId === null && t.data.parentId === null)
     case 'completed':
       return tasks.filter(t => t.data.status === EXPLICIT_STATUS.COMPLETED)
     default:
@@ -137,11 +124,10 @@ export function expandAncestors(taskIds: string[], tree: TaskTree): string[] {
 /** 单 task 在某 groupKey 下的归属值列表（tag 多归属 → 多值） */
 function groupValues(task: EntityRowOf<'task'>, key: GroupKey, rowStore: RowStore): string[] {
   switch (key) {
-    case GROUP_KEY.PROJECT: return [task.data.projectId ?? '']
-    case GROUP_KEY.FOLDER: {
-      const proj = rowStore.findLive('project', task.data.projectId ?? '')
-      return [proj?.data.folderId ?? '']
-    }
+    case GROUP_KEY.PROJECT: return [rowStore.projectOf?.(task) ?? task.data.projectId ?? '']
+    case GROUP_KEY.FOLDER:
+      // §8.1：文件夹 = mountDirId 指向 kind=dir 者；非 dir 挂载归空组
+      return [rowStore.isDirMount?.(task) ? (task.data.mountDirId ?? '') : '']
     case GROUP_KEY.TAG: {
       const tagIds = rowStore.tagIdsOf(task.id)
       return tagIds.length ? tagIds : ['']
@@ -276,7 +262,7 @@ export function renderPerspective(
 
   let filtered = applyBaseFilter(tasks, perspective, ctx)
   filtered = filtered.filter(t => matchFilter(t, perspective.filter, evalCtx))
-  filtered = applyBuiltinFilter(filtered, perspective, rowStore, now, dueSoonIntervalMs)
+  filtered = applyBuiltinFilter(filtered, perspective)
 
   const expandedIds = new Set(expandAncestors(filtered.map(t => t.id), tree))
   let result = tasks.filter(t => expandedIds.has(t.id))
@@ -306,7 +292,7 @@ function builtin(id: string, name: string, overrides: Partial<Perspective> = {})
   }
 }
 
-/** 7 个内置透视（forecast 居首） */
+/** 6 个内置透视（forecast 居首；Phase 1 移除 review） */
 export function builtinPerspectives(): Perspective[] {
   return [
     // Forecast：availabilityFilter/show* 经 applyBaseFilter 生效；
@@ -335,11 +321,6 @@ export function builtinPerspectives(): Perspective[] {
         { field: SORT_FIELD.DUE_DATE, dir: SORT_DIR.ASC },
         { field: SORT_FIELD.FLAGGED, dir: SORT_DIR.DESC },
       ],
-    }),
-    builtin('review', '回顾', {
-      availabilityFilter: AVAILABILITY_FILTER.ALL,
-      groupBy: [GROUP_KEY.PROJECT],
-      sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
     }),
     builtin('completed', '已完成', {
       availabilityFilter: AVAILABILITY_FILTER.ALL,

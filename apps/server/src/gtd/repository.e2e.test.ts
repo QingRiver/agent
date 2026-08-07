@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db/drizzle'
 import { migrateAppSchema } from '../db/migrate'
-import { gtdFolders, gtdPerspectives, gtdProjects, gtdTasks, gtdTaskTags, tags } from '../db/schema'
+import { gtdPerspectives, gtdTasks, gtdTaskTags, tags } from '../db/schema'
 import { DrizzleGtdRepository } from './repository'
 
 const USER_ID = `gtd-e2e-${Date.now().toString(36)}`
@@ -31,6 +31,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     name: 'task',
     note: null,
     projectId: 'proj-1',
+    mountDirId: null,
     parentId: null,
     order: 1,
     status: EXPLICIT_STATUS.ACTIVE,
@@ -67,9 +68,7 @@ function makeTag(overrides: Partial<Tag> = {}): Tag {
 async function cleanup(): Promise<void> {
   await db.delete(gtdTasks).where(eq(gtdTasks.userId, USER_ID))
   await db.delete(gtdPerspectives).where(eq(gtdPerspectives.userId, USER_ID))
-  await db.delete(gtdProjects).where(eq(gtdProjects.userId, USER_ID))
   await db.delete(tags).where(eq(tags.userId, USER_ID))
-  await db.delete(gtdFolders).where(eq(gtdFolders.userId, USER_ID))
 }
 
 describe('drizzleGtdRepository e2e', () => {

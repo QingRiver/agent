@@ -1,4 +1,5 @@
 import type { Context } from 'hono'
+import { ProjectDirError } from '@agent/project'
 import { HTTPException } from 'hono/http-exception'
 import { KbConflictError } from '../service/kb'
 import { TagsConflictError } from '../service/tags'
@@ -18,7 +19,7 @@ export function notFound(message = 'Not found'): never {
 export function handleAppError(err: Error, c: Context): Response | Promise<Response> {
   if (err instanceof HTTPException)
     return c.json({ error: err.message }, err.status)
-  if (err instanceof KbConflictError || err instanceof TagsConflictError)
+  if (err instanceof KbConflictError || err instanceof TagsConflictError || err instanceof ProjectDirError)
     return c.json({ error: err.message }, 409)
   console.error('[server]', err)
   return c.json({ error: err.message }, 500)

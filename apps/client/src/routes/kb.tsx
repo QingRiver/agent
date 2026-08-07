@@ -1,3 +1,4 @@
+import { DirSync } from '@components/gtd/DirSync'
 import { KbEditor } from '@components/kb/KbEditor'
 import { KbRecallPanel } from '@components/kb/KbRecallPanel'
 import { KbSidebar } from '@components/kb/KbSidebar'
@@ -12,7 +13,6 @@ import { z } from 'zod'
 const LS_SIDEBAR_COLLAPSED = 'kb.sidebarCollapsed'
 
 const kbSearchSchema = z.object({
-  path: z.string().optional(),
   doc: z.string().optional(),
   chunk: z.string().optional(),
 })
@@ -42,16 +42,12 @@ function KbPage() {
   const [recallOpen, setRecallOpen] = useState(false)
   const [sourceMode, setSourceMode] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
-  const { path, doc } = Route.useSearch()
+  const { doc } = Route.useSearch()
 
   useEffect(() => {
     let cancelled = false
 
     async function selectRouteDocument() {
-      if (path) {
-        await KbStore.selectByVdir(path)
-        return
-      }
       if (doc && !cancelled)
         KbStore.select(doc)
     }
@@ -60,7 +56,7 @@ function KbPage() {
     return () => {
       cancelled = true
     }
-  }, [path, doc])
+  }, [doc])
 
   function onToggleSidebar() {
     setSidebarCollapsed((prev) => {
@@ -79,6 +75,7 @@ function KbPage() {
   return (
     <>
       <KbSync />
+      <DirSync />
       <KbLayout
         sidebar={(
           <KbSidebar

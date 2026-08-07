@@ -9,22 +9,18 @@ import { COMPUTED_STATUS, EXPLICIT_STATUS, GROUP_TYPE } from './types'
 /**
  * 可用性计算。派生状态不落 JSON，实时计算。
  * 吃 RowStore（行级），不再吃 GtdDocument。
+ *
+ * Phase 1（统一 dirs 树）：project facet 全弃用——project on_hold（status 删）与
+ * project 级 sequential（type 下沉 action group groupType）两路逻辑移除；sequential 仅
+ * 剩 action group 级（parent.task.data.groupType === SEQUENTIAL）。
  */
 
 interface ComputeContext {
   now: Date
   tree: TaskTree
   dueSoonIntervalMs: number
-  projects: EntityRowOf<'project'>[]
   cache: Map<string, ComputedStatus>
   visiting: Set<string>
-}
-
-function projectRootTasks(tree: TaskTree, projectId: string): EntityRowOf<'task'>[] {
-  return tree.roots
-    .filter(n => n.task.data.projectId === projectId && n.task.data.parentId === null)
-    .map(n => n.task)
-    .sort((a, b) => a.data.order - b.data.order)
 }
 
 function computeStatusInner(task: EntityRowOf<'task'>, ctx: ComputeContext): ComputedStatus {
@@ -68,30 +64,6 @@ function computeStatusInner(task: EntityRowOf<'task'>, ctx: ComputeContext): Com
     ancestor = ancestor.parent
   }
 
-  // 祖先 project on_hold → blocked
-  if (task.data.projectId) {
-    const proj = ctx.projects.find(p => p.id === task.data.projectId)
-    if (proj && proj.data.status === EXPLICIT_STATUS.ON_HOLD) {
-      ctx.cache.set(task.id, COMPUTED_STATUS.BLOCKED)
-      ctx.visiting.delete(task.id)
-      return COMPUTED_STATUS.BLOCKED
-    }
-  }
-
-  // 项目级 sequential：顶层 action 前序未完成 → blocked
-  if (task.data.projectId && task.data.parentId === null) {
-    const proj = ctx.projects.find(p => p.id === task.data.projectId)
-    if (proj?.data.type === GROUP_TYPE.SEQUENTIAL) {
-      const roots = projectRootTasks(ctx.tree, task.data.projectId)
-      const idx = roots.findIndex(s => s.id === task.id)
-      if (idx > 0 && roots.slice(0, idx).some(s => s.data.status === EXPLICIT_STATUS.ACTIVE)) {
-        ctx.cache.set(task.id, COMPUTED_STATUS.BLOCKED)
-        ctx.visiting.delete(task.id)
-        return COMPUTED_STATUS.BLOCKED
-      }
-    }
-  }
-
   // action group sequential：前序 sibling 未完成 → blocked
   let node = ctx.tree.byId.get(task.id)
   while (node?.parent) {
@@ -130,21 +102,19 @@ function computeStatusInner(task: EntityRowOf<'task'>, ctx: ComputeContext): Com
 
 /**
  * 计算单个 Task 的 ComputedStatus。
- * projects 可选：传入后检查祖先 project on_hold / sequential。
+ * （Phase 1：project on_hold / project 级 sequential 已移除，仅剩 action group 级 sequential。）
  */
 export function computeStatus(
   task: EntityRowOf<'task'>,
   now: Date,
   tree: TaskTree,
   dueSoonIntervalMs: number,
-  projects: EntityRowOf<'project'>[] = [],
   cache?: Map<string, ComputedStatus>,
 ): ComputedStatus {
   return computeStatusInner(task, {
     now,
     tree,
     dueSoonIntervalMs,
-    projects,
     cache: cache ?? new Map(),
     visiting: new Set(),
   })
@@ -161,7 +131,7 @@ export function computeAll(
   const cache = new Map<string, ComputedStatus>()
   const result: Record<string, ComputedStatus> = {}
   for (const t of tasks) {
-    result[t.id] = computeStatus(t, now, tree, dueSoonIntervalMs, rowStore.liveProjects(), cache)
+    result[t.id] = computeStatus(t, now, tree, dueSoonIntervalMs, cache)
   }
   return result
 }

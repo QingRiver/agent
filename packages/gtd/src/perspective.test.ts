@@ -155,18 +155,18 @@ describe('renderPerspective', () => {
 })
 
 describe('applyBuiltinFilter', () => {
-  it('inbox 仅顶层无 project', () => {
+  it('inbox 仅 mountDirId 为 null 的顶层', () => {
     const inbox = makeTaskRow('inbox')
-    const other = makeTaskRow('p', { projectId: 'p1' })
+    const other = makeTaskRow('p', { mountDirId: 'p1' })
     const p = builtinPerspectives().find(x => x.id === 'inbox')!
-    const out = applyBuiltinFilter([inbox, other], p, new RowStore([inbox, other]), NOW, DUE_SOON_MS)
+    const out = applyBuiltinFilter([inbox, other], p)
     expect(out.map(r => r.id)).toEqual(['inbox'])
   })
 })
 
 describe('builtinPerspectives', () => {
-  it('返回 7 个内置透视', () => {
-    expect(builtinPerspectives()).toHaveLength(7)
+  it('返回 6 个内置透视', () => {
+    expect(builtinPerspectives()).toHaveLength(6)
   })
 
   it('forecast 居首且无 predicted', () => {

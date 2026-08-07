@@ -11,6 +11,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
+    globalSetup: ['./vitest.globalSetup.ts'],
     include: ['packages/**/*.test.ts', 'apps/**/*.test.ts'],
     coverage: {
       provider: 'v8',

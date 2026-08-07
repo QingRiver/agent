@@ -1,27 +1,32 @@
-import type { EntityRow, PullResponse, PushRequest, PushResponse, RepeatRule, SyncState } from '@agent/gtd'
+import type { EntityRow, EntityRowOf, PullResponse, PushRequest, PushResponse, RepeatRule, SyncState } from '@agent/gtd'
+import type { DirRow } from '@agent/project'
 import type {
   AttachmentRow,
-  FolderRow,
   PerspectiveRow,
-  ProjectRow,
   TagRow,
   TaskRow,
 } from '../db/schema'
 import { applyPush } from '@agent/gtd'
+import { walkToProjectRoot } from '@agent/project'
 /**
  * GTD sync Postgres 落库。
  *
  * EntityRow 是 Client/wire/PG 同构真相。push 单事务：FOR UPDATE clock → 装配 SyncState
- * → applyPush 纯函数 → 写变更行（upsert）+ clock + 幂等 → 返回 response。
+ * → applyPush 纯函数 → **task project_id stamp（server 派生）** → 写变更行（upsert）
+ * + clock + 幂等 → 返回 response。
+ *
+ * project_id 两层模型：applyPush 纯函数完全不维护 projectId（patch 不含、move 已删）；
+ * 本落库层在 applyPush 后对每个 syncId > oldClock 的 task 行做 stamp——
+ * `walkToProjectRoot(mountDirId, dirsById)` + 死引用修正（mountDirId→已删 dir→null）。
+ * stamp 必须在 response.changes 构造之前，client 收到的 projectId 永远是 server 权威值。
  * pull 纯读 sync_id > lastSyncId。日常路径禁止 saveDocument 全删全插。
  */
 import { and, eq, gt, inArray } from 'drizzle-orm'
 import { db } from '../db/drizzle'
 import {
+  dirs,
   gtdAttachments,
-  gtdFolders,
   gtdPerspectives,
-  gtdProjects,
   gtdSyncClocks,
   gtdSyncMutations,
   gtdTasks,
@@ -57,6 +62,7 @@ function rowToTaskEntity(row: TaskRow): EntityRow {
       name: row.name,
       note: row.note,
       projectId: row.projectId,
+      mountDirId: row.mountDirId,
       parentId: row.parentId,
       order: row.sortOrder,
       status: row.status,
@@ -74,49 +80,6 @@ function rowToTaskEntity(row: TaskRow): EntityRow {
       repeatedFromTaskId: row.repeatedFromTaskId,
       createdAt: row.createdAt.toISOString(),
       updatedAt: (row.updatedAt ?? row.createdAt).toISOString(),
-    },
-  } as unknown as EntityRow
-}
-
-function rowToProjectEntity(row: ProjectRow): EntityRow {
-  return {
-    entity: 'project',
-    id: row.id,
-    userId: row.userId,
-    syncId: row.syncId ?? 0,
-    deleted: row.deleted,
-    data: {
-      name: row.name,
-      note: row.note,
-      folderId: row.folderId,
-      order: row.sortOrder,
-      status: row.status,
-      type: row.type,
-      defaultDeferOffset: row.defaultDeferOffset,
-      defaultDueOffset: row.defaultDueOffset,
-      defaultTagIds: row.defaultTagIds ?? [],
-      flagged: row.flagged,
-      review: row.review,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: (row.updatedAt ?? row.createdAt).toISOString(),
-    },
-  } as unknown as EntityRow
-}
-
-function rowToFolderEntity(row: FolderRow): EntityRow {
-  return {
-    entity: 'folder',
-    id: row.id,
-    userId: row.userId,
-    syncId: row.syncId ?? 0,
-    deleted: row.deleted,
-    data: {
-      name: row.name,
-      parentId: row.parentId,
-      order: row.sortOrder,
-      status: row.status,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: toISO(row.updatedAt),
     },
   } as unknown as EntityRow
 }
@@ -201,7 +164,8 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
           userId: row.userId,
           name: d.name,
           note: d.note,
-          projectId: d.projectId,
+          projectId: d.projectId ?? null,
+          mountDirId: d.mountDirId ?? null,
           parentId: d.parentId,
           sortOrder: d.order,
           status: d.status,
@@ -226,7 +190,8 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
           set: {
             name: d.name,
             note: d.note,
-            projectId: d.projectId,
+            projectId: d.projectId ?? null,
+            mountDirId: d.mountDirId ?? null,
             parentId: d.parentId,
             sortOrder: d.order,
             status: d.status,
@@ -261,80 +226,6 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
         .onConflictDoUpdate({
           target: [gtdTaskTags.taskId, gtdTaskTags.tagId],
           set: { userId: row.userId, syncId: row.syncId, deleted: row.deleted },
-        })
-      break
-    }
-    case 'project': {
-      const d = row.data
-      await tx.insert(gtdProjects)
-        .values({
-          id: row.id,
-          userId: row.userId,
-          folderId: d.folderId,
-          name: d.name,
-          note: d.note,
-          sortOrder: d.order,
-          status: d.status,
-          type: d.type,
-          defaultDeferOffset: d.defaultDeferOffset,
-          defaultDueOffset: d.defaultDueOffset,
-          defaultTagIds: d.defaultTagIds,
-          flagged: d.flagged,
-          review: d.review,
-          nextReviewDate: toDate(d.review.nextReviewDate),
-          syncId: row.syncId,
-          deleted: row.deleted,
-          createdAt: toDate(d.createdAt),
-          updatedAt: toDate(d.updatedAt),
-        })
-        .onConflictDoUpdate({
-          target: gtdProjects.id,
-          set: {
-            folderId: d.folderId,
-            name: d.name,
-            note: d.note,
-            sortOrder: d.order,
-            status: d.status,
-            type: d.type,
-            defaultDeferOffset: d.defaultDeferOffset,
-            defaultDueOffset: d.defaultDueOffset,
-            defaultTagIds: d.defaultTagIds,
-            flagged: d.flagged,
-            review: d.review,
-            nextReviewDate: toDate(d.review.nextReviewDate),
-            syncId: row.syncId,
-            deleted: row.deleted,
-            updatedAt: toDate(d.updatedAt),
-          },
-        })
-      break
-    }
-    case 'folder': {
-      const d = row.data
-      await tx.insert(gtdFolders)
-        .values({
-          id: row.id,
-          userId: row.userId,
-          parentId: d.parentId,
-          name: d.name,
-          sortOrder: d.order,
-          status: d.status,
-          syncId: row.syncId,
-          deleted: row.deleted,
-          createdAt: toDate(d.createdAt),
-          updatedAt: toDate(d.updatedAt),
-        })
-        .onConflictDoUpdate({
-          target: gtdFolders.id,
-          set: {
-            parentId: d.parentId,
-            name: d.name,
-            sortOrder: d.order,
-            status: d.status,
-            syncId: row.syncId,
-            deleted: row.deleted,
-            updatedAt: toDate(d.updatedAt),
-          },
         })
       break
     }
@@ -438,10 +329,8 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
 
 /** 拉取增量：各表 sync_id > lastSyncId（含软删）→ EntityRow[]。 */
 export async function pullFromPg(userId: string, lastSyncId: number): Promise<PullResponse> {
-  const [folders, tagRows, projects, perspectives, tasks, taskTags, attachments, clockRow] = await Promise.all([
-    db.select().from(gtdFolders).where(and(eq(gtdFolders.userId, userId), gt(gtdFolders.syncId, lastSyncId))),
+  const [tagRows, perspectives, tasks, taskTags, attachments, clockRow] = await Promise.all([
     db.select().from(tags).where(and(eq(tags.userId, userId), gt(tags.syncId, lastSyncId))),
-    db.select().from(gtdProjects).where(and(eq(gtdProjects.userId, userId), gt(gtdProjects.syncId, lastSyncId))),
     db.select().from(gtdPerspectives).where(and(eq(gtdPerspectives.userId, userId), gt(gtdPerspectives.syncId, lastSyncId))),
     db.select().from(gtdTasks).where(and(eq(gtdTasks.userId, userId), gt(gtdTasks.syncId, lastSyncId))),
     db.select().from(gtdTaskTags).where(and(eq(gtdTaskTags.userId, userId), gt(gtdTaskTags.syncId, lastSyncId))),
@@ -450,9 +339,7 @@ export async function pullFromPg(userId: string, lastSyncId: number): Promise<Pu
   ])
 
   const changes: EntityRow[] = [
-    ...folders.map(rowToFolderEntity),
     ...tagRows.map(rowToTagEntity),
-    ...projects.map(rowToProjectEntity),
     ...perspectives.map(rowToPerspectiveEntity),
     ...tasks.map(rowToTaskEntity),
     ...attachments.map(rowToAttachmentEntity),
@@ -486,6 +373,45 @@ export async function applyPushToPg(userId: string, req: PushRequest): Promise<P
     const newClock = result.state.clock
     // 变更行 = newState 中 syncId > oldClock（本次分配的）
     const changedRows = result.state.rows.filter(r => r.syncId > oldClock)
+
+    // 3.5. task project_id stamp（server 派生，非 LWW）。
+    //   applyPush 纯函数不维护 projectId（patch 不含、move 已删）；此处对每个变更 task 行
+    //   用 walkToProjectRoot(mountDirId, dirsById) 重算，并修正死引用（mountDirId→已删 dir）。
+    //   必须「先 stamp 再 upsert」且「response.changes 构造之前」——changedRows 与
+    //   result.state.rows 是同一引用，原地改 data 即同步生效，client 收到 server 权威值。
+    const changedTasks = changedRows.filter(
+      (r): r is EntityRowOf<'task'> => r.entity === 'task',
+    )
+    if (changedTasks.length > 0) {
+      const dirRows = await tx.select().from(dirs).where(and(eq(dirs.userId, userId), eq(dirs.deleted, false)))
+      // walkToProjectRoot 只读 id/parentId/kind；构造最小 DirRow 视图（cast 满足类型）
+      const dirsById = new Map<string, Pick<DirRow, 'id' | 'parentId' | 'kind'>>()
+      for (const d of dirRows) {
+        dirsById.set(d.id, { id: d.id, parentId: d.parentId, kind: d.kind as DirRow['kind'] })
+      }
+      for (const row of changedTasks) {
+        const mount = row.data.mountDirId ?? null
+        if (mount == null) {
+          row.data.projectId = null
+          continue
+        }
+        const dir = dirsById.get(mount)
+        if (!dir) {
+          // 死引用：mountDirId 指向已删/不存在 dir。顶层 task 降级 Inbox（清 mountDirId）；
+          // child task 受 CHECK ck_gtd_tasks_inbox 约束须保留 mountDirId，仅 projectId 置空。
+          if (row.data.parentId == null) {
+            row.data.mountDirId = null
+          }
+          row.data.projectId = null
+        }
+        else {
+          row.data.projectId = walkToProjectRoot(
+            mount,
+            dirsById as Map<string, DirRow>,
+          )
+        }
+      }
+    }
 
     // 4. 写变更行 upsert
     for (const row of changedRows) {
@@ -523,9 +449,7 @@ export async function applyPushToPg(userId: string, req: PushRequest): Promise<P
  *  事务绑定单一 pg 连接，禁止 Promise.all 并发 select（触发 pg 并发查询警告且可能错位结果），逐条 await。
  */
 async function loadSyncStateInTx(tx: Tx, userId: string, reqIds: string[]): Promise<SyncState> {
-  const folders = await tx.select().from(gtdFolders).where(eq(gtdFolders.userId, userId))
   const tagsRows = await tx.select().from(tags).where(eq(tags.userId, userId))
-  const projects = await tx.select().from(gtdProjects).where(eq(gtdProjects.userId, userId))
   const perspectives = await tx.select().from(gtdPerspectives).where(eq(gtdPerspectives.userId, userId))
   const tasks = await tx.select().from(gtdTasks).where(eq(gtdTasks.userId, userId))
   const taskTags = await tx.select().from(gtdTaskTags).where(eq(gtdTaskTags.userId, userId))
@@ -533,9 +457,7 @@ async function loadSyncStateInTx(tx: Tx, userId: string, reqIds: string[]): Prom
   const clockRow = await tx.select().from(gtdSyncClocks).where(eq(gtdSyncClocks.userId, userId))
 
   const rows: EntityRow[] = [
-    ...folders.map(rowToFolderEntity),
     ...tagsRows.map(rowToTagEntity),
-    ...projects.map(rowToProjectEntity),
     ...perspectives.map(rowToPerspectiveEntity),
     ...tasks.map(rowToTaskEntity),
     ...attachments.map(rowToAttachmentEntity),

@@ -1,6 +1,6 @@
 import type { KbQueryResult } from '@apis/kb-api'
 import type { FormEvent } from 'react'
-import { KB_DEFAULT_ID, KbApi } from '@apis/kb-api'
+import { KbApi } from '@apis/kb-api'
 import { Button } from '@components/ui/button'
 import { Loader2, Search, X } from 'lucide-react'
 import { useState } from 'react'
@@ -24,7 +24,7 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
     setLoading(true)
     setError(null)
     try {
-      const next = await KbApi.query(KB_DEFAULT_ID, query, { skipRerank: !enableRerank })
+      const next = await KbApi.query(query, { skipRerank: !enableRerank })
       setResult(next)
     }
     catch (err) {

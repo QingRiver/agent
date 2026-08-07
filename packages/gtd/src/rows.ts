@@ -8,12 +8,27 @@ import type { EntityRow, EntityRowOf, SyncEntity } from './sync-schema'
  *
  * 类型收窄：liveTasks() 等用类型谓词 filter 返回具体 EntityRowOf<E>，
  * tagIdsOf / attachmentIdsOf 从 task_tag / attachment 行聚合（替代 Task.tagIds[]）。
+ *
+ * Phase 1（统一 dirs 树）：project/folder entity 退出 sync，project_id 改 server 派生冗余缓存。
+ * @agent/gtd 不依赖 @agent/project，故 dirs 派生信息（project 根 / 文件夹语义）由调用方经
+ * `projectOf` / `isDirMount` 注入槽提供；缺省回退 task.data.projectId 缓存 / 非 dir 挂载。
  */
+export interface DirProjection {
+  /** task 所属 project 根 id（优先于 task.data.projectId 缓存）；client 注入 walkToProjectRoot */
+  projectOf?: (task: EntityRowOf<'task'>) => string | null
+  /** task 的 mountDirId 是否指向 kind=dir 节点（文件夹语义，§8.1）；client 注入 dirs 查询 */
+  isDirMount?: (task: EntityRowOf<'task'>) => boolean
+}
+
 export class RowStore {
   private rows: EntityRow[]
+  readonly projectOf?: ((task: EntityRowOf<'task'>) => string | null) | undefined
+  readonly isDirMount?: ((task: EntityRowOf<'task'>) => boolean) | undefined
 
-  constructor(rows: EntityRow[] = []) {
+  constructor(rows: EntityRow[] = [], projection?: DirProjection) {
     this.rows = rows
+    this.projectOf = projection?.projectOf
+    this.isDirMount = projection?.isDirMount
   }
 
   /** 全部行（含软删），只读 */
@@ -24,14 +39,6 @@ export class RowStore {
   /** live 行 by entity（类型谓词收窄） */
   liveTasks(): EntityRowOf<'task'>[] {
     return this.live('task')
-  }
-
-  liveProjects(): EntityRowOf<'project'>[] {
-    return this.live('project')
-  }
-
-  liveFolders(): EntityRowOf<'folder'>[] {
-    return this.live('folder')
   }
 
   liveTags(): EntityRowOf<'tag'>[] {

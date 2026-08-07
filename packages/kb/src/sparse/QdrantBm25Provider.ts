@@ -25,6 +25,7 @@ export class QdrantBm25Provider implements SparseProvider {
       using: SPARSE_VECTOR_NAME,
       limit: options.limit,
       with_payload: true,
+      ...(options.filter ? { filter: options.filter } : {}),
     })
 
     return result.points.map((point, index) =>
@@ -41,6 +42,7 @@ export async function denseSearch(
   kbId: string,
   denseVector: number[],
   limit: number,
+  filter?: import('../qdrant').KbRecallFilter,
 ): Promise<RetrievedChunk[]> {
   const client = getQdrantClient()
   const collectionName = resolveCollectionName(kbId)
@@ -53,6 +55,7 @@ export async function denseSearch(
     using: DENSE_VECTOR_NAME,
     limit,
     with_payload: true,
+    ...(filter ? { filter } : {}),
   })
 
   return result.points.map((point, index) =>
@@ -70,6 +73,7 @@ export async function denseSearchWithEnv(
   kbId: string,
   denseVector: number[],
   limit = env.KB_RECALL_K,
+  filter?: import('../qdrant').KbRecallFilter,
 ): Promise<RetrievedChunk[]> {
-  return denseSearch(kbId, denseVector, limit)
+  return denseSearch(kbId, denseVector, limit, filter)
 }

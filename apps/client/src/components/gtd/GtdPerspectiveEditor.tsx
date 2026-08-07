@@ -36,6 +36,8 @@ import {
 import { Input } from '@components/ui/input'
 import { Select } from '@components/ui/select'
 import { cn } from '@lib/utils'
+import { DirStore } from '@stores/dir-store'
+import { getDefaultStore } from 'jotai'
 import { ChevronDown, CornerDownRight, Plus, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 
@@ -131,10 +133,11 @@ function initialInput(perspective?: Perspective): PerspectiveInput {
 }
 
 function entitiesForField(store: RowStore, field: string): Array<{ id: string, name: string }> {
+  // Phase 1：project/folder 退出 GTD sync，引用来自 DirStore dirs 投影；tag 仍来自 RowStore
   if (field === FILTER_FIELD.PROJECT)
-    return store.liveProjects().map(r => ({ id: r.id, name: r.data.name }))
+    return getDefaultStore().get(DirStore.projectRefsAtom)
   if (field === FILTER_FIELD.FOLDER)
-    return store.liveFolders().map(r => ({ id: r.id, name: r.data.name }))
+    return getDefaultStore().get(DirStore.folderRefsAtom).map(f => ({ id: f.id, name: f.name }))
   return store.liveTags().map(r => ({ id: r.id, name: r.data.name }))
 }
 
@@ -200,7 +203,7 @@ export function GtdPerspectiveEditor({
 
   return (
     <div
-      className="fixed left-64 right-0 bottom-0 top-[65px] z-40 flex flex-col"
+      className="fixed left-64 right-0 bottom-0 top-16.25 z-40 flex flex-col"
       role="dialog"
       aria-modal="true"
     >

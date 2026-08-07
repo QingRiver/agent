@@ -43,6 +43,7 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     name: 'task',
     note: null,
     projectId: null,
+    mountDirId: null,
     parentId: null,
     order: 0,
     status: EXPLICIT_STATUS.ACTIVE,

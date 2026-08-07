@@ -9,15 +9,12 @@ import type { RepeatRule, Task } from '../schema'
 import type { SyncState } from '../sync'
 import type {
   CompleteCommand,
-  DeleteFolderCommand,
-  DeleteProjectCommand,
   DeleteTagCommand,
   DropCommand,
   EntityRow,
   EntityRowOf,
   GtdCommand,
   GtdMutation,
-  MoveCommand,
   SyncEntity,
   TaskDeleteMutation,
   TaskTagDeleteMutation,
@@ -25,8 +22,6 @@ import type {
   TaskUpsertMutation,
 } from '../sync-schema'
 import {
-  makeFolder,
-  makeProject,
   makeTag,
   makeTask,
   NOW_ISO,
@@ -67,34 +62,6 @@ export function makeTaskRow(
     deleted: opts.deleted ?? false,
     data,
   }
-}
-
-/** project 行：data 复用 makeProject。 */
-export function makeProjectRow(
-  id: string,
-  dataOverrides: Record<string, unknown> = {},
-  opts: Partial<Omit<EntityRow, 'entity' | 'id' | 'data'>> = {},
-): EntityRow {
-  return makeRow({
-    ...opts,
-    entity: 'project',
-    id,
-    data: Object.assign(makeProject({ id }), dataOverrides),
-  })
-}
-
-/** folder 行：data 复用 makeFolder。 */
-export function makeFolderRow(
-  id: string,
-  dataOverrides: Record<string, unknown> = {},
-  opts: Partial<Omit<EntityRow, 'entity' | 'id' | 'data'>> = {},
-): EntityRow {
-  return makeRow({
-    ...opts,
-    entity: 'folder',
-    id,
-    data: Object.assign(makeFolder({ id }), dataOverrides),
-  })
 }
 
 /** tag 行：data 复用 makeTag。 */
@@ -149,15 +116,6 @@ export function makeCommand(
   cmd: { id?: string, clientTs?: string, type?: 'complete', taskId: string, clientGenerated?: { nextTaskId: string } },
 ): CompleteCommand
 export function makeCommand(cmd: { id?: string, clientTs?: string, type: 'drop', taskId: string }): DropCommand
-export function makeCommand(
-  cmd: { id?: string, clientTs?: string, type: 'move', taskId: string, payload: MoveCommand['payload'] },
-): MoveCommand
-export function makeCommand(
-  cmd: { id?: string, clientTs?: string, type: 'delete_folder', payload: { folderId: string } },
-): DeleteFolderCommand
-export function makeCommand(
-  cmd: { id?: string, clientTs?: string, type: 'delete_project', payload: { projectId: string } },
-): DeleteProjectCommand
 export function makeCommand(
   cmd: { id?: string, clientTs?: string, type: 'delete_tag', payload: { tagId: string } },
 ): DeleteTagCommand

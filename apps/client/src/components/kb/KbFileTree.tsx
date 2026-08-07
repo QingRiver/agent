@@ -1,4 +1,4 @@
-import type { KbNodeRow } from '@apis/kb-api'
+import type { DirTree } from '@agent/project'
 import type { DragEvent, FormEvent, KeyboardEvent } from 'react'
 import type { KbTreeNode } from './kbTree'
 import { cn } from '@lib/utils'
@@ -49,7 +49,7 @@ function readPayload(e: DragEvent): KbTreeDragPayload | null {
 }
 
 export interface KbFileTreeProps {
-  nodes: KbNodeRow[]
+  dirTree: DirTree
   tree: KbTreeNode[]
   expanded: Set<string>
   activeId: string | null
@@ -59,11 +59,11 @@ export interface KbFileTreeProps {
   onRenameFolder: (id: string, name: string) => Promise<void>
   onDeleteFolder: (id: string) => Promise<void>
   onMoveFolder: (id: string, parentId: string | null) => Promise<void>
-  onMoveDoc: (id: string, parentNodeId: string | null) => Promise<void>
+  onMoveDoc: (id: string, mountDirId: string | null) => Promise<void>
 }
 
 export function KbFileTree({
-  nodes,
+  dirTree,
   tree,
   expanded,
   activeId,
@@ -83,7 +83,7 @@ export function KbFileTree({
 
   async function applyDrop(targetParentId: string | null, payload: KbTreeDragPayload) {
     if (payload.kind === 'folder') {
-      if (!canMoveFolderTo(nodes, payload.id, targetParentId))
+      if (!canMoveFolderTo(dirTree, payload.id, targetParentId))
         return
       await onMoveFolder(payload.id, targetParentId)
       return
@@ -211,7 +211,7 @@ export function KbFileTree({
       {pendingDeleteId && (
         <div className="space-y-2 border-b border-border bg-muted p-2 text-xs text-foreground">
           <p>
-            确定删除该文件夹？子文件夹会一并删除；其中的文档会移到根级，文档本身不会被删除。
+            确定删除该文件夹？须先清空其子文件夹与挂载文档（统一树删除为空校验，不级联）。
           </p>
           <div className="flex gap-2">
             <button
@@ -247,7 +247,7 @@ export function KbFileTree({
           </span>
           <button
             type="button"
-            title="新建根级文件夹"
+            title="新建项目（根级）"
             className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
             onClick={() => {
               if (creatingUnder === null) {

@@ -1,19 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { makeProjectRow, makeTaskRow, makeTaskTagRow } from './__tests__/sync-fixtures'
+import { makeTaskRow, makeTaskTagRow } from './__tests__/sync-fixtures'
 import { validateInvariants } from './invariant'
 import { RowStore } from './rows'
 import { EXPLICIT_STATUS, PLANNED_MODE } from './types'
 
 describe('validateInvariants', () => {
   it('合法 rows 返回空数组', () => {
-    const t = makeTaskRow('t1', { projectId: 'p1' })
-    const p = makeProjectRow('p1')
-    expect(validateInvariants(new RowStore([t, p]))).toEqual([])
-  })
-
-  it('broken_reference: projectId 指向不存在的 project', () => {
-    const t = makeTaskRow('t1', { projectId: 'nope' })
-    expect(validateInvariants(new RowStore([t])).some(v => v.code === 'broken_reference')).toBe(true)
+    const t = makeTaskRow('t1', { mountDirId: 'd1' })
+    expect(validateInvariants(new RowStore([t]))).toEqual([])
   })
 
   it('task_on_hold: Task.status=on_hold', () => {
@@ -27,8 +21,8 @@ describe('validateInvariants', () => {
   })
 
   it('cycle: parentId 成环', () => {
-    const a = makeTaskRow('a', { parentId: 'b' })
-    const b = makeTaskRow('b', { parentId: 'a' })
+    const a = makeTaskRow('a', { parentId: 'b', mountDirId: 'd1' })
+    const b = makeTaskRow('b', { parentId: 'a', mountDirId: 'd1' })
     expect(validateInvariants(new RowStore([a, b])).some(v => v.code === 'cycle')).toBe(true)
   })
 
@@ -38,12 +32,22 @@ describe('validateInvariants', () => {
     expect(validateInvariants(new RowStore([t, tt])).some(v => v.code === 'broken_reference')).toBe(true)
   })
 
-  it('duplicate_order: 不同 project 同 order 不冲突', () => {
-    const a = makeTaskRow('a', { projectId: 'p1', order: 1 })
-    const b = makeTaskRow('b', { projectId: 'p2', order: 1 })
-    const p1 = makeProjectRow('p1')
-    const p2 = makeProjectRow('p2')
-    expect(validateInvariants(new RowStore([a, b, p1, p2]))).toEqual([])
+  it('duplicate_order: 不同 mountDirId 同 order 不冲突', () => {
+    const a = makeTaskRow('a', { mountDirId: 'd1', order: 1 })
+    const b = makeTaskRow('b', { mountDirId: 'd2', order: 1 })
+    expect(validateInvariants(new RowStore([a, b]))).toEqual([])
+  })
+
+  it('duplicate_order: 同 mountDirId 同 order 冲突', () => {
+    const a = makeTaskRow('a', { mountDirId: 'd1', order: 1 })
+    const b = makeTaskRow('b', { mountDirId: 'd1', order: 1 })
+    expect(validateInvariants(new RowStore([a, b])).some(v => v.code === 'duplicate_order')).toBe(true)
+  })
+
+  it('invalid_inbox: 有 parent 但无 mountDirId', () => {
+    const parent = makeTaskRow('p', { mountDirId: 'd1' })
+    const child = makeTaskRow('c', { parentId: 'p' })
+    expect(validateInvariants(new RowStore([parent, child])).some(v => v.code === 'invalid_inbox')).toBe(true)
   })
 
   it('invalid_planned: on 缺 plannedDate', () => {

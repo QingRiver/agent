@@ -38,7 +38,7 @@ export function KbSidebar({
   onToggleRecall?: () => void
 }) {
   const {
-    nodes,
+    dirTree,
     filteredDocs,
     tags,
     selectedTagIds,
@@ -55,8 +55,8 @@ export function KbSidebar({
     moveDoc,
   } = useKbDocuments()
 
-  const tree = buildKbTree(nodes, filteredDocs)
-  const rootFolderIds = new Set(nodes.filter(n => n.parentId == null).map(n => n.id))
+  const tree = buildKbTree(dirTree, filteredDocs)
+  const rootFolderIds = new Set(dirTree.roots.map(n => n.dir.id))
   /** 展开/折叠持久化：localStorage 记用户展开的文件夹 id；首次（无记录）默认根展开 */
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     const raw = readLsExpanded()
@@ -174,7 +174,7 @@ export function KbSidebar({
         </p>
       )}
       <KbFileTree
-        nodes={nodes}
+        dirTree={dirTree}
         tree={tree}
         expanded={expanded}
         activeId={activeId}

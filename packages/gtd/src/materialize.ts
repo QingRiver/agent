@@ -9,13 +9,15 @@ import type { GtdDocument, RepeatRule } from './schema'
 import type { EntityRow } from './sync-schema'
 import { RowStore } from './rows'
 
-/** EntityRow[] → GtdDocument（task_tag 行聚合 → task.tagIds；repeatRule 内联 → doc.repeatRules[]） */
+/**
+ * EntityRow[] → GtdDocument（task_tag 行聚合 → task.tagIds；repeatRule 内联 → doc.repeatRules[]）。
+ * Phase 1：folder/project entity 退出 sync，doc.folders/projects 恒空（导入导出 project/folder
+ * 走 Dir API，留后续）；仅折叠 task/tag/perspective/attachment/task_tag。
+ */
 export function materialize(rows: EntityRow[]): GtdDocument {
   const store = new RowStore(rows)
   const tasks = store.liveTasks()
-  const folders = store.liveFolders()
   const tags = store.liveTags()
-  const projects = store.liveProjects()
   const perspectives = store.livePerspectives()
   const attachments = store.liveAttachments()
 
@@ -29,9 +31,9 @@ export function materialize(rows: EntityRow[]): GtdDocument {
   return {
     version: '1.0.0',
     meta: { createdAt: now, updatedAt: now, schemaVersion: '1' },
-    folders: folders.map(f => ({ id: f.id, ...f.data })),
+    folders: [],
     tags: tags.map(t => ({ id: t.id, ...t.data })),
-    projects: projects.map(p => ({ id: p.id, ...p.data })),
+    projects: [],
     tasks: tasks.map(t => ({
       id: t.id,
       ...t.data,
