@@ -161,7 +161,9 @@ export function payloadToRetrievedChunk(
   return {
     chunk_id: String(payload.chunk_id ?? ''),
     source_doc_id: String(payload.source_doc_id ?? ''),
-    heading_path: Array.isArray(payload.heading_path) ? payload.heading_path.map(String) : [],
+    heading_path: Array.isArray(payload.heading_path)
+      ? payload.heading_path.filter((x): x is string => typeof x === 'string' && x.length > 0)
+      : [],
     raw_text: String(payload.raw_text ?? ''),
     score,
     ...(pageNumber !== undefined ? { page_number: pageNumber } : {}),

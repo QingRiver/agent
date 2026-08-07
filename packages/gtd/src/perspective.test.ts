@@ -2,13 +2,15 @@ import type { RenderContext } from './perspective'
 import type { EntityRow, EntityRowOf } from './sync-schema'
 import { describe, expect, it } from 'vitest'
 import { DUE_SOON_MS, makePerspective, makeSortKey, NOW } from './__tests__/fixtures'
-import { makeTaskRow, makeTaskTagRow } from './__tests__/sync-fixtures'
+import { makeTagRow, makeTaskRow, makeTaskTagRow } from './__tests__/sync-fixtures'
 import { FILTER_FIELD, LEAF_OP, LOGIC_OP } from './filter'
 import {
   applyBaseFilter,
   applyBuiltinFilter,
   builtinPerspectives,
   expandAncestors,
+  expandDescendants,
+  flattenInTreeOrder,
   groupBy,
   renderPerspective,
   sortTasks,
@@ -71,6 +73,16 @@ describe('expandAncestors', () => {
   })
 })
 
+describe('expandDescendants', () => {
+  it('补齐子孙', () => {
+    const root = makeTaskRow('r', { groupType: 'parallel' })
+    const mid = makeTaskRow('m', { parentId: 'r' })
+    const leaf = makeTaskRow('l', { parentId: 'm' })
+    const tree = buildTaskTree([root, mid, leaf])
+    expect(expandDescendants(['r'], tree).sort()).toEqual(['l', 'm', 'r'])
+  })
+})
+
 describe('groupBy', () => {
   it('按 project 分组', () => {
     const t1 = makeTaskRow('a', { projectId: 'p1' })
@@ -80,11 +92,37 @@ describe('groupBy', () => {
     expect(groups).toHaveLength(2)
   })
 
+  it('project 分组标题经 dirNameOf 解析为名称', () => {
+    const t = makeTaskRow('a', { projectId: 'p1' })
+    const store = new RowStore([t], { dirNameOf: id => id === 'p1' ? '项目甲' : null })
+    const ctx: RenderContext = {
+      rowStore: store,
+      tree: buildTaskTree([t]),
+      now: NOW,
+      dueSoonIntervalMs: DUE_SOON_MS,
+      statusCache: new Map(),
+    }
+    const groups = groupBy([t], [GROUP_KEY.PROJECT], store, ctx)
+    expect(groups).toEqual([expect.objectContaining({ key: 'p1', label: '项目甲' })])
+  })
+
   it('tag 多归属：一 task 进多组', () => {
     const t = makeTaskRow('a')
     const ctx = makeCtx([t, makeTaskTagRow('a', 'g1'), makeTaskTagRow('a', 'g2')])
     const groups = groupBy([t], [GROUP_KEY.TAG], ctx.rowStore, ctx)
     expect(groups).toHaveLength(2)
+  })
+
+  it('dueDate 分组标题按 timeZone 格式化到分钟', () => {
+    const iso = '2026-08-08T15:59:00.000Z'
+    const t = makeTaskRow('a', { dueDate: iso })
+    const ctx = makeCtx([t])
+    ctx.timeZone = 'Asia/Shanghai'
+    const groups = groupBy([t], [GROUP_KEY.DUE_DATE], ctx.rowStore, ctx)
+    expect(groups).toEqual([expect.objectContaining({
+      key: iso,
+      label: '2026-08-08 23:59',
+    })])
   })
 })
 
@@ -99,7 +137,77 @@ describe('sortTasks', () => {
   })
 })
 
+describe('flattenInTreeOrder', () => {
+  it('父 order 大于子 order 时仍父在子前（不跨级比 order）', () => {
+    const parent = makeTaskRow('fa54', {
+      groupType: 'parallel',
+      order: 1,
+      dueDate: new Date(NOW.getTime() + DUE_SOON_MS / 2).toISOString(),
+    })
+    const child = makeTaskRow('d844', { parentId: 'fa54', order: 0 })
+    const sortBy = [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })]
+    const store = new RowStore([parent, child])
+    const tree = buildTaskTree([parent, child])
+    const out = flattenInTreeOrder(tree, [parent, child], sortBy, store)
+    expect(out.map(r => r.id)).toEqual(['fa54', 'd844'])
+  })
+
+  it('仅命中子任务时 expand 后的祖先仍排在子前', () => {
+    const parent = makeTaskRow('p', { groupType: 'parallel', order: 5 })
+    const child = makeTaskRow('c', { parentId: 'p', order: 0 })
+    const sortBy = [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })]
+    const store = new RowStore([parent, child])
+    const tree = buildTaskTree([parent, child])
+    const out = flattenInTreeOrder(tree, [parent, child], sortBy, store)
+    expect(out.map(r => r.id)).toEqual(['p', 'c'])
+  })
+})
+
 describe('renderPerspective', () => {
+  it('按 order 排序时不把子任务排到父前面', () => {
+    const parent = makeTaskRow('fa54', {
+      groupType: 'parallel',
+      order: 1,
+      dueDate: new Date(NOW.getTime() + DUE_SOON_MS / 2).toISOString(),
+    })
+    const child = makeTaskRow('d844', { parentId: 'fa54', order: 0 })
+    const p = makePerspective({
+      sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })],
+      availabilityFilter: AVAILABILITY_FILTER.REMAINING,
+    })
+    const groups = renderPerspective(new RowStore([parent, child]), p, NOW, DUE_SOON_MS, 'UTC')
+    const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null)
+    expect(ids).toEqual(['fa54', 'd844'])
+    expect(groups.flatMap(g => g.children).map(c => 'depth' in c ? c.depth : null)).toEqual([0, 1])
+  })
+
+  it('点具体标签：命中父任务时带上未打标子任务，且标签透视不收纯未打标任务', () => {
+    const tag = makeTagRow('tag-aaa', { name: 'aaa' })
+    const parent = makeTaskRow('fa54', {
+      name: 'aaa',
+      groupType: 'sequential',
+      order: 0,
+      dueDate: new Date(NOW.getTime() + DUE_SOON_MS / 2).toISOString(),
+    })
+    const child = makeTaskRow('d844', { name: '4', parentId: 'fa54', order: 3 })
+    const orphan = makeTaskRow('lonely')
+    const store = new RowStore([parent, child, orphan, tag, makeTaskTagRow('fa54', 'tag-aaa')])
+
+    const tagsPersp = builtinPerspectives().find(x => x.id === 'tags')!
+    const tagsGroups = renderPerspective(store, tagsPersp, NOW, DUE_SOON_MS, 'UTC')
+    expect(tagsGroups.map(g => g.label)).toEqual(['aaa'])
+    expect(tagsGroups[0]?.children.map(c => 'taskId' in c ? c.taskId : null)).toEqual(['fa54', 'd844'])
+
+    const tagSel = makePerspective({
+      filter: { op: LEAF_OP.SOME, field: FILTER_FIELD.TAG, value: ['tag-aaa'] },
+      sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })],
+      availabilityFilter: AVAILABILITY_FILTER.REMAINING,
+    })
+    const tagGroups = renderPerspective(store, tagSel, NOW, DUE_SOON_MS, 'UTC')
+    const ids = tagGroups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null)
+    expect(ids).toEqual(['fa54', 'd844'])
+  })
+
   it('端到端产出 RenderGroup[] 且 computed 非硬编码', () => {
     const t = makeTaskRow('a', { dueDate: new Date(NOW.getTime() - 60000).toISOString() })
     const p = makePerspective()
@@ -189,5 +297,14 @@ describe('builtinPerspectives', () => {
   it('inbox 内置透视使用 DSL empty 节点', () => {
     const inbox = builtinPerspectives().find(x => x.id === 'inbox')!
     expect(inbox.filter).toEqual({ op: LEAF_OP.EMPTY, field: FILTER_FIELD.PROJECT })
+  })
+
+  it('tags 内置透视排除未打标', () => {
+    const tags = builtinPerspectives().find(x => x.id === 'tags')!
+    expect(tags.filter).toEqual({
+      op: LOGIC_OP.NOT,
+      child: { op: LEAF_OP.EMPTY, field: FILTER_FIELD.TAG },
+    })
+    expect(tags.groupBy).toEqual([GROUP_KEY.TAG])
   })
 })

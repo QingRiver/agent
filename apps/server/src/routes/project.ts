@@ -5,8 +5,8 @@ import {
   DirCreateSchema,
   DirIdParamSchema,
   DirMoveSchema,
-  DirReorderSchema,
   DirRenameSchema,
+  DirReorderSchema,
   DirUpdateAclSchema,
   ProjectCreateSchema,
 } from '../../shared/project'

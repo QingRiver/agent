@@ -2,7 +2,8 @@ import type { KbQueryResult } from '@apis/kb-api'
 import type { FormEvent } from 'react'
 import { KbApi } from '@apis/kb-api'
 import { Button } from '@components/ui/button'
-import { Loader2, Search, X } from 'lucide-react'
+import { Switch } from '@components/ui/switch'
+import { CircleHelp, Loader2, Search, X } from 'lucide-react'
 import { useState } from 'react'
 
 interface KbRecallPanelProps {
@@ -14,7 +15,7 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<KbQueryResult | null>(null)
-  const [enableRerank, setEnableRerank] = useState(true)
+  const [enableRerank, setEnableRerank] = useState(false)
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -59,7 +60,7 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
         <input
           value={q}
           onChange={e => setQ(e.target.value)}
-          placeholder="输入查询，如 SKU-9001…"
+          placeholder="输入关键字测试召回…"
           className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:border-border"
         />
         <Button type="submit" size="sm" disabled={loading || !q.trim()}>
@@ -67,16 +68,40 @@ export function KbRecallPanel({ onClose }: KbRecallPanelProps) {
         </Button>
       </form>
 
-      <label className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <label
+          htmlFor="kb-recall-rerank"
+          className="cursor-pointer text-xs text-foreground"
+        >
+          启用 rerank
+        </label>
+        <span className="group relative inline-flex">
+          <button
+            type="button"
+            className="rounded-full p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="rerank 说明"
+          >
+            <CircleHelp className="size-3.5" />
+          </button>
+          <span
+            role="tooltip"
+            className={[
+              'pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 w-56 -translate-x-1/2',
+              'rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs leading-relaxed text-popover-foreground shadow-md',
+              'opacity-0 transition-opacity',
+              'group-hover:opacity-100 group-focus-within:opacity-100',
+            ].join(' ')}
+          >
+            关闭则仅 RRF 直出，更快，用于测试/自验
+          </span>
+        </span>
+        <Switch
+          id="kb-recall-rerank"
           checked={enableRerank}
-          onChange={e => setEnableRerank(e.target.checked)}
-          className="size-3.5 accent-sky-500"
+          onCheckedChange={setEnableRerank}
+          aria-label="启用 rerank"
         />
-        启用 rerank
-        <span className="text-muted-foreground">（关闭则仅 RRF 直出，更快，用于测试/自验）</span>
-      </label>
+      </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {error && (

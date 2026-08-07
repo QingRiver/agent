@@ -90,14 +90,18 @@ export class TagsService {
     const id = randomUUID()
     const ts = new Date()
     try {
-      await db.insert(tags).values({
-        id,
-        userId,
-        name: args.name,
-        color: args.color ?? null,
-        deleted: false,
-        createdAt: ts,
-        updatedAt: ts,
+      await db.transaction(async (tx) => {
+        const [syncId] = await allocateSyncIds(userId, 1, tx)
+        await tx.insert(tags).values({
+          id,
+          userId,
+          name: args.name,
+          color: args.color ?? null,
+          syncId,
+          deleted: false,
+          createdAt: ts,
+          updatedAt: ts,
+        })
       })
     }
     catch (err) {

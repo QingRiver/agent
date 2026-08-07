@@ -334,12 +334,16 @@ export class GtdStore {
   static readonly userIdAtom = atom<string | undefined>(undefined)
   static readonly rowsAtom = atom<EntityRow[]>([])
   static readonly rowStoreAtom = atom((get) => {
-    // 注入 dirs 派生投影：projectOf（walkToProjectRoot）+ isDirMount（FOLDER 改义）。
+    // 注入 dirs 派生投影：projectOf / isDirMount / dirNameOf（分组标题用名）。
     // 捕获 dirsById 值（非 get），rowStoreAtom 依赖 dirsAtom → dirs 变即重算 RowStore。
     const dirsById = get(DirStore.dirsByIdAtom)
     return new RowStore(get(GtdStore.rowsAtom), {
       projectOf: task => DirStore.projectOf(dirsById, task.data.mountDirId),
       isDirMount: task => DirStore.isDirMount(dirsById, task.data.mountDirId),
+      dirNameOf: (dirId) => {
+        const name = dirsById.get(dirId)?.name
+        return name != null && name !== '' ? name : null
+      },
     })
   })
 

@@ -35,6 +35,51 @@ describe('chunker', () => {
     expect(chunks.some(chunk => chunk.raw_text.includes('SKU-9001'))).toBe(true)
   })
 
+  it('跳级标题（如直接 ###）不产生 null / 稀疏 path', async () => {
+    const markdown = [
+      '### 戚风蛋糕',
+      '蛋白分次加入。',
+      '## 烘焙',
+      '烤箱预热。',
+    ].join('\n')
+
+    const chunks = await chunkMarkdown(markdown, {
+      sourceDocId: 'cake',
+      maxChars: 800,
+      overlapChars: 0,
+    })
+
+    for (const c of chunks) {
+      expect(c.heading_path.every(s => typeof s === 'string' && s.length > 0)).toBe(true)
+      expect(JSON.stringify(c.heading_path)).not.toContain('null')
+    }
+    const chiffon = chunks.find(c => c.raw_text.includes('蛋白'))
+    expect(chiffon?.heading_path).toEqual(['戚风蛋糕'])
+    const bake = chunks.find(c => c.raw_text.includes('烤箱'))
+    expect(bake?.heading_path).toEqual(['烘焙'])
+  })
+
+  it('h1 后跳到 h3：中间跳级不留洞，降回 h2 路径正确', async () => {
+    const markdown = [
+      '# 食谱',
+      '前言。',
+      '### 戚风蛋糕',
+      '步骤一。',
+      '## 吐司',
+      '步骤二。',
+    ].join('\n')
+
+    const chunks = await chunkMarkdown(markdown, {
+      sourceDocId: 'recipes',
+      maxChars: 800,
+      overlapChars: 0,
+    })
+
+    expect(chunks.find(c => c.raw_text.includes('前言'))?.heading_path).toEqual(['食谱'])
+    expect(chunks.find(c => c.raw_text.includes('步骤一'))?.heading_path).toEqual(['食谱', '戚风蛋糕'])
+    expect(chunks.find(c => c.raw_text.includes('步骤二'))?.heading_path).toEqual(['食谱', '吐司'])
+  })
+
   it('hashContent is stable', () => {
     expect(hashContent('abc')).toBe(hashContent('abc'))
     expect(hashContent('abc')).not.toBe(hashContent('abd'))

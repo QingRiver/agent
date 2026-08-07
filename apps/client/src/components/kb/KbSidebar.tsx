@@ -1,6 +1,6 @@
 import { TagManager } from '@components/tags/TagManager'
 import { useKbDocuments } from '@hooks/useKbDocuments'
-import { Plus, RefreshCw, Search, Settings2 } from 'lucide-react'
+import { RefreshCw, Search, Settings2 } from 'lucide-react'
 import { useState } from 'react'
 import { KbFileTree } from './KbFileTree'
 import { KbImportDialog } from './KbImportDialog'
@@ -62,7 +62,7 @@ export function KbSidebar({
     const raw = readLsExpanded()
     return raw ? new Set(raw) : new Set(rootFolderIds)
   })
-  const [importOpen, setImportOpen] = useState(false)
+  const [importTarget, setImportTarget] = useState<{ mountDirId: string, mountPath: string } | null>(null)
   const [tagManagerOpen, setTagManagerOpen] = useState(false)
 
   function toggleFolder(id: string) {
@@ -101,14 +101,6 @@ export function KbSidebar({
         <span className="flex-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           知识库
         </span>
-        <button
-          type="button"
-          title="引入文档"
-          onClick={() => setImportOpen(true)}
-          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <Plus className="size-3.5" />
-        </button>
         {onToggleRecall && (
           <button
             type="button"
@@ -131,36 +123,37 @@ export function KbSidebar({
         </button>
       </div>
 
-      {tags.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1 border-b border-border p-2">
-          {tags.map((tag) => {
-            const on = selectedTagIds.includes(tag.id)
-            return (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() => toggleTag(tag.id)}
-                className={`rounded-full px-2 py-0.5 text-xs ring-1 ring-inset ${
-                  on ? 'ring-2 ring-sky-400' : 'ring-border'
-                }`}
-                style={tag.color
-                  ? { backgroundColor: `${tag.color}33`, color: tag.color, borderColor: tag.color }
-                  : undefined}
-              >
-                {tag.name}
-              </button>
-            )
-          })}
-          <button
-            type="button"
-            title="管理标签"
-            onClick={() => setTagManagerOpen(true)}
-            className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <Settings2 className="size-3.5" />
-          </button>
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-1 border-b border-border p-2">
+        {tags.map((tag) => {
+          const on = selectedTagIds.includes(tag.id)
+          return (
+            <button
+              key={tag.id}
+              type="button"
+              onClick={() => toggleTag(tag.id)}
+              className={`rounded-full px-2 py-0.5 text-xs ring-1 ring-inset ${
+                on ? 'ring-2 ring-sky-400' : 'ring-border'
+              }`}
+              style={tag.color
+                ? { backgroundColor: `${tag.color}33`, color: tag.color, borderColor: tag.color }
+                : undefined}
+            >
+              {tag.name}
+            </button>
+          )
+        })}
+        {tags.length === 0 && (
+          <span className="px-1 text-xs text-muted-foreground">暂无标签</span>
+        )}
+        <button
+          type="button"
+          title="管理标签"
+          onClick={() => setTagManagerOpen(true)}
+          className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <Settings2 className="size-3.5" />
+        </button>
+      </div>
 
       {isLoading && (
         <p className="px-2 py-2 text-sm text-muted-foreground">加载中…</p>
@@ -170,7 +163,7 @@ export function KbSidebar({
       )}
       {!isLoading && tree.length === 0 && (
         <p className="px-2 py-2 text-sm text-muted-foreground">
-          暂无文档。可用顶部「引入」添加，或在下方新建文件夹。
+          暂无内容。先用下方「新建项目」创建根级项目，再在项目/文件夹行上点「引入文档」。
         </p>
       )}
       <KbFileTree
@@ -185,8 +178,16 @@ export function KbSidebar({
         onDeleteFolder={removeFolder}
         onMoveFolder={moveFolder}
         onMoveDoc={moveDoc}
+        onImportInto={(mountDirId, mountPath) => setImportTarget({ mountDirId, mountPath })}
       />
-      <KbImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
+      {importTarget && (
+        <KbImportDialog
+          open
+          mountDirId={importTarget.mountDirId}
+          mountPath={importTarget.mountPath}
+          onClose={() => setImportTarget(null)}
+        />
+      )}
       <TagManager open={tagManagerOpen} onClose={() => setTagManagerOpen(false)} />
     </aside>
   )

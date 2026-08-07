@@ -11,6 +11,7 @@ import {
   FolderOpen,
   FolderPlus,
   Pencil,
+  Plus,
   Trash2,
   X,
 } from 'lucide-react'
@@ -60,6 +61,8 @@ export interface KbFileTreeProps {
   onDeleteFolder: (id: string) => Promise<void>
   onMoveFolder: (id: string, parentId: string | null) => Promise<void>
   onMoveDoc: (id: string, mountDirId: string | null) => Promise<void>
+  /** 在指定 project/dir 下引入文档（与新建/改名/删除并列） */
+  onImportInto: (mountDirId: string, mountPath: string) => void
 }
 
 export function KbFileTree({
@@ -74,6 +77,7 @@ export function KbFileTree({
   onDeleteFolder,
   onMoveFolder,
   onMoveDoc,
+  onImportInto,
 }: KbFileTreeProps) {
   const [dropTarget, setDropTarget] = useState<string | 'root' | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -303,6 +307,7 @@ export function KbFileTree({
               onToggle(parentId)
           }}
           onRequestDelete={setPendingDeleteId}
+          onImportInto={onImportInto}
           onDraftChange={setDraftName}
           onSubmitCreate={parentId => void submitCreate(parentId)}
           onSubmitRename={id => void submitRename(id)}
@@ -414,6 +419,7 @@ function TreeNodes({
   onStartRename,
   onStartCreate,
   onRequestDelete,
+  onImportInto,
   onDraftChange,
   onSubmitCreate,
   onSubmitRename,
@@ -437,6 +443,7 @@ function TreeNodes({
   onStartRename: (id: string, name: string) => void
   onStartCreate: (parentId: string) => void
   onRequestDelete: (id: string) => void
+  onImportInto: (mountDirId: string, mountPath: string) => void
   onDraftChange: (v: string) => void
   onSubmitCreate: (parentId: string | null) => void
   onSubmitRename: (id: string) => void
@@ -489,6 +496,14 @@ function TreeNodes({
                         <span className="truncate">{node.name}</span>
                       </button>
                       <div className="flex shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+                        <button
+                          type="button"
+                          title="引入文档"
+                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          onClick={() => onImportInto(node.id, node.vdir || node.name)}
+                        >
+                          <Plus className="size-3" />
+                        </button>
                         <button
                           type="button"
                           title="新建子文件夹"
@@ -546,6 +561,7 @@ function TreeNodes({
                     onStartRename={onStartRename}
                     onStartCreate={onStartCreate}
                     onRequestDelete={onRequestDelete}
+                    onImportInto={onImportInto}
                     onDraftChange={onDraftChange}
                     onSubmitCreate={onSubmitCreate}
                     onSubmitRename={onSubmitRename}

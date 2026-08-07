@@ -5,6 +5,8 @@ export interface KbTreeFolder {
   kind: 'folder'
   id: string
   name: string
+  /** dirs.vdir 缓存路径，引入对话框展示用 */
+  vdir: string
   children: KbTreeNode[]
 }
 export interface KbTreeDoc {
@@ -36,6 +38,7 @@ export function buildKbTree(tree: DirTree, docs: KbDocSummary[]): KbTreeNode[] {
       kind: 'folder',
       id: n.dir.id,
       name: n.dir.name,
+      vdir: n.dir.vdir,
       children: buildChildren(n),
     }))
     const files = (docsByMount.get(node.dir.id) ?? []).map((d): KbTreeNode => ({
@@ -51,6 +54,7 @@ export function buildKbTree(tree: DirTree, docs: KbDocSummary[]): KbTreeNode[] {
     kind: 'folder',
     id: n.dir.id,
     name: n.dir.name,
+    vdir: n.dir.vdir,
     children: buildChildren(n),
   }))
   const rootDocs = (docsByMount.get(null) ?? []).map((d): KbTreeNode => ({

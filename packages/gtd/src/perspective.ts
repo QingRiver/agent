@@ -8,10 +8,11 @@ import type {
   SortKey,
 } from './schema'
 import type { EntityRowOf } from './sync-schema'
-import type { TaskTree } from './tree'
+import type { TaskNode, TaskTree } from './tree'
 import { computeStatus } from './availability'
-import { FILTER_FIELD, LEAF_OP, matchFilter, rawValue } from './filter'
+import { FILTER_FIELD, LEAF_OP, LOGIC_OP, matchFilter, rawValue } from './filter'
 import { defaultForecastOptions, renderForecast } from './forecast'
+import { formatZonedYmdHm } from './time'
 import { buildTaskTree, taskDepth } from './tree'
 import {
   AVAILABILITY_FILTER,
@@ -42,6 +43,8 @@ export interface RenderContext {
   now: Date
   dueSoonIntervalMs: number
   statusCache: Map<string, ComputedStatus>
+  /** 分组日期标签用；缺省 UTC */
+  timeZone?: string
 }
 
 function isActionable(computed: ComputedStatus): boolean {
@@ -108,7 +111,7 @@ export function applyBuiltinFilter(
   }
 }
 
-/** Step3 父级展开 */
+/** Step3 父级展开（过滤命中子任务时补齐祖先，便于树序渲染） */
 export function expandAncestors(taskIds: string[], tree: TaskTree): string[] {
   const result = new Set<string>(taskIds)
   for (const id of taskIds) {
@@ -121,15 +124,49 @@ export function expandAncestors(taskIds: string[], tree: TaskTree): string[] {
   return [...result]
 }
 
+/** 子树展开（过滤命中父任务时带上子孙，避免「点标签只剩空壳父节点」） */
+export function expandDescendants(taskIds: string[], tree: TaskTree): string[] {
+  const result = new Set<string>(taskIds)
+  const visit = (node: TaskNode) => {
+    for (const child of node.children) {
+      result.add(child.task.id)
+      visit(child)
+    }
+  }
+  for (const id of taskIds) {
+    const node = tree.byId.get(id)
+    if (node)
+      visit(node)
+  }
+  return [...result]
+}
+
 /** 单 task 在某 groupKey 下的归属值列表（tag 多归属 → 多值） */
-function groupValues(task: EntityRowOf<'task'>, key: GroupKey, rowStore: RowStore): string[] {
+function groupValues(
+  task: EntityRowOf<'task'>,
+  key: GroupKey,
+  rowStore: RowStore,
+  tree: TaskTree,
+): string[] {
   switch (key) {
     case GROUP_KEY.PROJECT: return [rowStore.projectOf?.(task) ?? task.data.projectId ?? '']
     case GROUP_KEY.FOLDER:
       // §8.1：文件夹 = mountDirId 指向 kind=dir 者；非 dir 挂载归空组
       return [rowStore.isDirMount?.(task) ? (task.data.mountDirId ?? '') : '']
     case GROUP_KEY.TAG: {
-      const tagIds = rowStore.tagIdsOf(task.id)
+      // 自身无标时继承最近带标祖先，使 expandDescendants 进来的子任务仍落在父标签组
+      let tagIds = rowStore.tagIdsOf(task.id)
+      if (!tagIds.length) {
+        let node = tree.byId.get(task.id)?.parent ?? null
+        while (node) {
+          const inherited = rowStore.tagIdsOf(node.task.id)
+          if (inherited.length) {
+            tagIds = inherited
+            break
+          }
+          node = node.parent
+        }
+      }
       return tagIds.length ? tagIds : ['']
     }
     case GROUP_KEY.DEFER_DATE: return [task.data.deferDate ?? '']
@@ -139,6 +176,33 @@ function groupValues(task: EntityRowOf<'task'>, key: GroupKey, rowStore: RowStor
     case GROUP_KEY.NONE: return ['']
     default: return ['']
   }
+}
+
+function groupLabel(key: string, groupKey: GroupKey, rowStore: RowStore, timeZone: string): string {
+  if (groupKey === GROUP_KEY.TAG) {
+    if (!key)
+      return '无标签'
+    return rowStore.findLive('tag', key)?.data.name ?? key
+  }
+  if (groupKey === GROUP_KEY.PROJECT) {
+    if (!key)
+      return '无项目'
+    return rowStore.dirNameOf?.(key) ?? key
+  }
+  if (groupKey === GROUP_KEY.FOLDER) {
+    if (!key)
+      return '无文件夹'
+    return rowStore.dirNameOf?.(key) ?? key
+  }
+  if (groupKey === GROUP_KEY.DUE_DATE || groupKey === GROUP_KEY.DEFER_DATE) {
+    if (!key)
+      return groupKey === GROUP_KEY.DUE_DATE ? '无截止日' : '无推迟日'
+    const ms = Date.parse(key)
+    if (Number.isNaN(ms))
+      return key
+    return formatZonedYmdHm(new Date(ms), timeZone)
+  }
+  return key
 }
 
 function toRenderItem(task: EntityRowOf<'task'>, ctx: RenderContext): RenderItem {
@@ -163,7 +227,7 @@ export function groupBy(
   const rest = keys.slice(1)
   const buckets = new Map<string, EntityRowOf<'task'>[]>()
   for (const t of tasks) {
-    for (const gv of groupValues(t, first, rowStore)) {
+    for (const gv of groupValues(t, first, rowStore, ctx.tree)) {
       const arr = buckets.get(gv) ?? []
       arr.push(t)
       buckets.set(gv, arr)
@@ -171,7 +235,7 @@ export function groupBy(
   }
   return [...buckets.entries()].map(([key, ts]) => ({
     key,
-    label: key,
+    label: groupLabel(key, first, rowStore, ctx.timeZone ?? 'UTC'),
     children: rest.length ? groupBy(ts, rest, rowStore, ctx) : ts.map(t => toRenderItem(t, ctx)),
   }))
 }
@@ -214,7 +278,7 @@ function compareField(
   return 0
 }
 
-/** Step5 排序 */
+/** Step5 排序（扁平；仅同级语义时正确。渲染管线请用 {@link flattenInTreeOrder}） */
 export function sortTasks(
   tasks: EntityRowOf<'task'>[],
   sortBy: SortKey[],
@@ -233,6 +297,48 @@ export function sortTasks(
   return sorted
 }
 
+function subtreeHasVisible(node: TaskNode, visibleIds: Set<string>): boolean {
+  if (visibleIds.has(node.task.id))
+    return true
+  return node.children.some(c => subtreeHasVisible(c, visibleIds))
+}
+
+/**
+ * 树序展开可见任务：父永远在子前；`sortBy` 只在兄弟间生效（order 等同级字段）。
+ *
+ * 修复扁平 `sortTasks(order)` 把「子 order=0」排到「父 order=1」前面的问题。
+ */
+export function flattenInTreeOrder(
+  tree: TaskTree,
+  visible: EntityRowOf<'task'>[],
+  sortBy: SortKey[],
+  rowStore: RowStore,
+): EntityRowOf<'task'>[] {
+  const visibleIds = new Set(visible.map(t => t.id))
+  const out: EntityRowOf<'task'>[] = []
+  const siblingSort = sortBy.length > 0
+    ? sortBy
+    : [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC } satisfies SortKey]
+
+  const visit = (siblings: TaskNode[]) => {
+    const relevant = siblings.filter(n => subtreeHasVisible(n, visibleIds))
+    if (!relevant.length)
+      return
+    const ordered = sortTasks(relevant.map(n => n.task), siblingSort, rowStore)
+    for (const task of ordered) {
+      const node = relevant.find(n => n.task.id === task.id)
+      if (!node)
+        continue
+      if (visibleIds.has(task.id))
+        out.push(task)
+      visit(node.children)
+    }
+  }
+
+  visit(tree.roots)
+  return out
+}
+
 /**
  * 完整渲染管线。
  * forecast：先 applyBaseFilter（尊重声明的 availabilityFilter / show*），再 renderForecast 日块分块；
@@ -249,7 +355,7 @@ export function renderPerspective(
   if (perspective.id === 'forecast') {
     const all = rowStore.liveTasks()
     const tree = buildTaskTree(all)
-    const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map() }
+    const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map(), timeZone }
     const filtered = applyBaseFilter(all, perspective, ctx)
     const opts = forecastOptions ?? defaultForecastOptions(now, timeZone)
     return renderForecast(rowStore, opts, now, dueSoonIntervalMs, filtered, timeZone)
@@ -257,19 +363,20 @@ export function renderPerspective(
 
   const tasks = rowStore.liveTasks()
   const tree = buildTaskTree(tasks)
-  const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map() }
+  const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map(), timeZone }
   const evalCtx: FilterEvalContext = { rowStore }
 
   let filtered = applyBaseFilter(tasks, perspective, ctx)
   filtered = filtered.filter(t => matchFilter(t, perspective.filter, evalCtx))
   filtered = applyBuiltinFilter(filtered, perspective)
 
-  const expandedIds = new Set(expandAncestors(filtered.map(t => t.id), tree))
-  let result = tasks.filter(t => expandedIds.has(t.id))
-
-  if (perspective.sortBy.length > 0) {
-    result = sortTasks(result, perspective.sortBy, rowStore)
-  }
+  const matchedIds = filtered.map(t => t.id)
+  const expandedIds = new Set([
+    ...expandAncestors(matchedIds, tree),
+    ...expandDescendants(matchedIds, tree),
+  ])
+  const visible = tasks.filter(t => expandedIds.has(t.id))
+  const result = flattenInTreeOrder(tree, visible, perspective.sortBy, rowStore)
 
   return groupBy(result, perspective.groupBy, rowStore, ctx)
 }
@@ -312,6 +419,8 @@ export function builtinPerspectives(): Perspective[] {
       sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
     }),
     builtin('tags', '标签', {
+      // 只收已打标任务；未打标不再混进「标签」透视（否则点侧栏具体标签会像「突然变空」）
+      filter: { op: LOGIC_OP.NOT, child: { op: LEAF_OP.EMPTY, field: FILTER_FIELD.TAG } },
       groupBy: [GROUP_KEY.TAG],
       sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
     }),

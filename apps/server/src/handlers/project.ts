@@ -1,5 +1,5 @@
 import type { Context } from 'hono'
-import type { DirCreate, DirMove, DirReorder, DirRename, DirUpdateAcl, ProjectCreate } from '../../shared/project'
+import type { DirCreate, DirMove, DirRename, DirReorder, DirUpdateAcl, ProjectCreate } from '../../shared/project'
 import type { AppEnv, AuthUser } from '../types'
 import { ProjectService } from '../service/project'
 

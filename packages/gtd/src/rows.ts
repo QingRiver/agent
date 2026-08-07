@@ -11,24 +11,29 @@ import type { EntityRow, EntityRowOf, SyncEntity } from './sync-schema'
  *
  * Phase 1（统一 dirs 树）：project/folder entity 退出 sync，project_id 改 server 派生冗余缓存。
  * @agent/gtd 不依赖 @agent/project，故 dirs 派生信息（project 根 / 文件夹语义）由调用方经
- * `projectOf` / `isDirMount` 注入槽提供；缺省回退 task.data.projectId 缓存 / 非 dir 挂载。
+ * `projectOf` / `isDirMount` / `dirNameOf` 注入槽提供；缺省回退 task.data.projectId 缓存 /
+ * 非 dir 挂载 / 原 id。
  */
 export interface DirProjection {
   /** task 所属 project 根 id（优先于 task.data.projectId 缓存）；client 注入 walkToProjectRoot */
   projectOf?: (task: EntityRowOf<'task'>) => string | null
   /** task 的 mountDirId 是否指向 kind=dir 节点（文件夹语义，§8.1）；client 注入 dirs 查询 */
   isDirMount?: (task: EntityRowOf<'task'>) => boolean
+  /** dirs id → 展示名（project/folder 分组标题）；client 注入 dirsById.get(id)?.name */
+  dirNameOf?: (dirId: string) => string | null
 }
 
 export class RowStore {
   private rows: EntityRow[]
   readonly projectOf?: ((task: EntityRowOf<'task'>) => string | null) | undefined
   readonly isDirMount?: ((task: EntityRowOf<'task'>) => boolean) | undefined
+  readonly dirNameOf?: ((dirId: string) => string | null) | undefined
 
   constructor(rows: EntityRow[] = [], projection?: DirProjection) {
     this.rows = rows
     this.projectOf = projection?.projectOf
     this.isDirMount = projection?.isDirMount
+    this.dirNameOf = projection?.dirNameOf
   }
 
   /** 全部行（含软删），只读 */

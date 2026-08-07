@@ -43,6 +43,25 @@ export function formatZonedYmd(date: Date, timeZone: string): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
+/** 用户时区瞬时 → `YYYY-MM-DD HH:mm`（透视日期分组标题） */
+export function formatZonedYmdHm(date: Date, timeZone: string): string {
+  const dtf = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+  const parts = Object.fromEntries(
+    dtf.formatToParts(date)
+      .filter(p => p.type !== 'literal')
+      .map(p => [p.type, p.value]),
+  )
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
+}
+
 function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
   const dtf = new Intl.DateTimeFormat('en-US', {
     timeZone,

@@ -4,6 +4,7 @@ import type { GtdSelection } from '@stores/gtd-store'
 import type { ReactNode } from 'react'
 import { builtinPerspectives, sortTags } from '@agent/gtd'
 import { GtdPerspectiveEditor } from '@components/gtd/GtdPerspectiveEditor'
+import { TagManager } from '@components/tags/TagManager'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import {
@@ -31,7 +32,6 @@ import {
   CheckCircle2,
   Download,
   Flag,
-  Folder,
   GripVertical,
   Inbox,
   Layers,
@@ -123,46 +123,34 @@ function SortableNavItem({
 }
 
 /**
- * 统一 dirs 树递归渲染（Phase 1：project 根 + dir 子节点合并为单一 dirs 表）。
- * project 根 → selection.kind='project'；dir 子节点 → selection.kind='folder'。
- * 每层同级用独立 SortableContext，DnD 按 `kind:id` 前缀分发到 reorderProject/reorderFolder。
+ * 统一 dirs 树中的 **project 根** 列表（GTD 侧栏「项目」区）。
+ * 只展示 kind=project，不展开其下 dir 子树（KB vdir 文件夹树不进 GTD 导航）。
  */
-function DirSubtree({
+function ProjectList({
   nodes,
-  depth,
   selection,
   onSelect,
 }: {
   nodes: DirTreeNode[]
-  depth: number
   selection: GtdSelection
   onSelect: (sel: GtdSelection) => void
 }) {
-  const items = nodes.map(n => `${n.dir.kind === 'project' ? 'project' : 'folder'}:${n.dir.id}`)
+  const projects = nodes.filter(n => n.dir.kind === 'project')
+  const items = projects.map(n => `project:${n.dir.id}`)
   return (
     <SortableContext items={items} strategy={verticalListSortingStrategy}>
-      {nodes.map((n) => {
-        const kind = n.dir.kind === 'project' ? 'project' : 'folder'
-        const sid = `${kind}:${n.dir.id}`
+      {projects.map((n) => {
+        const sid = `project:${n.dir.id}`
         return (
-          <div key={n.dir.id}>
-            <SortableNavItem
-              sortableId={sid}
-              active={selection.kind === kind && selection.id === n.dir.id}
-              icon={kind === 'project' ? Layers : Folder}
-              label={n.dir.name}
-              indent={depth}
-              onClick={() => onSelect({ kind, id: n.dir.id })}
-            />
-            {n.children.length > 0 && (
-              <DirSubtree
-                nodes={n.children}
-                depth={depth + 1}
-                selection={selection}
-                onSelect={onSelect}
-              />
-            )}
-          </div>
+          <SortableNavItem
+            key={n.dir.id}
+            sortableId={sid}
+            active={selection.kind === 'project' && selection.id === n.dir.id}
+            icon={Layers}
+            label={n.dir.name}
+            indent={0}
+            onClick={() => onSelect({ kind: 'project', id: n.dir.id })}
+          />
         )
       })}
     </SortableContext>
@@ -176,12 +164,10 @@ export function GtdSidebar() {
     setSelection,
     addProject,
     addTag,
-    addFolder,
     addPerspective,
     patchPerspective,
     removePerspective,
     reorderProject,
-    reorderFolder,
     syncStatus,
     error,
     exportDocument,
@@ -189,7 +175,7 @@ export function GtdSidebar() {
   } = useGtd()
   const [projectName, setProjectName] = useState('')
   const [tagName, setTagName] = useState('')
-  const [folderName, setFolderName] = useState('')
+  const [tagManagerOpen, setTagManagerOpen] = useState(false)
   const [perspectiveEditorId, setPerspectiveEditorId] = useState<string | 'new' | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const sensors = useSensors(
@@ -203,11 +189,6 @@ export function GtdSidebar() {
   const dirTree = useAtomValue(DirStore.dirTreeAtom)
   const flatTags = sortTags(rowStore.liveTags())
   const customPerspectives = rowStore.livePerspectives().map(p => ({ id: p.id, name: p.data.name }))
-
-  // dir 子节点必须有父，新建文件夹挂到当前选中的 project/folder 下；无选中则禁用
-  const selectedDirId = (selection.kind === 'project' || selection.kind === 'folder')
-    ? selection.id
-    : null
 
   const syncLabel = syncStatus === 'syncing'
     ? '同步中…'
@@ -240,7 +221,7 @@ export function GtdSidebar() {
         if (!a || !b || a.parentId !== b.parentId)
           return
         const siblings = dirs
-          .filter(d => d.parentId === a.parentId)
+          .filter(d => d.parentId === a.parentId && d.kind === 'project')
           .map(d => ({ id: d.id, order: d.sortOrder }))
           .sort((x, y) => x.order - y.order)
         const moved = arrayMove(
@@ -255,8 +236,6 @@ export function GtdSidebar() {
         }
         if (kind === 'project')
           reorderProject(id, target)
-        else
-          reorderFolder(id, target)
       }}
     >
       <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-card">
@@ -370,9 +349,8 @@ export function GtdSidebar() {
             项目
           </div>
           <div className="mb-3 space-y-0.5">
-            <DirSubtree
+            <ProjectList
               nodes={dirTree.roots}
-              depth={0}
               selection={selection}
               onSelect={setSelection}
             />
@@ -404,40 +382,20 @@ export function GtdSidebar() {
                 <Plus className="size-3.5" />
               </Button>
             </div>
-            <div className="flex gap-1 px-1">
-              <Input
-                value={folderName}
-                disabled={!selectedDirId}
-                onChange={e => setFolderName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && folderName.trim() && selectedDirId) {
-                    void addFolder(folderName, selectedDirId)
-                    setFolderName('')
-                  }
-                }}
-                placeholder={selectedDirId ? '新文件夹（挂到选中节点下）' : '先选中一个项目/文件夹'}
-                className="h-9 border-border bg-transparent text-xs"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-9 w-9 p-0"
-                disabled={!selectedDirId || !folderName.trim()}
-                onClick={() => {
-                  if (!folderName.trim() || !selectedDirId)
-                    return
-                  void addFolder(folderName, selectedDirId)
-                  setFolderName('')
-                }}
-              >
-                <Plus className="size-3.5" />
-              </Button>
-            </div>
           </div>
 
-          <div className="mb-1 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            标签
+          <div className="mb-1 flex items-center gap-1 px-2">
+            <span className="flex-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              标签
+            </span>
+            <button
+              type="button"
+              title="管理标签"
+              onClick={() => setTagManagerOpen(true)}
+              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <Settings2 className="size-3.5" />
+            </button>
           </div>
           <div className="space-y-0.5">
             {flatTags.map(tag => (
@@ -486,6 +444,7 @@ export function GtdSidebar() {
           </div>
         )}
       </aside>
+      <TagManager open={tagManagerOpen} onClose={() => setTagManagerOpen(false)} />
       {perspectiveEditorId && (
         <GtdPerspectiveEditor
           store={rowStore}
