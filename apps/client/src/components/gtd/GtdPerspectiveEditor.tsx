@@ -133,11 +133,9 @@ function initialInput(perspective?: Perspective): PerspectiveInput {
 }
 
 function entitiesForField(store: RowStore, field: string): Array<{ id: string, name: string }> {
-  // Phase 1：project/folder 退出 GTD sync，引用来自 DirStore dirs 投影；tag 仍来自 RowStore
+  // project 退出 GTD sync，引用来自 DirStore dirs 投影；tag 仍来自 RowStore
   if (field === FILTER_FIELD.PROJECT)
     return getDefaultStore().get(DirStore.projectRefsAtom)
-  if (field === FILTER_FIELD.FOLDER)
-    return getDefaultStore().get(DirStore.folderRefsAtom).map(f => ({ id: f.id, name: f.name }))
   return store.liveTags().map(r => ({ id: r.id, name: r.data.name }))
 }
 
@@ -582,7 +580,7 @@ function LeafValue({
       <Select value={String(value ?? 'active')} onChange={e => onChange(e.target.value)}>
         <option value="active">活跃</option>
         <option value="completed">已完成</option>
-        <option value="cancelled">已放弃</option>
+        <option value="hold">已搁置</option>
         <option value="deleted">已删除</option>
       </Select>
     )

@@ -47,7 +47,7 @@ async function cleanupLeaked(): Promise<void> {
   await db.delete(gtdSyncClocks).where(like(gtdSyncClocks.userId, pattern))
 }
 
-/** 插入 dir 行（Phase 1 统一 dirs 树：project 根 / dir 子节点） */
+/** 插入 dir 行（统一 dirs 树：project 根 / dir 子节点） */
 async function insertDir(row: {
   id: string
   parentId: string | null
@@ -70,7 +70,7 @@ async function insertDir(row: {
   })
 }
 
-/** 构造 task upsert patch（Phase 1：mountDirId 权威挂载，projectId 退出 LWW 不在 patch） */
+/** 构造 task upsert patch（mountDirId 权威挂载，projectId 退出 LWW 不在 patch） */
 function taskPatch(overrides: Partial<Record<string, unknown>> & { name: string }): Record<string, unknown> {
   return {
     status: 'active',
@@ -365,7 +365,7 @@ describe('sync-repository e2e (push/pull 落库)', () => {
     }
   })
 
-  // ---------------- Phase 1：mountDirId 权威挂载 + projectId server 派生 ----------------
+  // ---------------- mountDirId 权威挂载 + projectId server 派生 ----------------
 
   it(`mountDirId → server 派生 projectId（project 根 + 子 dir 均回溯根）`, async () => {
     // 建 project 根 + 一级 dir 子节点

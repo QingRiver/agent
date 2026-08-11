@@ -3,7 +3,7 @@ import { z } from 'zod'
 /**
  * dirs / projects 在线 API 的 wire 契约（zod）。
  *
- * Phase 1：统一 dirs 树（project=根 / dir=子节点）。project/folder 退出 GTD sync，
+ * 统一 dirs 树（project=根 / dir=子节点）。project/folder 退出 GTD sync，
  * 改走在线 Dir API（POST，/:id/<action>）。task 经 mount_dir_id 挂载到 dirs 节点，
  * project_id 由 server 派生（walkToProjectRoot），非 LWW。
  *

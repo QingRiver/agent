@@ -5,7 +5,7 @@ export { type KbQueryOptions, KbQueryOptionsSchema } from '@agent/kb'
 
 export const KbQueryRequestSchema = z.object({
   query: z.string().min(1),
-  /** 分区标签（默认 kb_default）；Phase 2 已废 kbId 隔离，全局单 collection，此值仅记录 */
+  /** 分区标签（默认 kb_default）；已废 kbId 隔离，全局单 collection，此值仅记录 */
   kbId: z.string().optional(),
   options: KbQueryOptionsSchema.optional(),
 })

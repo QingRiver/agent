@@ -1,4 +1,4 @@
-import type { PerspectiveEntityRef, PerspectiveFolderRef } from '@agent/gtd'
+import type { PerspectiveEntityRef } from '@agent/gtd'
 import type { DirRow, DirTree } from '@agent/project'
 import type { DirDto } from '@apis/dir-api'
 import { buildDirTree, subtreeDirIds, walkToProjectRoot } from '@agent/project'
@@ -8,11 +8,11 @@ import { atom, getDefaultStore } from 'jotai'
 /**
  * 统一 dirs 树客户端内存 store（project 根 + dir 子树）。
  *
- * Phase 1：project/folder 退出 GTD sync，改走在线 Dir API。dirs 量小，纯内存（不进 IDB
+ * project/folder 退出 GTD sync，改走在线 Dir API。dirs 量小，纯内存（不进 IDB
  * rows store），list 拉全量扁平行，client 端 buildDirTree 组装。mutation 后 refresh 全量
  * 重拉（量小，简单可靠）。
  *
- * 派生：dirsById（id→DirDto）、dirTree（buildDirTree）、projectRefs/folderRefs（透视校验
+ * 派生：dirsById（id→DirDto）、dirTree（buildDirTree）、projectRefs（透视校验
  * 上下文用）、mountDirIdsOf(projectDirId)（task 聚合用 subtreeDirIds）。
  * projectOf(task) = walkToProjectRoot(mountDirId, dirsById) 供 RowStore 投影槽注入。
  */
@@ -34,14 +34,9 @@ export class DirStore {
   static readonly projectRefsAtom = atom<PerspectiveEntityRef[]>(get =>
     get(DirStore.dirsAtom).filter(d => d.kind === 'project').map(d => ({ id: d.id, name: d.name })))
 
-  /** 透视校验上下文：dir 子节点引用（id+name+parentId） */
-  static readonly folderRefsAtom = atom<PerspectiveFolderRef[]>(get =>
-    get(DirStore.dirsAtom).filter(d => d.kind === 'dir').map(d => ({ id: d.id, name: d.name, parentId: d.parentId })))
-
-  /** 透视校验上下文聚合（projects + folders） */
+  /** 透视校验上下文聚合（projects） */
   static readonly validationRefsAtom = atom(get => ({
     projects: get(DirStore.projectRefsAtom),
-    folders: get(DirStore.folderRefsAtom),
   }))
 
   private static store() {
@@ -107,12 +102,6 @@ export class DirStore {
   /** task 的派生 projectId = walkToProjectRoot(mountDirId)；null=Inbox/无挂载 */
   static projectOf(dirsById: Map<string, DirDto>, mountDirId: string | null | undefined): string | null {
     return walkToProjectRoot(mountDirId ?? null, dirsById as unknown as Map<string, DirRow>)
-  }
-
-  /** task 是否挂载到 kind=dir 节点（FOLDER 过滤改义，§8.1） */
-  static isDirMount(dirsById: Map<string, DirDto>, mountDirId: string | null | undefined): boolean {
-    const m = mountDirId ?? null
-    return m != null && dirsById.get(m)?.kind === 'dir'
   }
 
   /** 某 project/dir 子树下全部 dir id（含自身），供 task 聚合（mountDirId ∈ 子树） */

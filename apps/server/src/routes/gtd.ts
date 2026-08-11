@@ -9,8 +9,7 @@ import { requireAuth } from '../middleware/authMiddleware'
 export const gtdRoutes = new Hono<AppEnv>()
   .onError(handleAppError)
   .use('*', requireAuth)
-  // 日常同步走 /sync/push|pull；legacy /document/* 已下线
-  // saveDocument 仅保留为内部灾难修复入口，不暴露 HTTP。
+  // 日常同步走 /sync/push|pull；导入导出为 client 侧行级 JSON（v2.0.0），无 /document 路由。
   .post(
     '/sync/push',
     zValidator('json', PushRequestSchema),

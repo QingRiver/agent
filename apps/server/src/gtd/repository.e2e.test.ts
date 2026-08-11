@@ -1,4 +1,4 @@
-import type { GtdDocument, Tag, Task } from '@agent/gtd'
+import type { Tag, Task } from '@agent/gtd'
 import { EXPLICIT_STATUS, PLANNED_MODE } from '@agent/gtd'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
@@ -10,27 +10,12 @@ import { DrizzleGtdRepository } from './repository'
 const USER_ID = `gtd-e2e-${Date.now().toString(36)}`
 const NOW = '2026-07-16T12:00:00.000Z'
 
-function makeDoc(overrides: Partial<GtdDocument> = {}): GtdDocument {
-  return {
-    version: '1.0.0',
-    meta: { createdAt: NOW, updatedAt: NOW, schemaVersion: '1' },
-    folders: [],
-    projects: [],
-    tags: [],
-    tasks: [],
-    perspectives: [],
-    repeatRules: [],
-    attachments: [],
-    ...overrides,
-  }
-}
-
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
     id: 'task-1',
     name: 'task',
     note: null,
-    projectId: 'proj-1',
+    projectId: null,
     mountDirId: null,
     parentId: null,
     order: 1,
@@ -86,83 +71,14 @@ describe('drizzleGtdRepository e2e', () => {
     await cleanup()
   })
 
-  it('saveDocument ↔ loadDocument round-trip', async () => {
-    const tag = makeTag()
-    const task = makeTask({ tagIds: [tag.id] })
-    const doc = makeDoc({
-      tags: [tag],
-      projects: [{
-        id: 'proj-1',
-        name: 'project',
-        note: null,
-        folderId: null,
-        order: 1,
-        status: EXPLICIT_STATUS.ACTIVE,
-        type: 'parallel',
-        defaultDeferOffset: null,
-        defaultDueOffset: null,
-        defaultTagIds: [],
-        flagged: false,
-        review: {
-          enabled: true,
-          interval: 'weekly',
-          customDays: null,
-          lastReviewDate: null,
-          nextReviewDate: NOW,
-          needsReview: false,
-        },
-        createdAt: NOW,
-        updatedAt: NOW,
-      }],
-      tasks: [task],
-    })
-
-    await repo.saveDocument(USER_ID, doc)
-    const loaded = await repo.loadDocument(USER_ID)
-
-    expect(loaded.tasks).toHaveLength(1)
-    expect(loaded.tasks[0]?.tagIds).toEqual([tag.id])
-    expect(loaded.tasks[0]?.plannedMode).toBe(PLANNED_MODE.NONE)
-    expect(loaded.meta.createdAt).toBe(NOW)
-    const updatedMs = new Date(loaded.meta.updatedAt).getTime()
-    expect(updatedMs).toBeGreaterThanOrEqual(new Date(NOW).getTime())
-  })
-
-  it('saveTask ↔ loadTask 透传 plannedMode/plannedDate', async () => {
+  it('saveTask ↔ getTask 透传 plannedMode/plannedDate', async () => {
     const task = makeTask({
       id: 'task-planned',
       plannedMode: PLANNED_MODE.ON,
       plannedDate: '2026-07-18T00:00:00.000Z',
     })
-    const doc = makeDoc({
-      projects: [{
-        id: 'proj-1',
-        name: 'project',
-        note: null,
-        folderId: null,
-        order: 1,
-        status: EXPLICIT_STATUS.ACTIVE,
-        type: 'parallel',
-        defaultDeferOffset: null,
-        defaultDueOffset: null,
-        defaultTagIds: [],
-        flagged: false,
-        review: {
-          enabled: true,
-          interval: 'weekly',
-          customDays: null,
-          lastReviewDate: null,
-          nextReviewDate: NOW,
-          needsReview: false,
-        },
-        createdAt: NOW,
-        updatedAt: NOW,
-      }],
-      tasks: [task],
-    })
-    await repo.saveDocument(USER_ID, doc)
-    const loaded = await repo.loadDocument(USER_ID)
-    const got = loaded.tasks.find(t => t.id === task.id)
+    await repo.saveTask(USER_ID, task, null)
+    const got = await repo.getTask(USER_ID, task.id)
     expect(got?.plannedMode).toBe(PLANNED_MODE.ON)
     expect(got?.plannedDate).toBe('2026-07-18T00:00:00.000Z')
   })
@@ -170,35 +86,11 @@ describe('drizzleGtdRepository e2e', () => {
   it('saveTask 同步 gtd_task_tags', async () => {
     const tagA = makeTag({ id: 'tag-a', name: 'tag-a' })
     const tagB = makeTag({ id: 'tag-b', name: 'tag-b' })
+    await repo.saveTag(USER_ID, tagA)
+    await repo.saveTag(USER_ID, tagB)
+
     const task = makeTask({ id: 'task-sync', tagIds: [tagA.id] })
-    const doc = makeDoc({
-      tags: [tagA, tagB],
-      projects: [{
-        id: 'proj-1',
-        name: 'project',
-        note: null,
-        folderId: null,
-        order: 1,
-        status: EXPLICIT_STATUS.ACTIVE,
-        type: 'parallel',
-        defaultDeferOffset: null,
-        defaultDueOffset: null,
-        defaultTagIds: [],
-        flagged: false,
-        review: {
-          enabled: true,
-          interval: 'weekly',
-          customDays: null,
-          lastReviewDate: null,
-          nextReviewDate: NOW,
-          needsReview: false,
-        },
-        createdAt: NOW,
-        updatedAt: NOW,
-      }],
-      tasks: [task],
-    })
-    await repo.saveDocument(USER_ID, doc)
+    await repo.saveTask(USER_ID, task, null)
 
     await repo.saveTask(USER_ID, { ...task, tagIds: [tagB.id] }, null)
 

@@ -1,7 +1,7 @@
 /**
  * 清空知识库可见数据（PG docs/chunks/tags + Qdrant points），便于重新导入带结构内容。
  *
- * Phase 2 后 KB 不再拥有文件夹树（已并入统一 dirs，归 ProjectService）；本脚本不动 dirs。
+ * 统一 dirs 树后 KB 不再拥有文件夹树（已并入统一 dirs，归 ProjectService）；本脚本不动 dirs。
  *
  * 用法（推荐经 devops）:
  *   pnpm devops e2e clear-kb --email you@example.com
@@ -42,7 +42,7 @@ function printHelp(): void {
   console.log(`用法: clear-kb (--email <addr> | --owner <userId> | --all) [--dry-run]
 
 按 owner 清空当前用户可见知识库（文档 / 标签 + Qdrant），或 --all 清空整库。
-Phase 2 后 KB 文件夹树已并入 dirs，本脚本不清理 dirs。
+统一 dirs 树后 KB 文件夹树已并入 dirs，本脚本不清理 dirs。
 `)
 }
 

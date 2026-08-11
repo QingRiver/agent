@@ -55,7 +55,7 @@ function toSummary(doc: KbDoc): KbDocSummary {
 export type KbMutationKind = 'save' | 'commit' | 'delete' | 'updateMeta'
 
 /**
- * KB 客户端 store（Phase 2：仅文档）。
+ * KB 客户端 store（仅文档）。
  *
  * 文件夹树已并入统一 dirs，归 DirStore（dirTreeAtom）；本 store 不再持有 nodes。
  * 文档列表按 mountDirId 挂到 DirStore 树渲染（组件层组装）；refresh 只拉 docs。

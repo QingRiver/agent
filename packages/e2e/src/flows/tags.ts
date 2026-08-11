@@ -327,6 +327,8 @@ async function cleanupFlow(token: string, state: CleanupState): Promise<void> {
     })),
     ...[...state.taskIds].map((entityId): GtdMutation => ({
       id: mutationId('cleanup-task'),
+      // 测试清理用 sync 软删(op:'delete' → row.deleted=true, status 不变),非 domain deleteTask command
+      // (deleteTask 仅 ACTIVE 可删 SP-STATE-6,会拒 completed/hold;清理须删任意态 → 软删)
       entity: 'task',
       entityId,
       op: 'delete',

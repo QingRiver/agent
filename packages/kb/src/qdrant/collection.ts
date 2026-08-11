@@ -22,7 +22,7 @@ export const KB_PAYLOAD_INDEX_FIELDS = [
 ] as const
 
 /**
- * Phase 2 废弃 kbId 隔离：所有 chunk 进单一全局 collection（env.KB_COLLECTION）。
+ * 废弃 kbId 隔离：所有 chunk 进单一全局 collection（env.KB_COLLECTION）。
  * kbId 参数保留签名兼容但忽略。多用户/多 kb 靠 payload 的 owner/mount_dir_id/project_id 区分。
  */
 export function resolveCollectionName(_kbId?: string, prefix = ''): string {

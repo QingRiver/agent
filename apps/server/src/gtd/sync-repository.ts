@@ -19,7 +19,7 @@ import { walkToProjectRoot } from '@agent/project'
  * 本落库层在 applyPush 后对每个 syncId > oldClock 的 task 行做 stamp——
  * `walkToProjectRoot(mountDirId, dirsById)` + 死引用修正（mountDirId→已删 dir→null）。
  * stamp 必须在 response.changes 构造之前，client 收到的 projectId 永远是 server 权威值。
- * pull 纯读 sync_id > lastSyncId。日常路径禁止 saveDocument 全删全插。
+ * pull 纯读 sync_id > lastSyncId。日常路径为行级增量，无全量文档写。
  */
 import { and, eq, gt, inArray } from 'drizzle-orm'
 import { db } from '../db/drizzle'

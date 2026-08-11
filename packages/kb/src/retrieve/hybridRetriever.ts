@@ -12,7 +12,7 @@ export interface HybridRetrieveOptions {
   query: string
   recallK?: number
   sparseProvider?: SparseProvider
-  /** Qdrant filter（召回作用域）；骨架，Phase 4 接作用域构造 */
+  /** Qdrant filter（召回作用域）；骨架，待接作用域构造 */
   filter?: KbRecallFilter
 }
 

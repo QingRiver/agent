@@ -5,7 +5,6 @@ import type {
   ForecastStripKey,
   GroupType,
   GtdCommand,
-  GtdDocument,
   GtdMutation,
   Perspective,
   PerspectiveInput,
@@ -20,21 +19,21 @@ import {
   builtinPerspectives,
   DEFAULT_FORECAST_SIGNALS,
   DEFAULT_FORECAST_STRIP,
-  dematerialize,
   EXPLICIT_STATUS,
   FILTER_FIELD,
   FORECAST_STRIP_ORDER,
   GROUP_TYPE,
   LEAF_OP,
-  materialize,
   normalizeDeferDue,
   orderBetween,
-  parse,
+  orderImportRows,
+  parseRows,
   PLANNED_MODE,
   reindexSiblings,
+  remapRowIds,
   REPEAT_ANCHOR,
   RowStore,
-  serialize,
+  serializeRows,
   shouldReindex,
   shouldStop,
   SORT_DIR,
@@ -120,7 +119,6 @@ export type GtdSelection
   = | { kind: 'perspective', id: string }
     | { kind: 'project', id: string }
     | { kind: 'tag', id: string }
-    | { kind: 'folder', id: string }
 
 export type RepeatRuleInput = Omit<RepeatRule, 'id' | 'completedOccurrences'>
 
@@ -202,16 +200,15 @@ function writeForecastSignals(signals: ForecastSignalOptions): void {
   }
 }
 
-/** 透视校验上下文：projects/folders 来自 dirs 树（Phase 1 统一树），tags 来自 RowStore */
+/** 透视校验上下文：projects 来自 dirs 树（统一树），tags 来自 RowStore */
 function perspectiveValidationContext(
   store: RowStore,
-  dirs: { projects: { id: string, name: string }[], folders: { id: string, name: string, parentId: string | null }[] },
+  dirs: { projects: { id: string, name: string }[] },
 ) {
   return {
     now: new Date(),
     timeZone: new Intl.DateTimeFormat().resolvedOptions().timeZone,
     projects: dirs.projects,
-    folders: dirs.folders,
     tags: store.liveTags().map(t => ({ id: t.id, name: t.data.name })),
     builtinPerspectiveIds: builtinPerspectives().map(p => p.id),
   }
@@ -260,21 +257,8 @@ export function resolvePerspective(store: RowStore, selection: GtdSelection): Pe
       updatedAt: null,
     }
   }
-  // folder：显示该 folder 下所有 project 的任务
-  return {
-    id: `folder:${selection.id}`,
-    name: '文件夹',
-    icon: null,
-    filter: { op: LEAF_OP.SOME, field: FILTER_FIELD.FOLDER, value: [selection.id] },
-    groupBy: [],
-    sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
-    availabilityFilter: AVAILABILITY_FILTER.REMAINING,
-    showCompleted: false,
-    showDropped: false,
-    flaggedOnly: null,
-    createdAt: new Date(0).toISOString(),
-    updatedAt: null,
-  }
+  // tag 分支见上；folder 选择已移除（侧栏仅 project/tag/perspective）
+  return builtinPerspectives()[0]!
 }
 
 // ---------------- row 形状小工具 ----------------
@@ -334,12 +318,11 @@ export class GtdStore {
   static readonly userIdAtom = atom<string | undefined>(undefined)
   static readonly rowsAtom = atom<EntityRow[]>([])
   static readonly rowStoreAtom = atom((get) => {
-    // 注入 dirs 派生投影：projectOf / isDirMount / dirNameOf（分组标题用名）。
+    // 注入 dirs 派生投影：projectOf / dirNameOf（分组标题用名）。
     // 捕获 dirsById 值（非 get），rowStoreAtom 依赖 dirsAtom → dirs 变即重算 RowStore。
     const dirsById = get(DirStore.dirsByIdAtom)
     return new RowStore(get(GtdStore.rowsAtom), {
       projectOf: task => DirStore.projectOf(dirsById, task.data.mountDirId),
-      isDirMount: task => DirStore.isDirMount(dirsById, task.data.mountDirId),
       dirNameOf: (dirId) => {
         const name = dirsById.get(dirId)?.name
         return name != null && name !== '' ? name : null
@@ -766,7 +749,7 @@ export class GtdStore {
       const task = store.findLive('task', taskId)
       if (!task)
         throw new Error('任务不存在')
-      return [upsertMut('task', taskId, { status: EXPLICIT_STATUS.ACTIVE, completedAt: null, updatedAt: nowIso() })]
+      return [cmd({ type: 'reopen', taskId })]
     })
   }
 
@@ -775,7 +758,7 @@ export class GtdStore {
       const task = store.findLive('task', taskId)
       if (!task)
         throw new Error('任务不存在')
-      return [upsertMut('task', taskId, { status: EXPLICIT_STATUS.ACTIVE, droppedAt: null, updatedAt: nowIso() })]
+      return [cmd({ type: 'restore', taskId })]
     })
   }
 
@@ -784,8 +767,8 @@ export class GtdStore {
       const task = store.findLive('task', taskId)
       if (!task)
         throw new Error('任务不存在')
-      const now = nowIso()
-      return [upsertMut('task', taskId, { status: EXPLICIT_STATUS.DELETED, droppedAt: now, updatedAt: now })]
+      // deleteTask command 仅 ACTIVE 可删（SP-STATE-6）；completed/hold 须先 reopen/restore 回 ACTIVE
+      return [cmd({ type: 'delete', taskId })]
     })
   }
 
@@ -944,7 +927,7 @@ export class GtdStore {
   }
 
   // ---------- Projects / Dirs（在线 Dir API，project=根=纯命名作用域） ----------
-  // Phase 1：project/folder 退出 sync，CRUD 走 DirStore（DirApi）。project facet 全弃用
+  // project/folder 退出 sync，CRUD 走 DirStore（DirApi）。project facet 全弃用
   // （type/status/review/default_*/flagged/note 删）；project 仅剩 name（rename）。
 
   /** 创建 project 根（kind=project，parentId=null） */
@@ -1005,7 +988,7 @@ export class GtdStore {
 
   static removeTag(tagId: string): void {
     GtdStore.applyLocal(() => {
-      // Phase 1：project defaultTagIds 已弃用（facet 全删），仅删 tag
+      // project defaultTagIds 已弃用（facet 全删），仅删 tag
       const items: Array<GtdMutation | GtdCommand> = [cmd({ type: 'delete_tag', payload: { tagId } })]
       return items
     })
@@ -1034,115 +1017,32 @@ export class GtdStore {
     await DirStore.delete(id)
   }
 
-  // ---------- 导入 / 导出 ----------
+  // ---------- 导入 / 导出（行级 JSON v2.0.0） ----------
 
-  /** 导出：rows → materialize → GtdDocument → JSON 字符串（走最新读接口，非脏快照） */
+  /** 导出：live rows → serializeRows（仅新建快照，syncId 归零） */
   static exportDocument(): string {
     const s = GtdStore.store()
     const rows = s.get(GtdStore.rowsAtom)
-    return serialize(materialize(rows))
+    return serializeRows(rows, new Date())
   }
 
   /**
-   * 导入：JSON → parse → remap 全部 id 为新 uuid（仅新建，禁止覆盖）→ dematerialize →
-   * 按 ref 安全顺序（folders/projects/tags/perspectives/attachments/tasks 父先子后/task_tag）
-   * 批量 upsert mutation → applyLocal → push。不做冲突逐条决议 UI（简单版：全量 remap）。
+   * 导入：JSON → parseRows → remapRowIds（全量换新 id，仅新建不覆盖）→
+   * orderImportRows → applyLocal → push。
    */
   static importDocument(json: string): boolean {
     const s = GtdStore.store()
     const userId = s.get(GtdStore.userIdAtom) ?? 'u1'
-    let doc: GtdDocument
+    let rows: EntityRow[]
     try {
-      doc = parse(json)
+      rows = parseRows(json)
     }
     catch (e) {
       s.set(GtdStore.errorAtom, `导入失败：${e instanceof Error ? e.message : String(e)}`)
       return false
     }
-    const remapped = remapDocIds(doc)
-    const rows = dematerialize(remapped, userId)
-    const ordered = orderImportRows(rows)
+    const ordered = orderImportRows(remapRowIds(rows, userId))
     const items = ordered.map(r => upsertMut(r.entity, r.id, r.data as Record<string, unknown>))
     return GtdStore.applyLocal(() => items)
   }
-}
-
-// ---------------- 导入辅助 ----------------
-
-/** remap doc 全部实体 id 为新 uuid，并重建引用（projectId/parentId/folderId/tagIds/repeatRuleId/repeatedFromTaskId/taskId） */
-function remapDocIds(doc: GtdDocument): GtdDocument {
-  const idMap = new Map<string, string>()
-  const remap = (id: string): string => {
-    let n = idMap.get(id)
-    if (!n) {
-      n = crypto.randomUUID()
-      idMap.set(id, n)
-    }
-    return n
-  }
-  const remapOpt = (id: string | null): string | null => (id == null ? null : remap(id))
-
-  const folders = doc.folders.map(f => ({ ...f, id: remap(f.id), parentId: remapOpt(f.parentId) }))
-  const projects = doc.projects.map(p => ({ ...p, id: remap(p.id), folderId: remapOpt(p.folderId) }))
-  const tags = doc.tags.map(t => ({ ...t, id: remap(t.id) }))
-  const repeatRules = doc.repeatRules.map(r => ({ ...r, id: remap(r.id) }))
-  const tasks = doc.tasks.map(t => ({
-    ...t,
-    id: remap(t.id),
-    projectId: remapOpt(t.projectId),
-    parentId: remapOpt(t.parentId),
-    repeatRuleId: remapOpt(t.repeatRuleId),
-    repeatedFromTaskId: remapOpt(t.repeatedFromTaskId),
-    tagIds: t.tagIds.map(remap),
-  }))
-  const perspectives = doc.perspectives.map(p => ({ ...p, id: remap(p.id) }))
-  const attachments = doc.attachments.map(a => ({ ...a, id: remap(a.id), taskId: remap(a.taskId) }))
-
-  return {
-    ...doc,
-    folders,
-    projects,
-    tags,
-    tasks,
-    perspectives,
-    repeatRules,
-    attachments: attachments.map((a) => {
-      // attachment data 含 taskId（已是 remap 后）
-      const { id, ...data } = a
-      return { id, ...data, taskId: a.taskId }
-    }),
-  }
-}
-
-/**
- * 导入行的 apply 顺序：tags → perspectives → attachments → tasks（父先子后）→ task_tag
- *（Phase 1：project/folder 退出 GTD sync，导入导出留待 Dir API 后续支持）
- */
-function orderImportRows(rows: EntityRow[]): EntityRow[] {
-  const byEntity = <E extends SyncEntity>(e: E) =>
-    rows.filter((r): r is EntityRowOf<E> => r.entity === e)
-  const tags = byEntity('tag')
-  const perspectives = byEntity('perspective')
-  const attachments = byEntity('attachment')
-  const taskTags = byEntity('task_tag')
-  // tasks 拓扑排序：parentId 在前
-  const tasks = byEntity('task')
-  const taskById = new Map(tasks.map(t => [t.id, t]))
-  const ordered: EntityRow[] = []
-  const seen = new Set<string>()
-  const visit = (t: EntityRowOf<'task'>) => {
-    if (seen.has(t.id))
-      return
-    seen.add(t.id)
-    const parentId = t.data.parentId
-    if (parentId) {
-      const parent = taskById.get(parentId)
-      if (parent)
-        visit(parent)
-    }
-    ordered.push(t)
-  }
-  for (const t of tasks)
-    visit(t)
-  return [...tags, ...perspectives, ...attachments, ...ordered, ...taskTags]
 }

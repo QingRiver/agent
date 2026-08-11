@@ -44,14 +44,14 @@ export function GtdInspector() {
   const projectRoots = useAtomValue(DirStore.projectRefsAtom) as PerspectiveEntityRef[]
 
   const task = selectedTaskId ? rowStore.findLive('task', selectedTaskId) : null
-  // Phase 1：project/folder 退出 GTD sync，dir 信息来自 DirStore（dirsById 投影）
+  // project 退出 GTD sync，dir 信息来自 DirStore（dirsById 投影）
   const dirId = selectedProjectId
-    ?? ((selection.kind === 'project' || selection.kind === 'folder') ? selection.id : null)
+    ?? (selection.kind === 'project' ? selection.id : null)
   const dir = !task && dirId ? dirsById.get(dirId) ?? null : null
 
   if (task) {
     const done = task.data.status === EXPLICIT_STATUS.COMPLETED
-    const dropped = task.data.status === EXPLICIT_STATUS.CANCELLED
+    const dropped = task.data.status === EXPLICIT_STATUS.HOLD
     const tagIds = rowStore.tagIdsOf(task.id)
     const taskChildren = rowStore.liveTasks().filter(t => t.data.parentId === task.id)
     const repeatRule = task.data.repeatRule ?? null
@@ -188,7 +188,6 @@ export function GtdInspector() {
                   <option value="" disabled={taskChildren.length > 0}>普通任务</option>
                   <option value={GROUP_TYPE.PARALLEL}>并行任务组</option>
                   <option value={GROUP_TYPE.SEQUENTIAL}>串行任务组</option>
-                  <option value={GROUP_TYPE.SINGLE_ACTION}>单动作清单</option>
                 </Select>
               </div>
             </div>
@@ -269,11 +268,12 @@ export function GtdInspector() {
                       <Button type="button" className="h-9" variant="outline" onClick={() => dropTask(task.id)}>
                         放弃
                       </Button>
+                      {/* deleteTask command 仅 ACTIVE 可删（SP-STATE-6）；completed/hold 须先 reopen/restore 回 ACTIVE */}
+                      <Button type="button" className="h-9" variant="ghost" onClick={() => deleteTaskLogical(task.id)}>
+                        删除
+                      </Button>
                     </>
                   )}
-            <Button type="button" className="h-9" variant="ghost" onClick={() => deleteTaskLogical(task.id)}>
-              删除
-            </Button>
           </div>
         </div>
       </aside>
@@ -304,7 +304,7 @@ export function GtdInspector() {
 
 /**
  * Dir 检视器（project 根 / dir 子节点通用）。
- * Phase 1：project facet 全弃用，仅剩重命名 + 删除。重命名走在线 API，按 blur/Enter 提交
+ * project facet 全弃用，仅剩重命名 + 删除。重命名走在线 API，按 blur/Enter 提交
  * （避免逐键请求）；dir 切换靠 key 重置本地名状态。
  */
 function DirInspector({

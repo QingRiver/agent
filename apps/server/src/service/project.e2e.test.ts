@@ -13,7 +13,7 @@ async function cleanup(): Promise<void> {
 }
 
 /**
- * Phase 1 dirs 在线服务 e2e（ProjectService 直测）。
+ * dirs 在线服务 e2e（ProjectService 直测）。
  * 覆盖 plan §6 step 6：建 project 根 → 建 dir 子节点 → rename/move（含跨 project 级联
  * task projectId）→ delete 空校验。结构纯函数由 @agent/project 单测覆盖，此处验落库 + 级联。
  */

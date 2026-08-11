@@ -16,7 +16,7 @@ const baseInput = {
   denseVector: [0.1, 0.2],
 }
 
-describe('buildUpsertPoint payload（Phase 2：认 id，无 vdir）', () => {
+describe('buildUpsertPoint payload（认 id，无 vdir）', () => {
   it('含 mount_dir_id / project_id / owner / tag_ids（当提供）', () => {
     const point = buildUpsertPoint({
       ...baseInput,
@@ -35,7 +35,7 @@ describe('buildUpsertPoint payload（Phase 2：认 id，无 vdir）', () => {
     expect(payload.tag_ids).toEqual(['t1', 't2'])
   })
 
-  it('不携带 vdir（Phase 2 已从 payload 移除）', () => {
+  it('不携带 vdir（已从 payload 移除）', () => {
     const point = buildUpsertPoint({ ...baseInput, mountDirId: 'dir-1', projectId: 'proj-1' })
     const payload = point.payload as Record<string, unknown>
     expect('vdir' in payload).toBe(false)

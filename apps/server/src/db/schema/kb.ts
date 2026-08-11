@@ -6,7 +6,7 @@ import { tags } from './tags'
  * id（uuid）= chunk 关联用 source_doc_id，与路径/内容解耦。
  * 草稿/提交分离：saveDraft 只动 content/draft_hash/updated_at；commit 才跑 chunk+enrich+embed+Qdrant。
  *
- * Phase 2：并入统一 dirs 树（废弃 kb_nodes）。
+ * 并入统一 dirs 树（废弃 kb_nodes）。
  * - mountDirId = 挂载到 dirs.id（权威位置，无 FK 靠 server stamp 校验存活，同 task 模式）；null=未归位/Inbox
  * - projectId = walkToProjectRoot(mountDirId) 冗余缓存（server 维护，非 LWW）
  * - userId = 属主隔离（对齐 dirs.userId）；kbId 降为分区标签不再驱动树隔离/collection

@@ -30,7 +30,7 @@ export type RerankRetrieveOptions = z.infer<ReturnType<typeof KbQueryOptionsSche
  * @param kbId 全局 collection 标签（已废弃隔离，仅留分区标签）
  * @param query 查询文本
  * @param options 检索选项（skipRerank/recallK）
- * @param filter Qdrant filter（召回作用域）；骨架，Phase 4 接作用域构造，Phase 2 不启用。
+ * @param filter Qdrant filter（召回作用域）；骨架，待接作用域构造，不启用。
  */
 export async function retrieveAndRerank(
   kbId: string,

@@ -1,49 +1,27 @@
 import type {
-  Attachment,
   Perspective,
   RepeatRule,
   Tag,
   Task,
 } from '@agent/gtd'
 import type {
-  gtdAttachments,
   gtdPerspectives,
   gtdTasks,
   tags,
 } from '../db/schema'
-import {
-  AttachmentSchema,
-  PerspectiveSchema,
-  RepeatRuleSchema,
-  TagSchema,
-  TaskSchema,
-} from '@agent/gtd'
+import { TaskSchema } from '@agent/gtd'
 
-type TagRow = typeof tags.$inferSelect
 type TaskRow = typeof gtdTasks.$inferSelect
-type PerspectiveRow = typeof gtdPerspectives.$inferSelect
-type AttachmentRow = typeof gtdAttachments.$inferSelect
 
 type TagInsert = typeof tags.$inferInsert
 type TaskInsert = typeof gtdTasks.$inferInsert
 type PerspectiveInsert = typeof gtdPerspectives.$inferInsert
-type AttachmentInsert = typeof gtdAttachments.$inferInsert
 
 /** timestamptz(Date) ↔ zod datetime(ISO string) */
 const toISO = (d: Date | null): string | null => d?.toISOString() ?? null
 const toDate = (s: string | null): Date | null => s ? new Date(s) : null
 
 // ---------- Tag ----------
-export function rowToTag(row: TagRow): Tag {
-  return TagSchema.parse({
-    id: row.id,
-    name: row.name,
-    color: row.color,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: toISO(row.updatedAt),
-  })
-}
-
 export function tagToRow(tag: Tag, userId: string): TagInsert {
   return {
     id: tag.id,
@@ -54,11 +32,6 @@ export function tagToRow(tag: Tag, userId: string): TagInsert {
     createdAt: new Date(tag.createdAt),
     updatedAt: toDate(tag.updatedAt),
   }
-}
-
-// ---------- RepeatRule（内联 task.repeat_rule jsonb，无独立表） ----------
-export function rowToRepeatRule(jsonb: unknown): RepeatRule {
-  return RepeatRuleSchema.parse(jsonb)
 }
 
 // ---------- Task（repeatRuleId ↔ repeat_rule jsonb；tagIds/attachmentIds 装配） ----------
@@ -118,24 +91,7 @@ export function taskToRow(task: Task, userId: string, repeatRule: RepeatRule | n
   }
 }
 
-// ---------- Perspective（filter/sort_by jsonb；group_by text[]） ----------
-export function rowToPerspective(row: PerspectiveRow): Perspective {
-  return PerspectiveSchema.parse({
-    id: row.id,
-    name: row.name,
-    icon: row.icon,
-    filter: row.filter as Perspective['filter'],
-    groupBy: row.groupBy ?? [],
-    sortBy: row.sortBy as Perspective['sortBy'],
-    availabilityFilter: row.availabilityFilter,
-    showCompleted: row.showCompleted,
-    showDropped: row.showDropped,
-    flaggedOnly: row.flaggedOnly,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: toISO(row.updatedAt),
-  })
-}
-
+// ---------- Perspective ----------
 export function perspectiveToRow(p: Perspective, userId: string): PerspectiveInsert {
   return {
     id: p.id,
@@ -151,29 +107,5 @@ export function perspectiveToRow(p: Perspective, userId: string): PerspectiveIns
     flaggedOnly: p.flaggedOnly,
     createdAt: new Date(p.createdAt),
     updatedAt: toDate(p.updatedAt),
-  }
-}
-
-// ---------- Attachment ----------
-export function rowToAttachment(row: AttachmentRow): Attachment {
-  return AttachmentSchema.parse({
-    id: row.id,
-    taskId: row.taskId,
-    kind: row.kind,
-    url: row.url,
-    filename: row.filename,
-    createdAt: row.createdAt.toISOString(),
-  })
-}
-
-export function attachmentToRow(a: Attachment, userId: string): AttachmentInsert {
-  return {
-    id: a.id,
-    userId,
-    taskId: a.taskId,
-    kind: a.kind,
-    url: a.url,
-    filename: a.filename,
-    createdAt: new Date(a.createdAt),
   }
 }

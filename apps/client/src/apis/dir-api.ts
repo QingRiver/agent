@@ -12,7 +12,7 @@ export type ProjectDto = InferResponseType<Projects['list']['$post'], 200>['proj
 /**
  * dirs / projects 在线 API client。
  *
- * Phase 1：project/folder 退出 GTD sync，改走在线 Dir API（全 POST）。
+ * project/folder 退出 GTD sync，改走在线 Dir API（全 POST）。
  * dirs 纯内存（量小），list 拉全量扁平行，client 端 buildDirTree 组装。
  */
 export class DirApi {

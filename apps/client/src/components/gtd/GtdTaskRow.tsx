@@ -11,7 +11,7 @@ import { ChevronDown, ChevronRight, Flag, GripVertical, Repeat2 } from 'lucide-r
 function statusDotClass(computed: ComputedStatus | null, explicit: string): string {
   if (explicit === EXPLICIT_STATUS.COMPLETED)
     return 'bg-muted-foreground'
-  if (explicit === EXPLICIT_STATUS.CANCELLED || explicit === EXPLICIT_STATUS.DELETED)
+  if (explicit === EXPLICIT_STATUS.HOLD || explicit === EXPLICIT_STATUS.DELETED)
     return 'bg-muted-foreground/80'
   switch (computed) {
     case COMPUTED_STATUS.AVAILABLE:

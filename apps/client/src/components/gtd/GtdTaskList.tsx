@@ -136,19 +136,19 @@ export function GtdTaskList() {
   const dirsById = useAtomValue(DirStore.dirsByIdAtom)
   const perspective = resolvePerspective(rowStore, selection)
   const isForecast = selection.kind === 'perspective' && selection.id === 'forecast'
-  // Phase 1：project/folder 退出 GTD sync，名称来自 DirStore dirsById 投影
-  const selectedDir = (selection.kind === 'project' || selection.kind === 'folder')
+  // project 退出 GTD sync，名称来自 DirStore dirsById 投影
+  const selectedDir = selection.kind === 'project'
     ? dirsById.get(selection.id) ?? null
     : null
 
   function resolveTitle() {
     if (selection.kind === 'perspective')
       return perspective.name
-    if (selection.kind === 'project' || selection.kind === 'folder')
-      return selectedDir?.name ?? (selection.kind === 'project' ? '项目' : '文件夹')
+    if (selection.kind === 'project')
+      return selectedDir?.name ?? '项目'
     if (selection.kind === 'tag')
       return rowStore.findLive('tag', selection.id)?.data.name ?? '标签'
-    return '文件夹'
+    return ''
   }
   const title = resolveTitle()
   const liveTasks = rowStore.liveTasks()

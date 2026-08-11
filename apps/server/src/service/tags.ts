@@ -289,7 +289,7 @@ export class TagsService {
       }
     }
 
-    // Phase 1：project defaultTagIds 已弃用（project facet 全删），不再清理
+    // project defaultTagIds 已弃用（project facet 全删），不再清理
 
     return { docIds: linkedDocs.map(d => d.id) }
   }
@@ -413,7 +413,7 @@ export class TagsService {
         }
       }
 
-      // Phase 1：project defaultTagIds 已弃用（project facet 全删），不再清理
+      // project defaultTagIds 已弃用（project facet 全删），不再清理
 
       await TagsService.softDeleteTag(userId, tagId, tx)
     })
