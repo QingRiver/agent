@@ -9,7 +9,7 @@ import {
   remapRowIds,
   serializeRows,
 } from './serialize'
-import { ATTACHMENT_KIND, AVAILABILITY_FILTER } from './types'
+import { ATTACHMENT_KIND } from './types'
 
 function makePerspectiveRow(
   id: string,
@@ -28,10 +28,6 @@ function makePerspectiveRow(
       filter: filter as never,
       groupBy: [],
       sortBy: [],
-      availabilityFilter: AVAILABILITY_FILTER.AVAILABLE,
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
       createdAt: NOW_ISO,
       updatedAt: null,
     },

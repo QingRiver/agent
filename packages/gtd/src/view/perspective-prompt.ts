@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import {
-  AVAILABILITY_FILTER_TEXT,
   FILTER_FIELD_TEXT,
 } from '../data/types'
 import { FILTER_ERROR_CODE, LEAF_OP_TEXT, LOGIC_OP_TEXT, RELATIVE_DATE_LITERALS } from './filter'
@@ -23,10 +22,6 @@ export const PERSPECTIVE_PROMPT_TEMPLATE = `# GTD 自定义透视（Perspective�
 1. 先调用 \`gtd_list_context\` 获取当前用户的 projects、tags、perspectives。
 2. 使用返回的 **id 或精确 name** 构造过滤树；**禁止编造 UUID**。
 3. 收到结构化 \`errors\` 后按 \`code\` 修正并重试。
-
-## 可用性范围（availabilityFilter）
-
-${Object.entries(AVAILABILITY_FILTER_TEXT).map(([k, v]) => `- \`${k}\`：${v}`).join('\n')}
 
 ## 过滤树（filter）
 

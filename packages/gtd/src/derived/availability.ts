@@ -1,6 +1,5 @@
 /**
  * 可用性计算。派生状态不持久化，实时计算。
- * 吃 RowStore
  */
 import type { RowStore } from '../data/rows'
 import type { ComputedStatus } from '../data/schema'
@@ -11,7 +10,7 @@ import { effectiveDefer, effectiveDue } from '../inheritance/effective'
 import { buildTaskTree } from '../structure/tree'
 import { isWallClockUnlocked } from '../time/clock'
 
-/** 计算上下文 */
+/** 可用性计算上下文 */
 interface ComputeContext {
   /** 当前时间 */
   now: Date
@@ -38,7 +37,7 @@ function computeStatusInner(task: EntityRowOf<'task'>, ctx: ComputeContext): Com
   }
   ctx.visiting.add(task.id)
 
-  /** 终态 → 直接阻塞 */
+  /** 终态 → 阻塞 */
   if (
     task.data.status === EXPLICIT_STATUS.COMPLETED
     || task.data.status === EXPLICIT_STATUS.HOLD
@@ -49,14 +48,17 @@ function computeStatusInner(task: EntityRowOf<'task'>, ctx: ComputeContext): Com
     return COMPUTED_STATUS.BLOCKED
   }
 
-  /** 墙钟未解锁（effectiveDefer > now）→ 直接阻塞 */
+  /** 墙钟未解锁（effectiveDefer > now）→ 阻塞 */
   if (!isWallClockUnlocked(effectiveDefer(task, ctx.tree), ctx.now)) {
     ctx.cache.set(task.id, COMPUTED_STATUS.BLOCKED)
     ctx.visiting.delete(task.id)
     return COMPUTED_STATUS.BLOCKED
   }
 
-  /** 祖先 task 派生阻塞 → 直接阻塞（递归上溯） */
+  /**
+   * 祖先派生阻塞
+   * 递归上溯 容器不可用 里面的动作也不可用
+   */
   let ancestor = ctx.tree.byId.get(task.id)?.parent ?? null
   while (ancestor) {
     const ancStatus = computeStatusInner(ancestor.task, ctx)
@@ -68,7 +70,10 @@ function computeStatusInner(task: EntityRowOf<'task'>, ctx: ComputeContext): Com
     ancestor = ancestor.parent
   }
 
-  /** 串行动作组：前序兄弟未完成 → 直接阻塞 */
+  /**
+   * 兄弟派生阻塞
+   * 串行判别 前序兄弟不可用 后置动作也不可用
+   */
   let node = ctx.tree.byId.get(task.id)
   while (node?.parent) {
     const parent = node.parent
@@ -84,7 +89,7 @@ function computeStatusInner(task: EntityRowOf<'task'>, ctx: ComputeContext): Com
     node = parent
   }
 
-  /** 截止日计算：过期/临近 */
+  /** 截止日计算 */
   const effDue = effectiveDue(task, ctx.tree)
   if (effDue) {
     const dueMs = new Date(effDue).getTime()

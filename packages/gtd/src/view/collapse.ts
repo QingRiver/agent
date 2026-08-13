@@ -23,7 +23,6 @@ function descendantHasMatched(node: TaskNode, matchedIds: Set<string>): boolean 
  * 纯结构祖先集（塌陷目标）：expandedIds 内、非 matched、且后代含 matched 的节点 [SP-COLLAPSE-1]。
  *
  * expandAncestors 拉入的祖先若自身非 matched 且有 matched 后代 → 塌陷。
- * expandDescendants 拉入的子孙位于 matched 之下、后代无 matched → 不会误入。
  * forecast 路径传空 matchedIds → 空集（不塌陷）[SP-COLLAPSE-FORECAST-NOOP]。
  */
 export function computeCollapsibleSet(

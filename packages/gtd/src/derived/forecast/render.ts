@@ -1,18 +1,15 @@
 import type { RowStore } from '../../data/rows'
 import type { EntityRowOf } from '../../data/sync-schema'
 /**
- * Forecast 渲染：按 timeslice 吸顶分块 + 块内序（wiki §1.1.1）。
+ * Forecast 渲染：按 timeslice 吸顶分块 + 块内树序（保层级）。
  * `computeStatus` / depth 用全量 liveTasks 树；`tasks` 仅作归桶列表（已 applyBaseFilter）。
  */
 import type { RenderContext, RenderGroup, RenderItem } from '../../view/perspective'
 import type { ForecastBlockKey, ForecastOptions } from './types'
 import {
-  COMPUTED_STATUS,
   FORECAST_STRIP,
   FORECAST_STRIP_TEXT,
-  PLANNED_MODE,
 } from '../../data/types'
-import { effectiveDefer, effectiveDue } from '../../inheritance/effective'
 import { buildTaskTree, taskDepth } from '../../structure/tree'
 import {
   formatZonedYmd,
@@ -21,12 +18,13 @@ import {
   startOfZonedToday,
   startOfZonedYmd,
 } from '../../time/calendar'
+import { flattenInTreeOrder } from '../../view/perspective'
 import { computeStatus } from '../availability'
 import { assignForecastBlock } from './assign'
 import { dayBlockKey } from './block-key'
 import { dayStartAtOffset, NAMED_DAY_OFFSETS } from './strip-offsets'
 
-/** 有限窗按日预建桶；开窗仅预建落在窗内的今日/明天/后天，更远日由任务动态建桶 */
+/** 有限窗按日预建桶；开窗仅预建落在窗内的「现在」，更远日由任务动态建桶 */
 function enumerateDayBuckets(
   options: ForecastOptions,
   now: Date,
@@ -61,12 +59,8 @@ function enumerateDayBuckets(
 function forecastBlockLabel(key: ForecastBlockKey, timeZone: string): string {
   if (key === FORECAST_STRIP.PAST)
     return FORECAST_STRIP_TEXT[FORECAST_STRIP.PAST]
-  if (key === FORECAST_STRIP.TODAY)
-    return FORECAST_STRIP_TEXT[FORECAST_STRIP.TODAY]
-  if (key === FORECAST_STRIP.TOMORROW)
-    return FORECAST_STRIP_TEXT[FORECAST_STRIP.TOMORROW]
-  if (key === FORECAST_STRIP.DAY_AFTER)
-    return FORECAST_STRIP_TEXT[FORECAST_STRIP.DAY_AFTER]
+  if (key === FORECAST_STRIP.NOW)
+    return FORECAST_STRIP_TEXT[FORECAST_STRIP.NOW]
   if (/^\d{4}-\d{2}-\d{2}$/.test(key))
     return key
   try {
@@ -90,63 +84,6 @@ function toItem(task: EntityRowOf<'task'>, ctx: RenderContext): RenderItem {
     computed,
     depth: taskDepth(ctx.tree, task.id),
   }
-}
-
-function computedRank(status: string): number {
-  if (status === COMPUTED_STATUS.OVERDUE)
-    return 0
-  if (status === COMPUTED_STATUS.DUE_SOON)
-    return 1
-  return 2
-}
-
-/** 块内序：computed → due → defer → planned → order → id（wiki §1.1.1） */
-function sortBlockTasks(
-  tasks: EntityRowOf<'task'>[],
-  ctx: RenderContext,
-): EntityRowOf<'task'>[] {
-  const statusOf = (t: EntityRowOf<'task'>) => computeStatus(
-    t,
-    ctx.now,
-    ctx.tree,
-    ctx.dueSoonIntervalMs,
-    ctx.statusCache,
-  )
-  const sorted = [...tasks]
-  sorted.sort((a, b) => {
-    const ra = computedRank(statusOf(a))
-    const rb = computedRank(statusOf(b))
-    if (ra !== rb)
-      return ra - rb
-
-    const dueA = effectiveDue(a, ctx.tree)
-    const dueB = effectiveDue(b, ctx.tree)
-    const dueAm = dueA ? new Date(dueA).getTime() : Number.POSITIVE_INFINITY
-    const dueBm = dueB ? new Date(dueB).getTime() : Number.POSITIVE_INFINITY
-    if (dueAm !== dueBm)
-      return dueAm - dueBm
-
-    const deferA = effectiveDefer(a, ctx.tree)
-    const deferB = effectiveDefer(b, ctx.tree)
-    const deferAm = deferA ? new Date(deferA).getTime() : Number.POSITIVE_INFINITY
-    const deferBm = deferB ? new Date(deferB).getTime() : Number.POSITIVE_INFINITY
-    if (deferAm !== deferBm)
-      return deferAm - deferBm
-
-    const planA = a.data.plannedMode === PLANNED_MODE.ON && a.data.plannedDate
-      ? new Date(a.data.plannedDate).getTime()
-      : Number.POSITIVE_INFINITY
-    const planB = b.data.plannedMode === PLANNED_MODE.ON && b.data.plannedDate
-      ? new Date(b.data.plannedDate).getTime()
-      : Number.POSITIVE_INFINITY
-    if (planA !== planB)
-      return planA - planB
-
-    if (a.data.order !== b.data.order)
-      return a.data.order - b.data.order
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-  })
-  return sorted
 }
 
 function blockSortKey(key: ForecastBlockKey, now: Date, timeZone: string): number {
@@ -192,7 +129,7 @@ export function renderForecast(
     ensure(d.key)
 
   for (const t of tasks) {
-    const block = assignForecastBlock(t, options, now, timeZone)
+    const block = assignForecastBlock(t, options, now, timeZone, tree)
     if (block == null)
       continue
     ensure(block)
@@ -207,15 +144,11 @@ export function renderForecast(
   for (const key of keys) {
     const list = buckets.get(key)!
     if (list.length === 0 && key !== FORECAST_STRIP.PAST) {
-      if (!(
-        key === FORECAST_STRIP.TODAY
-        || key === FORECAST_STRIP.TOMORROW
-        || key === FORECAST_STRIP.DAY_AFTER
-      )) {
+      // 空桶只保留「过去」「现在」吸顶；更远日无任务则不占行
+      if (key !== FORECAST_STRIP.NOW)
         continue
-      }
     }
-    const sorted = sortBlockTasks(list, ctx)
+    const sorted = flattenInTreeOrder(tree, list, [], rowStore)
     groups.push({
       key,
       label: forecastBlockLabel(key, timeZone),

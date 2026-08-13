@@ -352,33 +352,6 @@
           "notNull": true,
           "default": "'[]'::jsonb"
         },
-        "availability_filter": {
-          "name": "availability_filter",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'available'"
-        },
-        "show_completed": {
-          "name": "show_completed",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "show_dropped": {
-          "name": "show_dropped",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "flagged_only": {
-          "name": "flagged_only",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
         "sync_id": {
           "name": "sync_id",
           "type": "bigint",

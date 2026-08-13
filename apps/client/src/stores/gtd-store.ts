@@ -14,16 +14,20 @@ import type {
   Task,
 } from '@agent/gtd'
 import type { SyncStatus } from '../gtd/sync-engine'
+import type { GtdSelection, PerspectiveViewOptions } from '../gtd/view-options'
 import {
-  AVAILABILITY_FILTER,
+  BUILTIN_PERSPECTIVE_ID,
+  BUILTIN_PERSPECTIVE_IDS,
   builtinPerspectives,
   DEFAULT_FORECAST_SIGNALS,
   DEFAULT_FORECAST_STRIP,
+  entityFocusFilter,
   EXPLICIT_STATUS,
   FILTER_FIELD,
   FORECAST_STRIP_ORDER,
   GROUP_TYPE,
-  LEAF_OP,
+  isBuiltinPerspectiveId,
+  mergeFilter,
   normalizeDeferDue,
   orderBetween,
   orderImportRows,
@@ -36,8 +40,6 @@ import {
   serializeRows,
   shouldReindex,
   shouldStop,
-  SORT_DIR,
-  SORT_FIELD,
   validateInvariants,
   validatePerspectiveInput,
 } from '@agent/gtd'
@@ -46,12 +48,23 @@ import { atom, getDefaultStore } from 'jotai'
 import { isContiguousStripSelection, toggleForecastStrip } from '../gtd/forecast-strip'
 import { applyLocal as applyRows, loadRows, mergeChanges, persistAndQueue } from '../gtd/row-store'
 import { SyncEngine } from '../gtd/sync-engine'
+import {
+  DEFAULT_GTD_SELECTION,
+  parseGtdSelection,
+  parseViewOptionsMap,
+  resolveAvailabilityFilter,
+  selectPerspective,
+  viewOptionsScope,
+} from '../gtd/view-options'
 import { DirStore } from './dir-store'
+
+export type { GtdSelection }
 
 const DUE_SOON_MS = 2 * 24 * 60 * 60 * 1000
 const LS_SELECTION = 'gtd.selection'
 const LS_FORECAST_STRIP = 'gtd.forecastStrip'
 const LS_FORECAST_SIGNALS = 'gtd.forecastSignals'
+const LS_VIEW_OPTIONS = 'gtd.viewOptions'
 
 // ---------------- mutation/command 构造小工具 ----------------
 
@@ -71,6 +84,23 @@ function deleteMut(entity: SyncEntity, entityId: string): GtdMutation {
   return { id: newId(), entity, entityId, op: 'delete', clientTs: nowIso() } as GtdMutation
 }
 
+/** OF4 Inherited Tags Assignment：目标无标时复制父 task_tag（新建可传 ownTagIds=[]）；已有标不覆盖。 */
+function copyTagMutsFromParent(
+  store: RowStore,
+  taskId: string,
+  parentId: string | null | undefined,
+  ownTagIds?: readonly string[],
+): GtdMutation[] {
+  if (parentId == null)
+    return []
+  const own = ownTagIds ?? store.tagIdsOf(taskId)
+  if (own.length > 0)
+    return []
+  return store.tagIdsOf(parentId).map(tagId =>
+    upsertMut('task_tag', `${taskId}|${tagId}`, { taskId, tagId }),
+  )
+}
+
 // command 构造：输入为分支字段（type/taskId/payload/...），自动补 id+clientTs。
 // 用 Record 入参 + GtdCommand 出参，避开 Omit<discriminated-union> 丢变体字段。
 function cmd(c: Record<string, unknown>): GtdCommand {
@@ -83,6 +113,20 @@ function nextOrder(items: Array<{ order: number }>): number {
   if (items.length === 0)
     return 0
   return Math.max(...items.map(i => i.order)) + 1
+}
+
+function collectDescendantIds(store: RowStore, rootId: string): string[] {
+  const out: string[] = []
+  const visit = (pid: string) => {
+    for (const t of store.liveTasks()) {
+      if (t.data.parentId === pid) {
+        out.push(t.id)
+        visit(t.id)
+      }
+    }
+  }
+  visit(rootId)
+  return out
 }
 
 function sortedByOrder<T extends { order: number }>(items: T[]): T[] {
@@ -115,26 +159,19 @@ function targetOrder<T extends { id: string, order: number }>(
 
 // ---------------- 选择 ----------------
 
-export type GtdSelection
-  = | { kind: 'perspective', id: string }
-    | { kind: 'project', id: string }
-    | { kind: 'tag', id: string }
-
 export type RepeatRuleInput = Omit<RepeatRule, 'id' | 'completedOccurrences'>
 
 function readSelection(): GtdSelection {
   try {
     const raw = localStorage.getItem(LS_SELECTION)
     if (!raw)
-      return { kind: 'perspective', id: 'forecast' }
-    const parsed = JSON.parse(raw) as GtdSelection
-    if (parsed && typeof parsed === 'object' && 'kind' in parsed && 'id' in parsed)
-      return parsed
+      return DEFAULT_GTD_SELECTION
+    return parseGtdSelection(raw)
   }
   catch {
     // ignore
   }
-  return { kind: 'perspective', id: 'forecast' }
+  return DEFAULT_GTD_SELECTION
 }
 
 function writeSelection(sel: GtdSelection): void {
@@ -200,6 +237,27 @@ function writeForecastSignals(signals: ForecastSignalOptions): void {
   }
 }
 
+function readViewOptionsMap(): Record<string, Partial<PerspectiveViewOptions>> {
+  try {
+    const raw = localStorage.getItem(LS_VIEW_OPTIONS)
+    if (!raw)
+      return {}
+    return parseViewOptionsMap(raw)
+  }
+  catch {
+    return {}
+  }
+}
+
+function writeViewOptionsMap(map: Record<string, Partial<PerspectiveViewOptions>>): void {
+  try {
+    localStorage.setItem(LS_VIEW_OPTIONS, JSON.stringify(map))
+  }
+  catch {
+    // ignore
+  }
+}
+
 /** 透视校验上下文：projects 来自 dirs 树（统一树），tags 来自 RowStore */
 function perspectiveValidationContext(
   store: RowStore,
@@ -210,55 +268,42 @@ function perspectiveValidationContext(
     timeZone: new Intl.DateTimeFormat().resolvedOptions().timeZone,
     projects: dirs.projects,
     tags: store.liveTags().map(t => ({ id: t.id, name: t.data.name })),
-    builtinPerspectiveIds: builtinPerspectives().map(p => p.id),
+    builtinPerspectiveIds: BUILTIN_PERSPECTIVE_IDS,
   }
 }
 
-/** 按 selection 解析用于渲染的 Perspective（内置或临时过滤） */
-export function resolvePerspective(store: RowStore, selection: GtdSelection): Perspective {
-  if (selection.kind === 'perspective') {
-    const builtin = builtinPerspectives().find(p => p.id === selection.id)
-    if (builtin)
-      return builtin
-    const row = store.livePerspectives().find(p => p.id === selection.id)
-    if (row)
-      return { id: row.id, ...row.data }
-    return builtinPerspectives()[0]!
+function resolvePerspectiveBase(store: RowStore, perspectiveId: string): Perspective {
+  if (isBuiltinPerspectiveId(perspectiveId)) {
+    const builtin = builtinPerspectives().find(p => p.id === perspectiveId)
+    return builtin ?? builtinPerspectives()[0]!
   }
-  if (selection.kind === 'project') {
-    return {
-      id: `project:${selection.id}`,
-      name: '项目',
-      icon: null,
-      filter: { op: LEAF_OP.SOME, field: FILTER_FIELD.PROJECT, value: [selection.id] },
-      groupBy: [],
-      sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
-      availabilityFilter: AVAILABILITY_FILTER.REMAINING,
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      createdAt: new Date(0).toISOString(),
-      updatedAt: null,
-    }
-  }
-  if (selection.kind === 'tag') {
-    return {
-      id: `tag:${selection.id}`,
-      name: '标签',
-      icon: null,
-      filter: { op: LEAF_OP.SOME, field: FILTER_FIELD.TAG, value: [selection.id] },
-      groupBy: [],
-      sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
-      availabilityFilter: AVAILABILITY_FILTER.REMAINING,
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
-      createdAt: new Date(0).toISOString(),
-      updatedAt: null,
-    }
-  }
-  // tag 分支见上；folder 选择已移除（侧栏仅 project/tag/perspective）
+  const row = store.livePerspectives().find(p => p.id === perspectiveId)
+  if (row)
+    return { id: row.id, ...row.data }
   return builtinPerspectives()[0]!
+}
+
+/** base 透视 + mergeFilter(实体焦点)；有 focus 时去掉同名 groupBy 键 */
+export function resolvePerspective(
+  store: RowStore,
+  selection: GtdSelection,
+): Perspective {
+  const base = resolvePerspectiveBase(store, selection.perspectiveId)
+  const focus = selection.focus
+  const filter = mergeFilter(base.filter, focus ? entityFocusFilter(focus) : null)
+  const groupBy = focus
+    ? base.groupBy.filter(k => k !== focus.field)
+    : base.groupBy
+  return { ...base, id: selection.perspectiveId, filter, groupBy }
+}
+
+/** 当前透视的可用性过滤（View Options 本地覆盖） */
+export function resolvePerspectiveAvailability(
+  selection: GtdSelection,
+  viewOptionsMap: Record<string, Partial<PerspectiveViewOptions>> = {},
+) {
+  const scope = viewOptionsScope(selection)
+  return resolveAvailabilityFilter(scope, viewOptionsMap[scope])
 }
 
 // ---------------- row 形状小工具 ----------------
@@ -333,6 +378,7 @@ export class GtdStore {
   static readonly selectionAtom = atom<GtdSelection>(readSelection())
   static readonly forecastStripAtom = atom<ForecastStripKey[]>(readForecastStrip())
   static readonly forecastSignalsAtom = atom<ForecastSignalOptions>(readForecastSignals())
+  static readonly viewOptionsAtom = atom<Record<string, Partial<PerspectiveViewOptions>>>(readViewOptionsMap())
   static readonly selectedTaskIdAtom = atom<string | null>(null)
   static readonly selectedProjectIdAtom = atom<string | null>(null)
   static readonly isLoadingAtom = atom(false)
@@ -412,13 +458,13 @@ export class GtdStore {
     s.set(GtdStore.selectionAtom, sel)
     writeSelection(sel)
     s.set(GtdStore.selectedTaskIdAtom, null)
-    if (sel.kind === 'project')
-      s.set(GtdStore.selectedProjectIdAtom, sel.id)
-    else
-      s.set(GtdStore.selectedProjectIdAtom, null)
+    s.set(
+      GtdStore.selectedProjectIdAtom,
+      sel.focus?.field === FILTER_FIELD.PROJECT ? sel.focus.id : null,
+    )
   }
 
-  /** 五段条点击：连续多选扩展/端点收缩 */
+  /** 三段条点击：连续多选扩展/端点收缩 */
   static toggleForecastStripSegment(clicked: ForecastStripKey): void {
     const s = GtdStore.store()
     const next = toggleForecastStrip(s.get(GtdStore.forecastStripAtom), clicked)
@@ -431,6 +477,17 @@ export class GtdStore {
     const next = { ...s.get(GtdStore.forecastSignalsAtom), ...patch }
     s.set(GtdStore.forecastSignalsAtom, next)
     writeForecastSignals(next)
+  }
+
+  /** 当前透视的 View Options 本地覆盖（不写回透视定义） */
+  static patchViewOptions(patch: Partial<PerspectiveViewOptions>): void {
+    const s = GtdStore.store()
+    const sel = s.get(GtdStore.selectionAtom)
+    const scope = viewOptionsScope(sel)
+    const map = { ...s.get(GtdStore.viewOptionsAtom) }
+    map[scope] = { ...map[scope], ...patch }
+    s.set(GtdStore.viewOptionsAtom, map)
+    writeViewOptionsMap(map)
   }
 
   /** Planned：none / rolling / on(+date) */
@@ -626,7 +683,10 @@ export class GtdStore {
         updatedAt: now,
         repeatRule: null,
       }
-      const items: Array<GtdMutation | GtdCommand> = [upsertMut('task', id, data)]
+      const items: Array<GtdMutation | GtdCommand> = [
+        upsertMut('task', id, data),
+        ...copyTagMutsFromParent(store, id, parentId, []),
+      ]
       if (!parent.data.groupType)
         items.push(upsertMut('task', parentId, { groupType: GROUP_TYPE.PARALLEL, updatedAt: now }))
       return items
@@ -652,6 +712,7 @@ export class GtdStore {
       // task 移动走 upsert patch（move command 已删）；mountDirId 不变（同 project 内缩进）
       const items: GtdMutation[] = [
         upsertMut('task', taskId, { parentId: parent.id, order: nextOrder(children), updatedAt: now }),
+        ...copyTagMutsFromParent(store, taskId, parent.id),
       ]
       if (!parent.groupType)
         items.push(upsertMut('task', parent.id, { groupType: GROUP_TYPE.PARALLEL, updatedAt: now }))
@@ -781,11 +842,81 @@ export class GtdStore {
     })
   }
 
+  /**
+   * 换容器（项目 / 父任务）。order 是同级坐标，不能跟着旧值进新列表；
+   * 默认插到目标同级末尾，算法与拖拽相同（orderBetween / 必要时 reindex）。
+   * `parentId` 省略则保留原父子；仅显式传 `null` 才变根。
+   */
+  static moveTask(
+    taskId: string,
+    dest: {
+      mountDirId: string | null
+      parentId?: string | null
+      beforeId?: string | null
+      afterId?: string | null
+    },
+  ): void {
+    GtdStore.applyLocal((store) => {
+      const task = store.findLive('task', taskId)
+      if (!task)
+        throw new Error('任务不存在')
+      const nextMount = dest.mountDirId
+      // 省略 parentId → 保留原父子；仅显式 null 才变根（Inspector 换项目只传 mountDirId）
+      const nextParent = dest.parentId !== undefined ? dest.parentId : task.data.parentId
+      if (nextParent && !nextMount)
+        throw new Error('Inbox 不能有子任务')
+      const descendantIds = collectDescendantIds(store, taskId)
+      if (nextMount == null && descendantIds.length > 0)
+        throw new Error('有子任务的任务不能移回收件箱')
+      if (nextParent === taskId || (nextParent != null && descendantIds.includes(nextParent)))
+        throw new Error('不能移到自己的子树下')
+      if (
+        task.data.mountDirId === nextMount
+        && task.data.parentId === nextParent
+        && dest.beforeId === undefined
+        && dest.afterId === undefined
+      ) {
+        return []
+      }
+      const siblings = store.liveTasks()
+        .filter(t => t.id !== taskId && t.data.mountDirId === nextMount && t.data.parentId === nextParent)
+        .map(tShape)
+      const placed = dest.beforeId !== undefined || dest.afterId !== undefined
+        ? targetOrder(siblings, dest.beforeId ?? null, dest.afterId ?? null)
+        : targetOrder(siblings, sortedByOrder(siblings).at(-1)?.id ?? null, null)
+      const now = nowIso()
+      const parentChanged = nextParent !== task.data.parentId
+      const items: GtdMutation[] = [
+        upsertMut('task', taskId, {
+          mountDirId: nextMount,
+          parentId: nextParent,
+          order: placed.order,
+          updatedAt: now,
+        }),
+      ]
+      // 换父且自身无标 → 复制新父标签（OF Inherited Tags Assignment）
+      if (parentChanged)
+        items.push(...copyTagMutsFromParent(store, taskId, nextParent))
+      for (const sib of siblings) {
+        const order = placed.reindexed.get(sib.id)
+        if (order != null)
+          items.push(upsertMut('task', sib.id, { order, updatedAt: now }))
+      }
+      if (nextMount != null) {
+        for (const id of descendantIds)
+          items.push(upsertMut('task', id, { mountDirId: nextMount, updatedAt: now }))
+      }
+      return items
+    })
+  }
+
   static patchTask(taskId: string, patch: Partial<Task>): void {
     GtdStore.applyLocal((store) => {
       const task = store.findLive('task', taskId)
       if (!task)
         throw new Error('任务不存在')
+      if (Object.hasOwn(patch, 'mountDirId') || Object.hasOwn(patch, 'parentId') || Object.hasOwn(patch, 'order'))
+        throw new Error('换项目或排序请用 moveTask / reorderTask')
       const rule = task.data.repeatRuleId != null ? task.data.repeatRule : null
       if (rule?.anchor === REPEAT_ANCHOR.DUE && patch.dueDate === null)
         throw new Error('按截止日重复的任务不能清空截止日期')
@@ -880,10 +1011,6 @@ export class GtdStore {
         filter: result.value.filter,
         groupBy: result.value.groupBy,
         sortBy: result.value.sortBy,
-        availabilityFilter: result.value.availabilityFilter,
-        showCompleted: result.value.showCompleted,
-        showDropped: result.value.showDropped,
-        flaggedOnly: result.value.flaggedOnly,
         createdAt: now,
         updatedAt: null,
       }
@@ -909,10 +1036,6 @@ export class GtdStore {
         filter: result.value.filter,
         groupBy: result.value.groupBy,
         sortBy: result.value.sortBy,
-        availabilityFilter: result.value.availabilityFilter,
-        showCompleted: result.value.showCompleted,
-        showDropped: result.value.showDropped,
-        flaggedOnly: result.value.flaggedOnly,
         updatedAt: nowIso(),
       })]
     })
@@ -922,8 +1045,8 @@ export class GtdStore {
     const s = GtdStore.store()
     GtdStore.applyLocal(() => [deleteMut('perspective', id)])
     const selection = s.get(GtdStore.selectionAtom)
-    if (selection.kind === 'perspective' && selection.id === id)
-      GtdStore.setSelection({ kind: 'perspective', id: 'forecast' })
+    if (selection.perspectiveId === id)
+      GtdStore.setSelection(selectPerspective(BUILTIN_PERSPECTIVE_ID.FORECAST))
   }
 
   // ---------- Projects / Dirs（在线 Dir API，project=根=纯命名作用域） ----------

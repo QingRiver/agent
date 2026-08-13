@@ -1,38 +1,69 @@
 /**
  * 父子时间继承行为规约（SP-INH-*）。
  * 每条 `it` 上方 `// SP-INH-*` 与 `wiki/draft/gtd行为规约.md` 一一对应。
- * PlanDate 不继承为当前已成立行为（跑绿）；Due/Defer effective 派生已落地（跑绿）。
+ * PlanDate 为 OF4 coalesce 继承（跑绿）；Due/Defer effective 派生已落地（跑绿）。
  * SP-INV-REPEAT-REOPEN（L5 reopenTask throw）归 command/state.test.ts SP-STATE-3，此处不重复。
  */
 import { describe, expect, it } from 'vitest'
-import { RowStore } from '../data/rows'
 import { COMPUTED_STATUS, PLANNED_MODE } from '../data/types'
-import { computeAll, computeStatus } from '../derived/availability'
+import { computeStatus } from '../derived/availability'
 import { DUE_SOON_MS, makeTaskRow, NOW } from '../fixtures'
 import { buildTaskTree } from '../structure/tree'
-import { effectiveDefer, effectiveDue } from './effective'
+import {
+  effectiveDefer,
+  effectiveDue,
+  effectivePlannedDate,
+  effectivePlannedMode,
+} from './effective'
 
 const D = (day: number) => `2026-07-${String(day).padStart(2, '0')}T00:00:00.000Z`
 
-describe('计划日不继承 [SP-INH-PLAN]', () => {
-  // SP-INH-PLAN-1: 无 effectivePlannedDate；父子计划日彼此独立
-  it('plannedDate 为每任务物理字段，不被派生（父子各自独立）[SP-INH-PLAN-1]', () => {
-    const parent = makeTaskRow('p', { plannedMode: PLANNED_MODE.ON, plannedDate: '2026-07-20T00:00:00.000Z' })
-    const child = makeTaskRow('c', { parentId: 'p', plannedMode: PLANNED_MODE.ON, plannedDate: '2026-07-22T00:00:00.000Z' })
-    const all = computeAll(new RowStore([parent, child]), NOW, DUE_SOON_MS)
-    // computeAll 不读 plannedDate，不派生 effectivePlannedDate；两行物理 plannedDate 保持各自原值
-    expect((parent.data as { plannedDate: string }).plannedDate).toBe('2026-07-20T00:00:00.000Z')
-    expect((child.data as { plannedDate: string }).plannedDate).toBe('2026-07-22T00:00:00.000Z')
-    void all
+describe('计划日 coalesce 继承 [SP-INH-PLAN]', () => {
+  // SP-INH-PLAN-1: 仅父设置 → 子 effective 继承父（*Planned with container*）
+  it('仅父 planned → 子 effectivePlannedDate 继承父 [SP-INH-PLAN-1]', () => {
+    const p = makeTaskRow('p', { plannedMode: PLANNED_MODE.ON, plannedDate: D(20) })
+    const c = makeTaskRow('c', { parentId: 'p' })
+    const tree = buildTaskTree([p, c])
+    expect(effectivePlannedMode(c, tree)).toBe(PLANNED_MODE.ON)
+    expect(effectivePlannedDate(c, tree)).toBe(D(20))
+    expect(c.data.plannedMode).toBe(PLANNED_MODE.NONE)
+    expect(c.data.plannedDate).toBeNull()
   })
 
-  // SP-INH-PLAN-2: 清空/改写父计划日，不派生或改写子计划日
-  it('父 plannedDate 变化不影响子（无继承机制）[SP-INH-PLAN-2]', () => {
-    const parent = makeTaskRow('p', { plannedMode: PLANNED_MODE.ON, plannedDate: '2026-07-20T00:00:00.000Z' })
-    const child = makeTaskRow('c', { parentId: 'p', plannedMode: PLANNED_MODE.ON, plannedDate: '2026-07-22T00:00:00.000Z' })
-    // 模拟父计划日改写：plannedDate 是物理字段，子的值独立保留
-    parent.data.plannedDate = '2026-07-30T00:00:00.000Z'
-    expect((child.data as { plannedDate: string }).plannedDate).toBe('2026-07-22T00:00:00.000Z')
+  // SP-INH-PLAN-2: 子有直接赋值 → 覆盖父（coalesce，非 min/max）
+  it('子自身有计划 → 用自身，可早于/晚于父 [SP-INH-PLAN-2]', () => {
+    const p = makeTaskRow('p', { plannedMode: PLANNED_MODE.ON, plannedDate: D(20) })
+    const early = makeTaskRow('c1', { parentId: 'p', plannedMode: PLANNED_MODE.ON, plannedDate: D(10) })
+    const late = makeTaskRow('c2', { parentId: 'p', plannedMode: PLANNED_MODE.ON, plannedDate: D(30) })
+    const tree = buildTaskTree([p, early, late])
+    expect(effectivePlannedDate(early, tree)).toBe(D(10))
+    expect(effectivePlannedDate(late, tree)).toBe(D(30))
+  })
+
+  // SP-INH-PLAN-IMMUT: 不改写子物理；父改后子 none 自动跟新
+  it('不改写子物理 plannedDate；父改写后 none 子重新继承 [SP-INH-PLAN-IMMUT]', () => {
+    const p = makeTaskRow('p', { plannedMode: PLANNED_MODE.ON, plannedDate: D(20) })
+    const c = makeTaskRow('c', { parentId: 'p' })
+    expect(effectivePlannedDate(c, buildTaskTree([p, c]))).toBe(D(20))
+    p.data.plannedDate = D(25)
+    expect(effectivePlannedDate(c, buildTaskTree([p, c]))).toBe(D(25))
+    expect(c.data.plannedDate).toBeNull()
+  })
+
+  // SP-INH-PLAN-ROLLING: 子 rolling 阻断父日期；父 rolling 无日期可继
+  it('子 rolling → mode=rolling、date=null，不继承父 on 日期 [SP-INH-PLAN-ROLLING]', () => {
+    const p = makeTaskRow('p', { plannedMode: PLANNED_MODE.ON, plannedDate: D(20) })
+    const c = makeTaskRow('c', { parentId: 'p', plannedMode: PLANNED_MODE.ROLLING })
+    const tree = buildTaskTree([p, c])
+    expect(effectivePlannedMode(c, tree)).toBe(PLANNED_MODE.ROLLING)
+    expect(effectivePlannedDate(c, tree)).toBeNull()
+  })
+  it('父 rolling、子 none → mode 继承 rolling、date=null [SP-INH-PLAN-ROLLING]', () => {
+    const p = makeTaskRow('p', { plannedMode: PLANNED_MODE.ROLLING })
+    const c = makeTaskRow('c', { parentId: 'p' })
+    const tree = buildTaskTree([p, c])
+    expect(effectivePlannedMode(c, tree)).toBe(PLANNED_MODE.ROLLING)
+    expect(effectivePlannedDate(c, tree)).toBeNull()
   })
 
   // SP-INH-PLAN-3: 计划日不影响 computed 着色与 blocked
@@ -40,16 +71,15 @@ describe('计划日不继承 [SP-INH-PLAN]', () => {
     const t = makeTaskRow('t1', { plannedMode: PLANNED_MODE.ON, plannedDate: new Date(NOW.getTime() - 86400000).toISOString() })
     expect(computeStatus(t, NOW, buildTaskTree([t]), DUE_SOON_MS)).toBe(COMPUTED_STATUS.AVAILABLE)
   })
-  it('plannedDate 过期不触发 overdue（与 dueDate 区分）[SP-INH-PLAN-3]', () => {
-    const t = makeTaskRow('t1', { plannedMode: PLANNED_MODE.ON, plannedDate: new Date(NOW.getTime() - 86400000).toISOString() })
-    // plannedDate 早于 now 但无 dueDate → 仍 AVAILABLE（不 overdue）
-    expect(computeStatus(t, NOW, buildTaskTree([t]), DUE_SOON_MS)).toBe(COMPUTED_STATUS.AVAILABLE)
+  it('继承的 plannedDate 过期仍不触发 overdue [SP-INH-PLAN-3]', () => {
+    const p = makeTaskRow('p', { plannedMode: PLANNED_MODE.ON, plannedDate: new Date(NOW.getTime() - 86400000).toISOString() })
+    const c = makeTaskRow('c', { parentId: 'p' })
+    expect(computeStatus(c, NOW, buildTaskTree([p, c]), DUE_SOON_MS)).toBe(COMPUTED_STATUS.AVAILABLE)
   })
 
   // SP-INH-PLAN-4: 计划日不参与 defer≤due 窗口规范化
   // 见 time/time-window.test.ts › SP-LINK-TIME-PLAN（同一规则，规范化层已钉）。
   it('plannedDate 不参与窗口规范化（见 SP-LINK-TIME-PLAN）[SP-INH-PLAN-4]', () => {
-    // 规范化结构上不含 plannedDate（DeferDuePatch 类型无此字段），此处仅做交叉引用断言占位
     expect(true).toBe(true)
   })
 })

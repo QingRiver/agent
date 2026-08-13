@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  BUILTIN_PERSPECTIVE_ID,
   FILTER_FIELD,
   SORT_DIR,
   SORT_FIELD,
@@ -33,7 +34,7 @@ const baseContext = {
     { id: 'p-dup-b', name: '重复' },
   ],
   tags: [{ id: 't1', name: '紧急' }],
-  builtinPerspectiveIds: ['inbox'],
+  builtinPerspectiveIds: [BUILTIN_PERSPECTIVE_ID.INBOX],
 }
 
 describe('fILTER_FIELD_OPS matrix', () => {
@@ -104,10 +105,6 @@ describe('resolveEntityRef', () => {
 
 function baseInput(filter: unknown) {
   return {
-    availabilityFilter: 'all',
-    showCompleted: false,
-    showDropped: false,
-    flaggedOnly: null,
     filter,
     groupBy: [],
     sortBy: [],
@@ -210,7 +207,7 @@ describe('validatePerspectiveInput', () => {
     const result = validatePerspectiveInput({
       name: '改 Inbox',
       ...baseInput(null),
-    }, baseContext, { mode: 'persist', perspectiveId: 'inbox' })
+    }, baseContext, { mode: 'persist', perspectiveId: BUILTIN_PERSPECTIVE_ID.INBOX })
     expect(result.ok).toBe(false)
     if (!result.ok)
       expect(result.errors[0]?.code).toBe(FILTER_ERROR_CODE.BUILTIN_ID_RESERVED)

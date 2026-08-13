@@ -135,10 +135,6 @@ export class DrizzleGtdRepository implements GtdRepository {
           filter: row.filter,
           groupBy: row.groupBy,
           sortBy: row.sortBy,
-          availabilityFilter: row.availabilityFilter,
-          showCompleted: row.showCompleted,
-          showDropped: row.showDropped,
-          flaggedOnly: row.flaggedOnly,
           updatedAt: row.updatedAt,
         },
       })

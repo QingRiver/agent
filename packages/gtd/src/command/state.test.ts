@@ -2,7 +2,7 @@
  * 状态机行为规约（SP-STATE-*）。
  * 每条 `it` 上方 `// SP-STATE-N` 与 `wiki/draft/gtd行为规约.md` 一一对应。
  * 实现在 `command/state-machine.ts`（complete/drop/reopen/restore/deleteTask，经 applyPush 驱动）；
- * 级联计划委托 L3 `inheritance/cascade.ts`（向下 complete/drop/delete、向上 reopen/restore）。
+ * 级联计划委托 L3 `inheritance/cascade.ts`（complete/drop/delete 向下；reopen/restore 仅自身）。
  */
 import type { GtdCommand, GtdMutation, SyncState } from '../sync/apply'
 import { describe, expect, it } from 'vitest'
@@ -104,19 +104,21 @@ describe('状态机 [SP-STATE]', () => {
       expect(res.response.rejected).toHaveLength(1)
       expect(res.response.rejected[0]?.reason ?? '').toContain('SP-INV-REPEAT-REOPEN')
     })
-    it('向上级联：reopen 子 → 链路 COMPLETED 祖先全转 ACTIVE（completedAt 清）', () => {
+    it('reopen 子 → 仅自身 ACTIVE，COMPLETED 祖先不变', () => {
       const gp = makeTaskRow('gp', { status: EXPLICIT_STATUS.COMPLETED, completedAt: SYNC_NOW }, { syncId: 1 })
       const p = makeTaskRow('p', { parentId: 'gp', status: EXPLICIT_STATUS.COMPLETED, completedAt: SYNC_NOW }, { syncId: 2 })
       const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.COMPLETED, completedAt: SYNC_NOW }, { syncId: 3 })
       const res = runCmd(makeState([gp, p, c]), makeCommand({ id: 'c1', type: 'reopen', taskId: 'c' }))
       expect(res.response.rejected).toHaveLength(0)
-      for (const id of ['c', 'p', 'gp']) {
+      expect(field<string>(findRow(res.state.rows, 'task', 'c'), 'status')).toBe(EXPLICIT_STATUS.ACTIVE)
+      expect(field(findRow(res.state.rows, 'task', 'c'), 'completedAt')).toBeNull()
+      for (const id of ['p', 'gp']) {
         const t = findRow(res.state.rows, 'task', id)!
-        expect(field<string>(t, 'status')).toBe(EXPLICIT_STATUS.ACTIVE)
-        expect(field(t, 'completedAt')).toBeNull()
+        expect(field<string>(t, 'status')).toBe(EXPLICIT_STATUS.COMPLETED)
+        expect(field<string>(t, 'completedAt')).toBe(SYNC_NOW)
       }
     })
-    it('向上级联不串扰 HOLD 祖先 [SP-LINK-STATE-6]', () => {
+    it('reopen 子 → HOLD 祖先也不变', () => {
       const p = makeTaskRow('p', { status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 1 })
       const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.COMPLETED, completedAt: SYNC_NOW }, { syncId: 2 })
       const res = runCmd(makeState([p, c]), makeCommand({ id: 'c1', type: 'reopen', taskId: 'c' }))
@@ -175,19 +177,21 @@ describe('状态机 [SP-STATE]', () => {
       expect(res.response.rejected).toHaveLength(1)
       expect(field<string>(findRow(res.state.rows, 'task', 't1'), 'status')).toBe(EXPLICIT_STATUS.COMPLETED)
     })
-    it('向上级联：restore 子 → 链路 HOLD 祖先全转 ACTIVE（droppedAt 清）', () => {
+    it('restore 子 → 仅自身 ACTIVE，HOLD 祖先不变', () => {
       const gp = makeTaskRow('gp', { status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 1 })
       const p = makeTaskRow('p', { parentId: 'gp', status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 2 })
       const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 3 })
       const res = runCmd(makeState([gp, p, c]), makeCommand({ id: 'c1', type: 'restore', taskId: 'c' }))
       expect(res.response.rejected).toHaveLength(0)
-      for (const id of ['c', 'p', 'gp']) {
+      expect(field<string>(findRow(res.state.rows, 'task', 'c'), 'status')).toBe(EXPLICIT_STATUS.ACTIVE)
+      expect(field(findRow(res.state.rows, 'task', 'c'), 'droppedAt')).toBeNull()
+      for (const id of ['p', 'gp']) {
         const t = findRow(res.state.rows, 'task', id)!
-        expect(field<string>(t, 'status')).toBe(EXPLICIT_STATUS.ACTIVE)
-        expect(field(t, 'droppedAt')).toBeNull()
+        expect(field<string>(t, 'status')).toBe(EXPLICIT_STATUS.HOLD)
+        expect(field<string>(t, 'droppedAt')).toBe(SYNC_NOW)
       }
     })
-    it('向上级联不串扰 COMPLETED 祖先 [SP-LINK-STATE-6]', () => {
+    it('restore 子 → COMPLETED 祖先也不变', () => {
       const p = makeTaskRow('p', { status: EXPLICIT_STATUS.COMPLETED, completedAt: SYNC_NOW }, { syncId: 1 })
       const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 2 })
       const res = runCmd(makeState([p, c]), makeCommand({ id: 'c1', type: 'restore', taskId: 'c' }))

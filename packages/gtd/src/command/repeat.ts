@@ -1,5 +1,6 @@
 import type { RepeatCycle, RepeatRule, Task } from '../data/schema'
 import type { EntityRow, EntityRowOf } from '../data/sync-schema'
+import { match, P } from 'ts-pattern'
 import { EXPLICIT_STATUS, REPEAT_ANCHOR, REPEAT_CYCLE } from '../data/types'
 
 /**
@@ -59,29 +60,32 @@ export function computeNextDates(
   task: Pick<Task, 'dueDate' | 'deferDate'>,
   now: Date,
 ): { deferDate: string | null, dueDate: string | null } {
-  const base
-    = rule.anchor === REPEAT_ANCHOR.COMPLETION
-      ? now
-      : rule.anchor === REPEAT_ANCHOR.DUE
-        ? task.dueDate ? new Date(task.dueDate) : now
-        : task.deferDate ? new Date(task.deferDate) : now
+  const base = match(rule.anchor)
+    .with(REPEAT_ANCHOR.COMPLETION, () => now)
+    .with(REPEAT_ANCHOR.DUE, () => task.dueDate ? new Date(task.dueDate) : now)
+    .with(REPEAT_ANCHOR.DEFER, () => task.deferDate ? new Date(task.deferDate) : now)
+    .exhaustive()
   const nextBase = addCycle(base, rule.cycle, rule.interval, rule.daysOfWeek)
   // 保持旧 defer-due 间隔
   const gap
     = task.dueDate && task.deferDate
       ? new Date(task.dueDate).getTime() - new Date(task.deferDate).getTime()
       : null
-  if (rule.anchor === REPEAT_ANCHOR.DEFER) {
-    const deferDate = nextBase.toISOString()
-    const dueDate
-      = gap != null ? new Date(nextBase.getTime() + gap).toISOString() : (task.dueDate ?? null)
-    return { deferDate, dueDate }
-  }
-  // COMPLETION / DUE：nextBase 即下一 dueDate
-  const dueDate = nextBase.toISOString()
-  const deferDate
-    = gap != null ? new Date(nextBase.getTime() - gap).toISOString() : (task.deferDate ?? null)
-  return { deferDate, dueDate }
+  return match(rule.anchor)
+    .with(REPEAT_ANCHOR.DEFER, () => {
+      const deferDate = nextBase.toISOString()
+      const dueDate
+        = gap != null ? new Date(nextBase.getTime() + gap).toISOString() : (task.dueDate ?? null)
+      return { deferDate, dueDate }
+    })
+    .with(P.union(REPEAT_ANCHOR.COMPLETION, REPEAT_ANCHOR.DUE), () => {
+      // COMPLETION / DUE：nextBase 即下一 dueDate
+      const dueDate = nextBase.toISOString()
+      const deferDate
+        = gap != null ? new Date(nextBase.getTime() - gap).toISOString() : (task.deferDate ?? null)
+      return { deferDate, dueDate }
+    })
+    .exhaustive()
 }
 
 /**

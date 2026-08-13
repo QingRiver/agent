@@ -4,7 +4,8 @@
  * 五个纯函数吃 L1 `TaskTree` + taskId，返回 `CascadeStep[]`（**计划，不执行**）。
  * 只依赖 L1 树结构 + 行 explicit 状态，**不依赖 L5 状态机**——以此破除 L3↔L5 循环。
  *
- * 四句口诀：完成/搁置父向下、完成/搁置子不上向、重开/恢复父不下向、重开/恢复子向上。
+ * 四句口诀（对齐 wiki/GTD_New.md §状态联动 / OF4）：
+ * 完成/搁置父向下、完成/搁置子不上向、重开/恢复上下都不联动。
  * 不采纳 autoCompleteOnLastChild（完成最后子→自动完成父）——违反「完成子不上向」。
  *
  * 执行（盖戳/清戳 + 翻状态 + stamp syncId）由 L5 `applySteps` 负责：见 §`tsField` 约定——
@@ -14,7 +15,7 @@
  */
 import type { TaskTree } from '../structure/tree'
 import { EXPLICIT_STATUS } from '../data/types'
-import { ancestors, subtree } from '../structure/tree'
+import { subtree } from '../structure/tree'
 
 /** 一条级联动作：把 taskId 翻到 targetStatus，并按 tsField 盖戳/清戳（由 L5 applySteps 执行）。 */
 export interface CascadeStep {
@@ -50,36 +51,20 @@ export function planDropCascade(taskId: string, tree: TaskTree): CascadeStep[] {
   return steps
 }
 
-/**
- * 重开子 → 自身(COMPLETED) + 链路所有 COMPLETED 祖先 → ACTIVE / 清 completedAt（向上）。
- * **不碰 HOLD 祖先**（SP-LINK-STATE-6 不串扰）；跳过 ACTIVE/DELETED 祖先（幂等）。
- */
+/** 重开 → 仅自身 COMPLETED → ACTIVE / 清 completedAt（不向上、不向下）。 */
 export function planReopenCascade(taskId: string, tree: TaskTree): CascadeStep[] {
-  const steps: CascadeStep[] = []
   const self = tree.byId.get(taskId)?.task
-  if (self?.data.status === EXPLICIT_STATUS.COMPLETED)
-    steps.push({ taskId, targetStatus: EXPLICIT_STATUS.ACTIVE, tsField: 'completedAt' })
-  for (const anc of ancestors(tree, taskId)) {
-    if (anc.data.status === EXPLICIT_STATUS.COMPLETED)
-      steps.push({ taskId: anc.id, targetStatus: EXPLICIT_STATUS.ACTIVE, tsField: 'completedAt' })
-  }
-  return steps
+  if (self?.data.status !== EXPLICIT_STATUS.COMPLETED)
+    return []
+  return [{ taskId, targetStatus: EXPLICIT_STATUS.ACTIVE, tsField: 'completedAt' }]
 }
 
-/**
- * 恢复子 → 自身(HOLD) + 链路所有 HOLD 祖先 → ACTIVE / 清 droppedAt（向上）。
- * **不碰 COMPLETED 祖先**（SP-LINK-STATE-6 不串扰）；跳过 ACTIVE/DELETED 祖先（幂等）。
- */
+/** 恢复 → 仅自身 HOLD → ACTIVE / 清 droppedAt（不向上、不向下）。 */
 export function planRestoreCascade(taskId: string, tree: TaskTree): CascadeStep[] {
-  const steps: CascadeStep[] = []
   const self = tree.byId.get(taskId)?.task
-  if (self?.data.status === EXPLICIT_STATUS.HOLD)
-    steps.push({ taskId, targetStatus: EXPLICIT_STATUS.ACTIVE, tsField: 'droppedAt' })
-  for (const anc of ancestors(tree, taskId)) {
-    if (anc.data.status === EXPLICIT_STATUS.HOLD)
-      steps.push({ taskId: anc.id, targetStatus: EXPLICIT_STATUS.ACTIVE, tsField: 'droppedAt' })
-  }
-  return steps
+  if (self?.data.status !== EXPLICIT_STATUS.HOLD)
+    return []
+  return [{ taskId, targetStatus: EXPLICIT_STATUS.ACTIVE, tsField: 'droppedAt' }]
 }
 
 /** 删除父 → 自身 + 所有后代 → DELETED / 盖 droppedAt（向下软删；跳过已 DELETED，幂等）。 */

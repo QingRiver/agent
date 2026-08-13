@@ -3,9 +3,9 @@ import { expect, test } from '@playwright/test'
 import { e2eFetch, signInE2E } from '../client'
 
 /**
- * GTD Forecast 五段条 e2e：Planned/rolling + 按日块。
+ * GTD Forecast 三段条 e2e：Planned/rolling + 按日块。
  *
- * 验证：默认「今日」含 rolling/due；扩选「过去」见逾期；扩选「明天」见 defer 明日；
+ * 验证：默认「现在」含 rolling/due；扩选「过去」见逾期；扩选「以后」见 defer 明日；
  * 侧栏无 Predicted；无预测标签钮。
  *
  * 前置：`pnpm dev` + `pnpm devops e2e auth` + 迁移已应用（含 planned_mode）。
@@ -84,7 +84,7 @@ function baseTask(name: string, order: number, extra: Record<string, unknown>, t
   }
 }
 
-test('Forecast 五段条：rolling / 过去 / 明天 defer', async ({ page }) => {
+test('Forecast 三段条：rolling / 过去 / 以后 defer', async ({ page }) => {
   test.setTimeout(120_000)
 
   const token = await signInE2E()
@@ -158,23 +158,23 @@ test('Forecast 五段条：rolling / 过去 / 明天 defer', async ({ page }) =>
   await page.goto('/gtd')
   await page.getByRole('button', { name: '预测' }).click()
 
-  // 五段条默认仅「今日」；可见「以后」
-  await expect(page.getByRole('button', { name: '今日' })).toBeVisible({ timeout: 15_000 })
+  // 三段条默认仅「现在」；可见「以后」
+  await expect(page.getByRole('button', { name: '现在' })).toBeVisible({ timeout: 15_000 })
   await expect(page.getByRole('button', { name: '以后' })).toBeVisible()
   await expect(page.getByText('截止事B')).toBeVisible()
   await expect(page.getByText('滚动事C')).toBeVisible()
   await expect(page.getByText('逾期事A')).toHaveCount(0)
   await expect(page.getByText('推迟明日D')).toHaveCount(0)
 
-  // 扩选「过去」：连续段 过去+今日
+  // 扩选「过去」：连续段 过去+现在
   await page.getByRole('button', { name: '过去' }).click()
   await expect(page.getByText('过去', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('逾期事A')).toBeVisible()
 
-  // 扩选「明天」：连续 过去..明天；推迟明日出现在明天块
-  await page.getByRole('button', { name: '明天' }).click()
+  // 扩选「以后」：连续 过去..以后；推迟明日出现在以后日块
+  await page.getByRole('button', { name: '以后' }).click()
   await expect(page.getByText('推迟明日D')).toBeVisible()
-  // rolling 仍只在今日（不复制到明天）
+  // rolling 仍只在现在（不复制到以后日）
   await expect(page.getByText('滚动事C')).toBeVisible()
 
   await expect(page.getByRole('button', { name: '预计' })).toHaveCount(0)

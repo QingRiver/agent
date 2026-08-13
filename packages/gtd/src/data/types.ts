@@ -21,7 +21,7 @@ export const EXPLICIT_STATUS = {
 export const EXPLICIT_STATUS_TEXT = {
   [EXPLICIT_STATUS.ACTIVE]: '活跃',
   [EXPLICIT_STATUS.COMPLETED]: '已完成',
-  [EXPLICIT_STATUS.HOLD]: '已搁置',
+  [EXPLICIT_STATUS.HOLD]: '搁置',
   [EXPLICIT_STATUS.DELETED]: '已删除',
 } as const
 
@@ -114,21 +114,62 @@ export const ATTACHMENT_KIND_TEXT = {
 // ===== 透视规则匹配模式 =====
 // 已迁至 ./filter/schema.ts 的 LOGIC_OP（and/or/not 可嵌套）
 
-// ===== 可用性过滤档 =====
+// ===== 可用性过滤档（视图谓词；applyBaseFilter 唯一顶层轴） =====
 export const AVAILABILITY_FILTER = {
-  /** 仅可执行 */
+  /** explicit=active ∧ actionable(computed) */
   AVAILABLE: 'available',
-  /** 所有未完成 */
+  /** explicit=active（含 blocked 的 active） */
   REMAINING: 'remaining',
-  /** 全部 */
+  /** 全部 explicit 状态 */
   ALL: 'all',
 } as const
 
 export const AVAILABILITY_FILTER_TEXT = {
-  [AVAILABILITY_FILTER.AVAILABLE]: '仅可执行',
+  [AVAILABILITY_FILTER.AVAILABLE]: '可执行',
   [AVAILABILITY_FILTER.REMAINING]: '未完成',
   [AVAILABILITY_FILTER.ALL]: '全部',
 } as const
+
+export type AvailabilityFilter = (typeof AVAILABILITY_FILTER)[keyof typeof AVAILABILITY_FILTER]
+
+const AVAILABILITY_FILTER_SET = new Set<string>(Object.values(AVAILABILITY_FILTER))
+
+export function isAvailabilityFilter(value: unknown): value is AvailabilityFilter {
+  return typeof value === 'string' && AVAILABILITY_FILTER_SET.has(value)
+}
+
+/** overlay scope 缺省；自定义透视渲染同理 */
+export const DEFAULT_AVAILABILITY_FILTER = AVAILABILITY_FILTER.REMAINING
+
+// ===== 内置透视（id 稳定、不落库；name 为默认 UI 文案） =====
+export const BUILTIN_PERSPECTIVE_ID = {
+  FORECAST: 'forecast',
+  INBOX: 'inbox',
+  PROJECTS: 'projects',
+  TAGS: 'tags',
+  FLAGGED: 'flagged',
+  COMPLETED: 'completed',
+} as const
+
+export type BuiltinPerspectiveId = (typeof BUILTIN_PERSPECTIVE_ID)[keyof typeof BUILTIN_PERSPECTIVE_ID]
+
+export const BUILTIN_PERSPECTIVE_NAME: Record<BuiltinPerspectiveId, string> = {
+  [BUILTIN_PERSPECTIVE_ID.FORECAST]: '预测',
+  [BUILTIN_PERSPECTIVE_ID.INBOX]: '收件箱',
+  [BUILTIN_PERSPECTIVE_ID.PROJECTS]: '项目',
+  [BUILTIN_PERSPECTIVE_ID.TAGS]: '标签',
+  [BUILTIN_PERSPECTIVE_ID.FLAGGED]: '旗标',
+  [BUILTIN_PERSPECTIVE_ID.COMPLETED]: '已完成',
+}
+
+/** 内置透视 id 列表（校验 reserved id 等） */
+export const BUILTIN_PERSPECTIVE_IDS = Object.values(BUILTIN_PERSPECTIVE_ID) as BuiltinPerspectiveId[]
+
+const BUILTIN_PERSPECTIVE_ID_SET = new Set<string>(BUILTIN_PERSPECTIVE_IDS)
+
+export function isBuiltinPerspectiveId(id: string): id is BuiltinPerspectiveId {
+  return BUILTIN_PERSPECTIVE_ID_SET.has(id)
+}
 
 // ===== 过滤字段 =====
 export const FILTER_FIELD = {
@@ -138,7 +179,7 @@ export const FILTER_FIELD = {
   PROJECT: 'project',
   /** 标签 */
   TAG: 'tag',
-  /** 推迟日 */
+  /** 解锁日/推迟日 */
   DEFER_DATE: 'deferDate',
   /** 截止日 */
   DUE_DATE: 'dueDate',
@@ -152,7 +193,7 @@ export const FILTER_FIELD_TEXT = {
   [FILTER_FIELD.STATUS]: '状态',
   [FILTER_FIELD.PROJECT]: '项目',
   [FILTER_FIELD.TAG]: '标签',
-  [FILTER_FIELD.DEFER_DATE]: '推迟日',
+  [FILTER_FIELD.DEFER_DATE]: '解锁日',
   [FILTER_FIELD.DUE_DATE]: '截止日',
   [FILTER_FIELD.FLAGGED]: '旗标',
   [FILTER_FIELD.ESTIMATE]: '预估时长',
@@ -233,29 +274,23 @@ export const PLANNED_MODE_TEXT = {
   [PLANNED_MODE.ROLLING]: '滚动到今日',
 } as const
 
-/** Forecast 顶栏五段（有序；连续多选） */
+/** Forecast 顶栏三段（有序；连续多选）：过去 / 现在 / 以后 */
 export const FORECAST_STRIP = {
   PAST: 'past',
-  TODAY: 'today',
-  TOMORROW: 'tomorrow',
-  DAY_AFTER: 'dayAfter',
+  NOW: 'now',
   LATER: 'later',
 } as const
 
 export const FORECAST_STRIP_TEXT = {
   [FORECAST_STRIP.PAST]: '过去',
-  [FORECAST_STRIP.TODAY]: '今日',
-  [FORECAST_STRIP.TOMORROW]: '明天',
-  [FORECAST_STRIP.DAY_AFTER]: '后天',
+  [FORECAST_STRIP.NOW]: '现在',
   [FORECAST_STRIP.LATER]: '以后',
 } as const
 
-/** 五段下标顺序（连续多选约束用） */
+/** 三段下标顺序（连续多选约束用） */
 export const FORECAST_STRIP_ORDER = [
   FORECAST_STRIP.PAST,
-  FORECAST_STRIP.TODAY,
-  FORECAST_STRIP.TOMORROW,
-  FORECAST_STRIP.DAY_AFTER,
+  FORECAST_STRIP.NOW,
   FORECAST_STRIP.LATER,
 ] as const
 

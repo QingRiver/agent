@@ -15,7 +15,7 @@ import { DEFAULT_FORECAST_SIGNALS, DEFAULT_FORECAST_STRIP } from './types'
 
 /**
  * 预设条 → 领域 `TimeSlice` + `includePast`（wiki §1.1.1 分层边界）。
- * 今日/明天/后天并入有限半开日；「以后」为 `[后日+1, ∞)`（`end = null`）。
+ * 「现在」= 今日有限半开日；「以后」为 `[明天, ∞)`（`end = null`）。
  * 领域归块只认返回的 timeslice，不解释按钮名。
  */
 export function stripToTimeSlice(

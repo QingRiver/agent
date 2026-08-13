@@ -14,7 +14,6 @@ import type {
 import type { EntityRow, EntityRowOf } from '../data/sync-schema'
 import { randomUUID } from 'node:crypto'
 import {
-  AVAILABILITY_FILTER,
   EXPLICIT_STATUS,
   PLANNED_MODE,
   REPEAT_ANCHOR,
@@ -90,10 +89,6 @@ export function makePerspective(overrides: Partial<Perspective> = {}): Perspecti
     filter: null,
     groupBy: [],
     sortBy: [],
-    availabilityFilter: AVAILABILITY_FILTER.AVAILABLE,
-    showCompleted: false,
-    showDropped: false,
-    flaggedOnly: null,
     createdAt: NOW_ISO,
     updatedAt: null,
     ...overrides,

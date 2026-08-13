@@ -7,6 +7,7 @@ export function useGtd() {
   const selection = useAtomValue(GtdStore.selectionAtom)
   const forecastStrip = useAtomValue(GtdStore.forecastStripAtom)
   const forecastSignals = useAtomValue(GtdStore.forecastSignalsAtom)
+  const viewOptionsMap = useAtomValue(GtdStore.viewOptionsAtom)
   const selectedTaskId = useAtomValue(GtdStore.selectedTaskIdAtom)
   const selectedProjectId = useAtomValue(GtdStore.selectedProjectIdAtom)
   const isLoading = useAtomValue(GtdStore.isLoadingAtom)
@@ -21,6 +22,7 @@ export function useGtd() {
     selection,
     forecastStrip,
     forecastSignals,
+    viewOptionsMap,
     selectedTaskId,
     selectedProjectId,
     isLoading,
@@ -35,6 +37,7 @@ export function useGtd() {
     setSelection: GtdStore.setSelection,
     toggleForecastStripSegment: GtdStore.toggleForecastStripSegment,
     patchForecastSignals: GtdStore.patchForecastSignals,
+    patchViewOptions: GtdStore.patchViewOptions,
     setTaskPlanned: GtdStore.setTaskPlanned,
     selectTask: GtdStore.selectTask,
     selectProjectForInspector: GtdStore.selectProjectForInspector,
@@ -45,6 +48,7 @@ export function useGtd() {
     outdentTask: GtdStore.outdentTask,
     setTaskGroupType: GtdStore.setTaskGroupType,
     reorderTask: GtdStore.reorderTask,
+    moveTask: GtdStore.moveTask,
     completeTask: GtdStore.completeTask,
     dropTask: GtdStore.dropTask,
     reopenTask: GtdStore.reopenTask,

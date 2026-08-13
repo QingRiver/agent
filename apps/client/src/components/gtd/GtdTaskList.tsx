@@ -1,8 +1,10 @@
-import type { EntityRowOf, ForecastStripKey, RenderGroup, RenderItem } from '@agent/gtd'
+import type { EntityRowOf, RenderGroup, RenderItem } from '@agent/gtd'
 import {
+  BUILTIN_PERSPECTIVE_ID,
+  DEFAULT_AVAILABILITY_FILTER,
   EXPLICIT_STATUS,
-  FORECAST_STRIP_ORDER,
-  FORECAST_STRIP_TEXT,
+  FILTER_FIELD,
+  isInboxFilter,
   renderPerspective,
   SORT_FIELD,
   stripToForecastOptions,
@@ -13,7 +15,6 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@components/ui/dropdown-menu'
 import { Input } from '@components/ui/input'
@@ -33,10 +34,13 @@ import {
 import { useGtd } from '@hooks/useGtd'
 import { cn } from '@lib/utils'
 import { DirStore } from '@stores/dir-store'
-import { GtdStore, resolvePerspective } from '@stores/gtd-store'
+import { GtdStore, resolvePerspective, resolvePerspectiveAvailability } from '@stores/gtd-store'
 import { useAtomValue } from 'jotai'
 import { Settings2 } from 'lucide-react'
 import { useState } from 'react'
+import { patchForAvailability } from '../../gtd/view-options'
+import { GtdAvailabilityFilter } from './GtdAvailabilityFilter'
+import { GtdForecastStrip } from './GtdForecastStrip'
 import { GtdTaskRow } from './GtdTaskRow'
 
 function isGroup(node: RenderGroup | RenderItem): node is RenderGroup {
@@ -119,12 +123,14 @@ export function GtdTaskList() {
     selection,
     forecastStrip,
     forecastSignals,
+    viewOptionsMap,
     isLoading,
     addInboxTask,
     addProjectTask,
     reorderTask,
     toggleForecastStripSegment,
     patchForecastSignals,
+    patchViewOptions,
   } = useGtd()
   const [draft, setDraft] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
@@ -135,20 +141,20 @@ export function GtdTaskList() {
 
   const dirsById = useAtomValue(DirStore.dirsByIdAtom)
   const perspective = resolvePerspective(rowStore, selection)
-  const isForecast = selection.kind === 'perspective' && selection.id === 'forecast'
+  const availabilityFilter = resolvePerspectiveAvailability(selection, viewOptionsMap)
+  const focus = selection.focus
+  const isForecast = selection.perspectiveId === BUILTIN_PERSPECTIVE_ID.FORECAST && focus == null
   // project 退出 GTD sync，名称来自 DirStore dirsById 投影
-  const selectedDir = selection.kind === 'project'
-    ? dirsById.get(selection.id) ?? null
+  const selectedDir = focus?.field === FILTER_FIELD.PROJECT
+    ? dirsById.get(focus.id) ?? null
     : null
 
   function resolveTitle() {
-    if (selection.kind === 'perspective')
-      return perspective.name
-    if (selection.kind === 'project')
+    if (focus?.field === FILTER_FIELD.PROJECT)
       return selectedDir?.name ?? '项目'
-    if (selection.kind === 'tag')
-      return rowStore.findLive('tag', selection.id)?.data.name ?? '标签'
-    return ''
+    if (focus?.field === FILTER_FIELD.TAG)
+      return rowStore.findLive('tag', focus.id)?.data.name ?? '标签'
+    return perspective.name
   }
   const title = resolveTitle()
   const liveTasks = rowStore.liveTasks()
@@ -160,7 +166,10 @@ export function GtdTaskList() {
   const forecastOptions = isForecast
     ? stripToForecastOptions(forecastStrip, forecastSignals, now, timeZone)
     : undefined
-  const tree = renderPerspective(rowStore, perspective, now, GtdStore.dueSoonMs, timeZone, forecastOptions)
+  const tree = renderPerspective(rowStore, perspective, now, GtdStore.dueSoonMs, timeZone, {
+    availabilityFilter,
+    forecastOptions,
+  })
 
   function collectVisibleTaskIds() {
     const ids: string[] = []
@@ -196,89 +205,73 @@ export function GtdTaskList() {
   const hiddenTaskIds = collectHiddenTaskIds()
   const activeCount = liveTasks.filter(t => t.data.status === EXPLICIT_STATUS.ACTIVE).length
 
-  const canQuickAdd
-    = (selection.kind === 'perspective' && selection.id === 'inbox')
-      || selection.kind === 'project'
+  const inboxLike = focus == null && isInboxFilter(perspective.filter)
+  const canQuickAdd = inboxLike || focus?.field === FILTER_FIELD.PROJECT
   const canManualReorder
     = perspective.sortBy[0]?.field === SORT_FIELD.ORDER
-      && (
-        selection.kind === 'project'
-        || (selection.kind === 'perspective' && selection.id === 'inbox')
-      )
+      && (focus?.field === FILTER_FIELD.PROJECT || inboxLike)
 
   const onAdd = () => {
     const name = draft.trim()
     if (!name)
       return
-    if (selection.kind === 'project')
-      addProjectTask(selection.id, name)
+    if (focus?.field === FILTER_FIELD.PROJECT)
+      addProjectTask(focus.id, name)
     else
       addInboxTask(name)
     setDraft('')
   }
 
-  const stripSelected = new Set(forecastStrip)
-
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 flex-col gap-2 border-b border-border px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold text-foreground">{title}</h1>
-            <p className="text-xs text-muted-foreground">
-              {isLoading ? '加载中…' : `${activeCount} 个活跃任务`}
-            </p>
-          </div>
-          {isForecast && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" className="size-8 shrink-0 p-0" title="信号开关">
-                  <Settings2 className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>包含信号</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {(
-                  [
-                    ['includeOverdue', '逾期'],
-                    ['includeDue', '截止'],
-                    ['includeDeferred', '推迟'],
-                    ['includePlanned', '计划'],
-                    ['includeFlagged', '旗标'],
-                  ] as const
-                ).map(([key, label]) => (
-                  <DropdownMenuCheckboxItem
-                    key={key}
-                    checked={forecastSignals[key]}
-                    onCheckedChange={v => patchForecastSignals({ [key]: v === true })}
-                  >
-                    {label}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+      <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
+        <div className="min-w-0 shrink-0">
+          <h1 className="truncate text-lg font-semibold text-foreground">{title}</h1>
+          <p className="text-xs text-muted-foreground">
+            {isLoading ? '加载中…' : `${activeCount} 个活跃任务`}
+          </p>
         </div>
         {isForecast && (
-          <div className="flex rounded-lg border border-border bg-muted p-0.5">
-            {FORECAST_STRIP_ORDER.map((key) => {
-              const active = stripSelected.has(key as ForecastStripKey)
-              return (
-                <button
+          <GtdForecastStrip
+            className="min-w-0 flex-1"
+            value={forecastStrip}
+            onToggle={key => toggleForecastStripSegment(key)}
+          />
+        )}
+        {!isForecast && <div className="min-w-0 flex-1" />}
+        <GtdAvailabilityFilter
+          className="shrink-0"
+          value={availabilityFilter ?? DEFAULT_AVAILABILITY_FILTER}
+          onChange={v => patchViewOptions(patchForAvailability(v))}
+        />
+        {isForecast && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" className="size-8 shrink-0 p-0" title="视图选项">
+                <Settings2 className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>包含信号</DropdownMenuLabel>
+              {(
+                [
+                  ['includeOverdue', '逾期'],
+                  ['includeDue', '截止'],
+                  ['includeDeferred', '推迟'],
+                  ['includePlanned', '计划'],
+                  ['includeFlagged', '旗标'],
+                ] as const
+              ).map(([key, label]) => (
+                <DropdownMenuCheckboxItem
                   key={key}
-                  type="button"
-                  className={cn(
-                    'h-8 flex-1 rounded-md px-2 text-xs text-muted-foreground transition-colors',
-                    active && 'bg-accent text-accent-foreground',
-                  )}
-                  onClick={() => toggleForecastStripSegment(key as ForecastStripKey)}
+                  checked={forecastSignals[key]}
+                  onCheckedChange={v => patchForecastSignals({ [key]: v === true })}
                 >
-                  {FORECAST_STRIP_TEXT[key]}
-                </button>
-              )
-            })}
-          </div>
+                  {label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </header>
 
@@ -291,7 +284,7 @@ export function GtdTaskList() {
               if (e.key === 'Enter')
                 onAdd()
             }}
-            placeholder={selection.kind === 'project' ? '添加任务…' : '捕捉到收件箱…'}
+            placeholder={focus?.field === FILTER_FIELD.PROJECT ? '添加任务…' : '捕捉到收件箱…'}
             className="border-border bg-muted"
           />
           <Button type="button" className="h-9" onClick={onAdd} disabled={!draft.trim()}>

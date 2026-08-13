@@ -5,7 +5,6 @@ import { z } from 'zod'
 import { FilterNodeSchema } from '../view/filter'
 import {
   ATTACHMENT_KIND,
-  AVAILABILITY_FILTER,
   EXPLICIT_STATUS,
   GROUP_KEY,
   GROUP_TYPE,
@@ -44,10 +43,6 @@ const RepeatAnchorSchema = z
   .describe('下一实例日期基准：completion=本次完成时间；due=旧 dueDate；defer=旧 deferDate')
 
 const AttachmentKindSchema = z.enum(ATTACHMENT_KIND).describe('附件类型')
-
-export const AvailabilityFilterSchema = z
-  .enum(AVAILABILITY_FILTER)
-  .describe('可用性过滤档：available=只看能做；remaining=所有未完成；all=含已完成/放弃')
 
 export const GroupKeySchema = z.enum(GROUP_KEY).describe('分组键，可多级')
 
@@ -168,10 +163,6 @@ export const PerspectiveSchema = z
     filter: FilterNodeSchema.nullable().describe('可嵌套 JSON DSL 过滤树（与/或/非 + 字段操作符）；null=无过滤'),
     groupBy: z.array(GroupKeySchema).describe('分组键，多级'),
     sortBy: z.array(SortKeySchema).describe('组内排序，多级'),
-    availabilityFilter: AvailabilityFilterSchema,
-    showCompleted: z.boolean().describe('是否显示已完成'),
-    showDropped: z.boolean().describe('是否显示已放弃'),
-    flaggedOnly: z.boolean().nullable().describe('仅旗标；null=不约束'),
     createdAt: datetime,
     updatedAt: datetime.nullable(),
   })

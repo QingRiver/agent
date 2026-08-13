@@ -9,8 +9,8 @@ import type {
 } from '@agent/gtd'
 import {
   allowedOpsForField,
-  AVAILABILITY_FILTER,
-  AVAILABILITY_FILTER_TEXT,
+  BUILTIN_PERSPECTIVE_ID,
+  builtinPerspectives,
   FILTER_FIELD,
   FILTER_FIELD_OPS,
   FILTER_FIELD_TEXT,
@@ -26,7 +26,6 @@ import {
 } from '@agent/gtd'
 import { Badge } from '@components/ui/badge'
 import { Button } from '@components/ui/button'
-import { Checkbox } from '@components/ui/checkbox'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -113,10 +112,6 @@ function initialInput(perspective?: Perspective): PerspectiveInput {
       filter: null,
       groupBy: [],
       sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
-      availabilityFilter: AVAILABILITY_FILTER.REMAINING,
-      showCompleted: false,
-      showDropped: false,
-      flaggedOnly: null,
     }
   }
   return {
@@ -125,10 +120,6 @@ function initialInput(perspective?: Perspective): PerspectiveInput {
     filter: filterToInput(perspective.filter),
     groupBy: perspective.groupBy,
     sortBy: perspective.sortBy,
-    availabilityFilter: perspective.availabilityFilter,
-    showCompleted: perspective.showCompleted,
-    showDropped: perspective.showDropped,
-    flaggedOnly: perspective.flaggedOnly,
   }
 }
 
@@ -199,6 +190,23 @@ export function GtdPerspectiveEditor({
   const setFilter = (filter: FilterNode | null) =>
     setInput(current => ({ ...current, filter }))
 
+  const templatePerspectives = builtinPerspectives().filter(
+    p => p.id !== BUILTIN_PERSPECTIVE_ID.FORECAST,
+  )
+
+  function applyBuiltinTemplate(id: string) {
+    const tpl = templatePerspectives.find(p => p.id === id)
+    if (!tpl)
+      return
+    setInput({
+      name: tpl.name,
+      icon: tpl.icon,
+      filter: filterToInput(tpl.filter),
+      groupBy: [...tpl.groupBy],
+      sortBy: tpl.sortBy.map(s => ({ ...s })),
+    })
+  }
+
   return (
     <div
       className="fixed left-64 right-0 bottom-0 top-16.25 z-40 flex flex-col"
@@ -209,7 +217,7 @@ export function GtdPerspectiveEditor({
         <header className="flex items-center justify-between border-b border-border p-4">
           <div>
             <h2 className="font-semibold text-foreground">
-              {perspective ? '编辑自定义透视' : '新建自定义透视'}
+              {perspective ? '编辑透视' : '新建透视'}
             </h2>
             <p className="text-xs text-muted-foreground">可嵌套过滤树（与/或/非），深度 ≤ 5、节点 ≤ 32</p>
           </div>
@@ -227,17 +235,6 @@ export function GtdPerspectiveEditor({
 
           <div className="grid grid-cols-2 gap-2">
             <label className="space-y-1 text-xs text-muted-foreground">
-              可用性
-              <Select
-                value={input.availabilityFilter}
-                onChange={e => setInput(current => ({ ...current, availabilityFilter: e.target.value as PerspectiveInput['availabilityFilter'] }))}
-              >
-                {Object.entries(AVAILABILITY_FILTER_TEXT).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </Select>
-            </label>
-            <label className="space-y-1 text-xs text-muted-foreground">
               分组
               <Select
                 value={input.groupBy[0] ?? GROUP_KEY.NONE}
@@ -250,33 +247,6 @@ export function GtdPerspectiveEditor({
                   <option key={value} value={value}>{label}</option>
                 ))}
               </Select>
-            </label>
-          </div>
-
-          <div className="flex flex-wrap gap-4 text-sm text-foreground">
-            <label className="flex items-center gap-2">
-              <Checkbox
-                checked={input.showCompleted}
-                onCheckedChange={checked =>
-                  setInput(c => ({ ...c, showCompleted: checked === true }))}
-              />
-              显示已完成
-            </label>
-            <label className="flex items-center gap-2">
-              <Checkbox
-                checked={input.showDropped}
-                onCheckedChange={checked =>
-                  setInput(c => ({ ...c, showDropped: checked === true }))}
-              />
-              显示已放弃
-            </label>
-            <label className="flex items-center gap-2">
-              <Checkbox
-                checked={input.flaggedOnly === true}
-                onCheckedChange={checked =>
-                  setInput(c => ({ ...c, flaggedOnly: checked === true ? true : null }))}
-              />
-              仅旗标
             </label>
           </div>
 
@@ -298,12 +268,35 @@ export function GtdPerspectiveEditor({
               ))}
             </Select>
           </label>
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">从内置覆盖</h3>
+            <p className="text-xs text-muted-foreground">强制替换当前草稿的过滤 / 分组 / 排序（及名称初值）；保存后才落库。</p>
+            <div className="flex flex-wrap gap-2">
+              {templatePerspectives.map(p => (
+                <Button
+                  key={p.id}
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => applyBuiltinTemplate(p.id)}
+                >
+                  {p.name}
+                </Button>
+              ))}
+            </div>
+          </section>
         </div>
 
         <footer className="flex justify-end gap-2 border-t border-border p-4">
           {error && <p className="mr-auto self-center text-xs text-rose-400">{error}</p>}
           <Button type="button" variant="outline" className="h-9" onClick={onClose}>取消</Button>
-          <Button type="button" className="h-9" disabled={!input.name.trim()} onClick={() => onSave(input)}>
+          <Button
+            type="button"
+            className="h-9"
+            disabled={!input.name.trim()}
+            onClick={() => onSave(input)}
+          >
             保存
           </Button>
         </footer>

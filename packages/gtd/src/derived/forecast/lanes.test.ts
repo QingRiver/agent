@@ -18,14 +18,13 @@ import {
   TZ,
   YESTERDAY,
 } from '../../fixtures'
+import { buildTaskTree } from '../../structure/tree'
 
 describe('lanes mermaid branches', () => {
-  const oToday = opts([FORECAST_STRIP.TODAY])
-  const oPastToday = opts([FORECAST_STRIP.PAST, FORECAST_STRIP.TODAY])
+  const oToday = opts([FORECAST_STRIP.NOW])
+  const oPastToday = opts([FORECAST_STRIP.PAST, FORECAST_STRIP.NOW])
   const oWide = opts([
-    FORECAST_STRIP.TODAY,
-    FORECAST_STRIP.TOMORROW,
-    FORECAST_STRIP.DAY_AFTER,
+    FORECAST_STRIP.NOW,
     FORECAST_STRIP.LATER,
   ])
 
@@ -40,23 +39,23 @@ describe('lanes mermaid branches', () => {
     })
     it('已截止但关逾期或关过去 → 逾期空', () => {
       const t = makeTaskRow('o2', { dueDate: YESTERDAY })
-      expect(laneOverdueDue(t, opts([FORECAST_STRIP.TODAY]), NOW, TZ).overdue).toBeNull()
+      expect(laneOverdueDue(t, opts([FORECAST_STRIP.NOW]), NOW, TZ).overdue).toBeNull()
       expect(laneOverdueDue(
         t,
-        opts([FORECAST_STRIP.PAST, FORECAST_STRIP.TODAY], { ...DEFAULT_FORECAST_SIGNALS, includeOverdue: false }),
+        opts([FORECAST_STRIP.PAST, FORECAST_STRIP.NOW], { ...DEFAULT_FORECAST_SIGNALS, includeOverdue: false }),
         NOW,
         TZ,
       ).overdue).toBeNull()
     })
     it('时段内截止 → 截止栏该日', () => {
       const t = makeTaskRow('d', { dueDate: TODAY })
-      expect(laneOverdueDue(t, oToday, NOW, TZ).due?.block).toBe(FORECAST_STRIP.TODAY)
+      expect(laneOverdueDue(t, oToday, NOW, TZ).due?.block).toBe(FORECAST_STRIP.NOW)
     })
     it('关截止信号 → 截止栏空', () => {
       const t = makeTaskRow('d2', { dueDate: TODAY })
       expect(laneOverdueDue(
         t,
-        opts([FORECAST_STRIP.TODAY], { ...DEFAULT_FORECAST_SIGNALS, includeDue: false }),
+        opts([FORECAST_STRIP.NOW], { ...DEFAULT_FORECAST_SIGNALS, includeDue: false }),
         NOW,
         TZ,
       ).due).toBeNull()
@@ -65,6 +64,20 @@ describe('lanes mermaid branches', () => {
       const t = makeTaskRow('d3', { dueDate: LATER_DAY })
       expect(laneOverdueDue(t, oToday, NOW, TZ).due).toBeNull()
     })
+    it('子无物理 due + 父有 due → 经 tree 按 effectiveDue 入截止栏', () => {
+      const parent = makeTaskRow('parent', { dueDate: TODAY })
+      const child = makeTaskRow('child', { parentId: 'parent' })
+      const tree = buildTaskTree([parent, child])
+      expect(laneOverdueDue(child, oToday, NOW, TZ).due).toBeNull()
+      expect(laneOverdueDue(child, oToday, NOW, TZ, tree).due?.block).toBe(FORECAST_STRIP.NOW)
+    })
+    it('父 due 更紧急 → 子物理晚也按 effectiveDue 入今日', () => {
+      const parent = makeTaskRow('parent', { dueDate: TODAY })
+      const child = makeTaskRow('child', { parentId: 'parent', dueDate: LATER_DAY })
+      const tree = buildTaskTree([parent, child])
+      expect(laneOverdueDue(child, oToday, NOW, TZ).due).toBeNull()
+      expect(laneOverdueDue(child, oToday, NOW, TZ, tree).due?.block).toBe(FORECAST_STRIP.NOW)
+    })
   })
 
   describe('推迟', () => {
@@ -72,13 +85,13 @@ describe('lanes mermaid branches', () => {
       expect(laneDeferred(makeTaskRow('x', {}), oToday, NOW, TZ)).toBeNull()
     })
     it('时段内解锁 → 该日', () => {
-      expect(laneDeferred(makeTaskRow('x', { deferDate: TOMORROW }), opts([FORECAST_STRIP.TOMORROW]), NOW, TZ)?.block)
-        .toBe(FORECAST_STRIP.TOMORROW)
+      expect(laneDeferred(makeTaskRow('x', { deferDate: TOMORROW }), opts([FORECAST_STRIP.LATER]), NOW, TZ)?.block)
+        .toBe('2026-07-17')
     })
     it('关推迟信号 → 空', () => {
       expect(laneDeferred(
         makeTaskRow('x', { deferDate: TODAY }),
-        opts([FORECAST_STRIP.TODAY], { ...DEFAULT_FORECAST_SIGNALS, includeDeferred: false }),
+        opts([FORECAST_STRIP.NOW], { ...DEFAULT_FORECAST_SIGNALS, includeDeferred: false }),
         NOW,
         TZ,
       )).toBeNull()
@@ -86,13 +99,21 @@ describe('lanes mermaid branches', () => {
     it('非时段内 → 空', () => {
       expect(laneDeferred(makeTaskRow('x', { deferDate: TOMORROW }), oToday, NOW, TZ)).toBeNull()
     })
+    it('子无物理 defer + 父有 defer → 经 tree 按 effectiveDefer 入推迟栏', () => {
+      const parent = makeTaskRow('parent', { deferDate: TOMORROW })
+      const child = makeTaskRow('child', { parentId: 'parent' })
+      const tree = buildTaskTree([parent, child])
+      expect(laneDeferred(child, opts([FORECAST_STRIP.LATER]), NOW, TZ)).toBeNull()
+      expect(laneDeferred(child, opts([FORECAST_STRIP.LATER]), NOW, TZ, tree)?.block)
+        .toBe('2026-07-17')
+    })
   })
 
   describe('计划', () => {
     it('关计划信号 → 空', () => {
       expect(lanePlanned(
         makeTaskRow('p', { plannedMode: PLANNED_MODE.ROLLING }),
-        opts([FORECAST_STRIP.TODAY], { ...DEFAULT_FORECAST_SIGNALS, includePlanned: false }),
+        opts([FORECAST_STRIP.NOW], { ...DEFAULT_FORECAST_SIGNALS, includePlanned: false }),
         NOW,
         TZ,
       )).toBeNull()
@@ -116,10 +137,10 @@ describe('lanes mermaid branches', () => {
     it('选日在时段内 → 该日', () => {
       expect(lanePlanned(
         makeTaskRow('p', { plannedMode: PLANNED_MODE.ON, plannedDate: TOMORROW }),
-        opts([FORECAST_STRIP.TOMORROW]),
+        opts([FORECAST_STRIP.LATER]),
         NOW,
         TZ,
-      )?.block).toBe(FORECAST_STRIP.TOMORROW)
+      )?.block).toBe('2026-07-17')
     })
     it('选日未到 → 空', () => {
       expect(lanePlanned(
@@ -143,15 +164,23 @@ describe('lanes mermaid branches', () => {
         oToday,
         NOW,
         TZ,
-      )?.block).toBe(FORECAST_STRIP.TODAY)
+      )?.block).toBe(FORECAST_STRIP.NOW)
     })
     it('滚动已解锁但锚日不在时段内 → 空', () => {
       expect(lanePlanned(
         makeTaskRow('p', { plannedMode: PLANNED_MODE.ROLLING }),
-        opts([FORECAST_STRIP.TOMORROW]),
+        opts([FORECAST_STRIP.LATER]),
         NOW,
         TZ,
       )).toBeNull()
+    })
+    it('子 none + 父 on → 经 tree coalesce 入计划栏', () => {
+      const parent = makeTaskRow('parent', { plannedMode: PLANNED_MODE.ON, plannedDate: TOMORROW })
+      const child = makeTaskRow('child', { parentId: 'parent' })
+      const tree = buildTaskTree([parent, child])
+      expect(lanePlanned(child, opts([FORECAST_STRIP.LATER]), NOW, TZ)).toBeNull()
+      expect(lanePlanned(child, opts([FORECAST_STRIP.LATER]), NOW, TZ, tree)?.block)
+        .toBe('2026-07-17')
     })
   })
 
@@ -160,7 +189,7 @@ describe('lanes mermaid branches', () => {
       expect(laneFlagged(makeTaskRow('f', {}), oToday, NOW, TZ)).toBeNull()
       expect(laneFlagged(
         makeTaskRow('f', { flagged: true }),
-        opts([FORECAST_STRIP.TODAY], { ...DEFAULT_FORECAST_SIGNALS, includeFlagged: false }),
+        opts([FORECAST_STRIP.NOW], { ...DEFAULT_FORECAST_SIGNALS, includeFlagged: false }),
         NOW,
         TZ,
       )).toBeNull()
@@ -175,10 +204,10 @@ describe('lanes mermaid branches', () => {
     })
     it('已解锁且锚日在时段内 → 锚日', () => {
       expect(laneFlagged(makeTaskRow('f', { flagged: true }), oToday, NOW, TZ)?.block)
-        .toBe(FORECAST_STRIP.TODAY)
+        .toBe(FORECAST_STRIP.NOW)
     })
     it('锚日不在时段内 → 空', () => {
-      expect(laneFlagged(makeTaskRow('f', { flagged: true }), opts([FORECAST_STRIP.TOMORROW]), NOW, TZ))
+      expect(laneFlagged(makeTaskRow('f', { flagged: true }), opts([FORECAST_STRIP.LATER]), NOW, TZ))
         .toBeNull()
     })
   })

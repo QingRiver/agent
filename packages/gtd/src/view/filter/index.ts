@@ -1,4 +1,5 @@
 export * from './engine'
 export * from './helpers'
+export * from './merge'
 export * from './schema'
 export * from './validate'

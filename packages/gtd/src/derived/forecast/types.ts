@@ -32,14 +32,14 @@ export const DEFAULT_FORECAST_SIGNALS: ForecastSignalOptions = {
   includeFlagged: true,
 }
 
-/** 默认仅「今日」 */
-export const DEFAULT_FORECAST_STRIP: ForecastStripKey[] = [FORECAST_STRIP.TODAY]
+/** 默认仅「现在」 */
+export const DEFAULT_FORECAST_STRIP: ForecastStripKey[] = [FORECAST_STRIP.NOW]
 
 /** tier 序（高→低），与 wiki「逾期 > 截止 > 推迟 > 计划 > 旗标」一致 */
 export const TIER_ORDER = ['overdue', 'due', 'deferred', 'planned', 'flagged'] as const
 export type ForecastLane = (typeof TIER_ORDER)[number]
 
-/** 块键：过去，或命名日（今日/明天/后天），或以后某日的时区 `YYYY-MM-DD` */
+/** 块键：过去，或命名「现在」（今日），或以后某日的时区 `YYYY-MM-DD` */
 export type ForecastBlockKey = typeof FORECAST_STRIP.PAST | string
 
 /** 单栏命中：所属 lane + 归入的 Forecast 块 */

@@ -1,3 +1,13 @@
+/**
+ * 透视渲染管线（通用路径）：
+ * 1. 可用性 base filter（View Options）
+ * 2. Perspective.filter
+ * 3. expandAncestors + 纯结构祖先塌陷
+ * 4. flattenInTreeOrder（父先子后；sortBy 仅兄弟间）
+ * 5. groupBy
+ *
+ * Forecast 在 step1 后早退到 renderForecast。下文按管线顺序排列，入口 {@link renderPerspective} 置顶。
+ */
 import type { RowStore } from '../data/rows'
 import type {
   ComputedStatus,
@@ -6,12 +16,16 @@ import type {
   SortKey,
 } from '../data/schema'
 import type { EntityRowOf } from '../data/sync-schema'
+import type { AvailabilityFilter, BuiltinPerspectiveId } from '../data/types'
 import type { ForecastOptions } from '../derived/forecast'
 import type { TaskNode, TaskTree } from '../structure/tree'
-import type { FilterEvalContext } from './filter'
+import type { FilterEvalContext, FilterNode } from './filter'
 import {
   AVAILABILITY_FILTER,
+  BUILTIN_PERSPECTIVE_ID,
+  BUILTIN_PERSPECTIVE_NAME,
   COMPUTED_STATUS,
+  DEFAULT_AVAILABILITY_FILTER,
   EXPLICIT_STATUS,
   GROUP_KEY,
   SORT_DIR,
@@ -24,6 +38,8 @@ import { buildTaskTree } from '../structure/tree'
 import { formatZonedYmdHm } from '../time/calendar'
 import { computeCollapsibleSet, effectiveVisibleChildren, visibleDepth } from './collapse'
 import { FILTER_FIELD, LEAF_OP, LOGIC_OP, matchFilter, rawValue } from './filter'
+
+// ─── 类型 ───────────────────────────────────────────────────────────────────
 
 /** 渲染叶子项 */
 export interface RenderItem {
@@ -51,10 +67,69 @@ export interface RenderContext {
   collapsibleSet: Set<string>
 }
 
-function isActionable(computed: ComputedStatus): boolean {
-  return computed === COMPUTED_STATUS.AVAILABLE
-    || computed === COMPUTED_STATUS.DUE_SOON
-    || computed === COMPUTED_STATUS.OVERDUE
+export interface RenderPerspectiveOptions {
+  availabilityFilter?: AvailabilityFilter
+  forecastOptions?: ForecastOptions
+}
+
+// ─── 入口 ───────────────────────────────────────────────────────────────────
+
+/** 透视渲染总入口（管线见文件头）。 */
+export function renderPerspective(
+  rowStore: RowStore,
+  perspective: Perspective,
+  now: Date,
+  dueSoonIntervalMs: number,
+  timeZone: string,
+  options?: RenderPerspectiveOptions,
+): RenderGroup[] {
+  const availabilityFilter = options?.availabilityFilter ?? DEFAULT_AVAILABILITY_FILTER
+  const forecastOptions = options?.forecastOptions
+
+  const tasks = rowStore.liveTasks()
+  const tree = buildTaskTree(tasks)
+  // ctx 先建（applyBaseFilter 需 ctx）；forecast 传空 collapsibleSet 不塌陷 [SP-COLLAPSE-FORECAST-NOOP]，通用路径 filter 后重算
+  const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map(), timeZone, collapsibleSet: new Set() }
+  let filtered = applyBaseFilter(tasks, availabilityFilter, ctx)
+
+  if (perspective.id === BUILTIN_PERSPECTIVE_ID.FORECAST) {
+    const opts = forecastOptions ?? defaultForecastOptions(now, timeZone)
+    return renderForecast(rowStore, opts, now, dueSoonIntervalMs, filtered, timeZone)
+  }
+
+  const evalCtx: FilterEvalContext = { rowStore, tree }
+  filtered = filtered.filter(t => matchFilter(t, perspective.filter, evalCtx))
+
+  const matchedIds = new Set(filtered.map(t => t.id))
+  // 只补祖先（树形挂载）；子孙靠自身过滤命中（TAG 为物理 task_tag），不再 expandDescendants 冲掉 Available
+  const expandedIds = new Set(expandAncestors([...matchedIds], tree))
+  // 纯结构祖先（非 matched 且子树含 matched 后代）塌陷：不占行，孙透传挂最近可见祖先 [SP-COLLAPSE-1]
+  const collapsibleSet = computeCollapsibleSet(tree, matchedIds, expandedIds)
+  ctx.collapsibleSet = collapsibleSet
+  const visible = tasks.filter(t => expandedIds.has(t.id) && !collapsibleSet.has(t.id))
+  const result = flattenInTreeOrder(tree, visible, perspective.sortBy, rowStore, collapsibleSet)
+
+  return groupBy(result, perspective.groupBy, rowStore, ctx)
+}
+
+// ─── 1. 可用性 base filter ──────────────────────────────────────────────────
+
+/** 计算状态匹配可用性过滤谓词 */
+export function matchesAvailability(
+  task: EntityRowOf<'task'>,
+  filter: AvailabilityFilter,
+  computed: ComputedStatus,
+): boolean {
+  switch (filter) {
+    case AVAILABILITY_FILTER.ALL:
+      return true
+    case AVAILABILITY_FILTER.REMAINING:
+      return task.data.status === EXPLICIT_STATUS.ACTIVE
+    case AVAILABILITY_FILTER.AVAILABLE:
+      return task.data.status === EXPLICIT_STATUS.ACTIVE && computed !== COMPUTED_STATUS.BLOCKED
+    default:
+      return false
+  }
 }
 
 function taskComputed(task: EntityRowOf<'task'>, ctx: RenderContext): ComputedStatus {
@@ -67,55 +142,21 @@ function taskComputed(task: EntityRowOf<'task'>, ctx: RenderContext): ComputedSt
   )
 }
 
-/** Step1 基础过滤 */
+/** 可用性谓词（View Options；不进 Perspective 持久化） */
 export function applyBaseFilter(
   tasks: EntityRowOf<'task'>[],
-  perspective: Pick<Perspective, 'availabilityFilter' | 'showCompleted' | 'showDropped' | 'flaggedOnly'>,
+  filter: AvailabilityFilter,
   ctx: RenderContext,
 ): EntityRowOf<'task'>[] {
   return tasks.filter((t) => {
-    if (!perspective.showCompleted && t.data.status === EXPLICIT_STATUS.COMPLETED) {
-      return false
-    }
-    if (
-      !perspective.showDropped
-      && (t.data.status === EXPLICIT_STATUS.HOLD || t.data.status === EXPLICIT_STATUS.DELETED)
-    ) {
-      return false
-    }
-    if (perspective.flaggedOnly === true && !t.data.flagged) {
-      return false
-    }
-
-    if (perspective.availabilityFilter === AVAILABILITY_FILTER.ALL) {
-      return true
-    }
-    if (perspective.availabilityFilter === AVAILABILITY_FILTER.REMAINING) {
-      return t.data.status === EXPLICIT_STATUS.ACTIVE
-    }
-
     const computed = taskComputed(t, ctx)
-    return isActionable(computed)
+    return matchesAvailability(t, filter, computed)
   })
 }
 
-/** 内置透视额外过滤（非通用 DSL；forecast 不经此函数）。review 透视移除。 */
-export function applyBuiltinFilter(
-  tasks: EntityRowOf<'task'>[],
-  perspective: Perspective,
-): EntityRowOf<'task'>[] {
-  switch (perspective.id) {
-    case 'inbox':
-      // Inbox = mountDirId null（位置权威），且无 parent（顶层）
-      return tasks.filter(t => t.data.mountDirId === null && t.data.parentId === null)
-    case 'completed':
-      return tasks.filter(t => t.data.status === EXPLICIT_STATUS.COMPLETED)
-    default:
-      return tasks
-  }
-}
+// ─── 2. 展开（祖先 / 子孙）─────────────────────────────────────────────────
 
-/** Step3 父级展开（过滤命中子任务时补齐祖先，便于树序渲染） */
+/** 过滤命中子任务时补齐祖先，便于树序渲染 */
 export function expandAncestors(taskIds: string[], tree: TaskTree): string[] {
   const result = new Set<string>(taskIds)
   for (const id of taskIds) {
@@ -128,7 +169,10 @@ export function expandAncestors(taskIds: string[], tree: TaskTree): string[] {
   return [...result]
 }
 
-/** 子树展开（过滤命中父任务时带上子孙，避免「点标签只剩空壳父节点」） */
+/**
+ * 过滤命中父任务时带上子孙（避免「点标签只剩空壳父节点」）。
+ * 通用管线已不用（会冲掉 Available）；导出供测试 / 特殊路径。
+ */
 export function expandDescendants(taskIds: string[], tree: TaskTree): string[] {
   const result = new Set<string>(taskIds)
   const visit = (node: TaskNode) => {
@@ -145,97 +189,7 @@ export function expandDescendants(taskIds: string[], tree: TaskTree): string[] {
   return [...result]
 }
 
-/** 单 task 在某 groupKey 下的归属值列表（tag 多归属 → 多值） */
-function groupValues(
-  task: EntityRowOf<'task'>,
-  key: GroupKey,
-  rowStore: RowStore,
-  tree: TaskTree,
-): string[] {
-  switch (key) {
-    case GROUP_KEY.PROJECT: return [rowStore.projectOf?.(task) ?? task.data.projectId ?? '']
-    case GROUP_KEY.TAG: {
-      // 自身无标时继承最近带标祖先，使 expandDescendants 进来的子任务仍落在父标签组
-      let tagIds = rowStore.tagIdsOf(task.id)
-      if (!tagIds.length) {
-        let node = tree.byId.get(task.id)?.parent ?? null
-        while (node) {
-          const inherited = rowStore.tagIdsOf(node.task.id)
-          if (inherited.length) {
-            tagIds = inherited
-            break
-          }
-          node = node.parent
-        }
-      }
-      return tagIds.length ? tagIds : ['']
-    }
-    case GROUP_KEY.DEFER_DATE: return [effectiveDefer(task, tree) ?? '']
-    case GROUP_KEY.DUE_DATE: return [effectiveDue(task, tree) ?? '']
-    case GROUP_KEY.FLAGGED: return [String(task.data.flagged)]
-    case GROUP_KEY.STATUS: return [task.data.status]
-    case GROUP_KEY.NONE: return ['']
-    default: return ['']
-  }
-}
-
-function groupLabel(key: string, groupKey: GroupKey, rowStore: RowStore, timeZone: string): string {
-  if (groupKey === GROUP_KEY.TAG) {
-    if (!key)
-      return '无标签'
-    return rowStore.findLive('tag', key)?.data.name ?? key
-  }
-  if (groupKey === GROUP_KEY.PROJECT) {
-    if (!key)
-      return '无项目'
-    return rowStore.dirNameOf?.(key) ?? key
-  }
-  if (groupKey === GROUP_KEY.DUE_DATE || groupKey === GROUP_KEY.DEFER_DATE) {
-    if (!key)
-      return groupKey === GROUP_KEY.DUE_DATE ? '无截止日' : '无推迟日'
-    const ms = Date.parse(key)
-    if (Number.isNaN(ms))
-      return key
-    return formatZonedYmdHm(new Date(ms), timeZone)
-  }
-  return key
-}
-
-function toRenderItem(task: EntityRowOf<'task'>, ctx: RenderContext): RenderItem {
-  return {
-    taskId: task.id,
-    computed: taskComputed(task, ctx),
-    // 塌陷后可见深度（跳过纯结构祖先）；空集时等价真实树深 [SP-COLLAPSE-2]
-    depth: visibleDepth(ctx.tree, task.id, ctx.collapsibleSet),
-  }
-}
-
-/** Step4 分组 */
-export function groupBy(
-  tasks: EntityRowOf<'task'>[],
-  keys: GroupKey[],
-  rowStore: RowStore,
-  ctx: RenderContext,
-): RenderGroup[] {
-  if (keys.length === 0) {
-    return [{ key: '', label: '', children: tasks.map(t => toRenderItem(t, ctx)) }]
-  }
-  const first = keys[0]!
-  const rest = keys.slice(1)
-  const buckets = new Map<string, EntityRowOf<'task'>[]>()
-  for (const t of tasks) {
-    for (const gv of groupValues(t, first, rowStore, ctx.tree)) {
-      const arr = buckets.get(gv) ?? []
-      arr.push(t)
-      buckets.set(gv, arr)
-    }
-  }
-  return [...buckets.entries()].map(([key, ts]) => ({
-    key,
-    label: groupLabel(key, first, rowStore, ctx.timeZone ?? 'UTC'),
-    children: rest.length ? groupBy(ts, rest, rowStore, ctx) : ts.map(t => toRenderItem(t, ctx)),
-  }))
-}
+// ─── 3. 树序与排序 ──────────────────────────────────────────────────────────
 
 /** ISO 时间戳比较（null 排末尾，ASC 语义；DESC 由调用方取反）。 */
 function compareIso(a: string | null, b: string | null): number {
@@ -292,7 +246,7 @@ function compareField(
   return 0
 }
 
-/** Step5 排序（扁平；仅同级语义时正确。渲染管线请用 {@link flattenInTreeOrder}） */
+/** 扁平排序（仅同级语义时正确。渲染管线请用 {@link flattenInTreeOrder}） */
 export function sortTasks(
   tasks: EntityRowOf<'task'>[],
   sortBy: SortKey[],
@@ -368,65 +322,108 @@ export function flattenInTreeOrder(
   return out
 }
 
-/**
- * 完整渲染管线。
- * forecast：先 applyBaseFilter（尊重声明的 availabilityFilter / show*），再 renderForecast 日块分块；
- * 不走 matchFilter / applyBuiltinFilter / Perspective.groupBy / sortBy（日块归属与块内序由 forecast 域负责）。
- */
-export function renderPerspective(
+// ─── 4. 分组 ────────────────────────────────────────────────────────────────
+
+/** 单 task 在某 groupKey 下的归属值列表（tag 多归属 → 多值） */
+function groupValues(
+  task: EntityRowOf<'task'>,
+  key: GroupKey,
   rowStore: RowStore,
-  perspective: Perspective,
-  now: Date,
-  dueSoonIntervalMs: number,
-  timeZone: string,
-  forecastOptions?: ForecastOptions,
-): RenderGroup[] {
-  if (perspective.id === 'forecast') {
-    const all = rowStore.liveTasks()
-    const tree = buildTaskTree(all)
-    // forecast 独立路径（renderForecast），不走 expand/flatten/collapse；传空集不塌陷 [SP-COLLAPSE-FORECAST-NOOP]
-    const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map(), timeZone, collapsibleSet: new Set() }
-    const filtered = applyBaseFilter(all, perspective, ctx)
-    const opts = forecastOptions ?? defaultForecastOptions(now, timeZone)
-    return renderForecast(rowStore, opts, now, dueSoonIntervalMs, filtered, timeZone)
+  tree: TaskTree,
+): string[] {
+  switch (key) {
+    case GROUP_KEY.PROJECT: return [rowStore.projectOf?.(task) ?? task.data.projectId ?? '']
+    case GROUP_KEY.TAG: {
+      const tagIds = rowStore.tagIdsOf(task.id)
+      return tagIds.length ? tagIds : ['']
+    }
+    case GROUP_KEY.DEFER_DATE: return [effectiveDefer(task, tree) ?? '']
+    case GROUP_KEY.DUE_DATE: return [effectiveDue(task, tree) ?? '']
+    case GROUP_KEY.FLAGGED: return [String(task.data.flagged)]
+    case GROUP_KEY.STATUS: return [task.data.status]
+    case GROUP_KEY.NONE: return ['']
+    default: return ['']
   }
-
-  const tasks = rowStore.liveTasks()
-  const tree = buildTaskTree(tasks)
-  // ctx 先建（applyBaseFilter 需 ctx）；collapsibleSet 占位空集，filter 后按 matchedIds 重算覆盖
-  const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map(), timeZone, collapsibleSet: new Set() }
-  const evalCtx: FilterEvalContext = { rowStore }
-
-  let filtered = applyBaseFilter(tasks, perspective, ctx)
-  filtered = filtered.filter(t => matchFilter(t, perspective.filter, evalCtx))
-  filtered = applyBuiltinFilter(filtered, perspective)
-
-  const matchedIds = new Set(filtered.map(t => t.id))
-  const expandedIds = new Set([
-    ...expandAncestors([...matchedIds], tree),
-    ...expandDescendants([...matchedIds], tree),
-  ])
-  // 纯结构祖先（非 matched 且子树含 matched 后代）塌陷：不占行，孙透传挂最近可见祖先 [SP-COLLAPSE-1]
-  const collapsibleSet = computeCollapsibleSet(tree, matchedIds, expandedIds)
-  ctx.collapsibleSet = collapsibleSet
-  const visible = tasks.filter(t => expandedIds.has(t.id) && !collapsibleSet.has(t.id))
-  const result = flattenInTreeOrder(tree, visible, perspective.sortBy, rowStore, collapsibleSet)
-
-  return groupBy(result, perspective.groupBy, rowStore, ctx)
 }
 
-function builtin(id: string, name: string, overrides: Partial<Perspective> = {}): Perspective {
+function groupLabel(key: string, groupKey: GroupKey, rowStore: RowStore, timeZone: string): string {
+  if (groupKey === GROUP_KEY.TAG) {
+    if (!key)
+      return '无标签'
+    return rowStore.findLive('tag', key)?.data.name ?? key
+  }
+  if (groupKey === GROUP_KEY.PROJECT) {
+    if (!key)
+      return '无项目'
+    return rowStore.dirNameOf?.(key) ?? key
+  }
+  if (groupKey === GROUP_KEY.DUE_DATE || groupKey === GROUP_KEY.DEFER_DATE) {
+    if (!key)
+      return groupKey === GROUP_KEY.DUE_DATE ? '无截止日' : '无推迟日'
+    const ms = Date.parse(key)
+    if (Number.isNaN(ms))
+      return key
+    return formatZonedYmdHm(new Date(ms), timeZone)
+  }
+  return key
+}
+
+function toRenderItem(task: EntityRowOf<'task'>, ctx: RenderContext): RenderItem {
+  return {
+    taskId: task.id,
+    computed: taskComputed(task, ctx),
+    // 塌陷后可见深度（跳过纯结构祖先）；空集时等价真实树深 [SP-COLLAPSE-2]
+    depth: visibleDepth(ctx.tree, task.id, ctx.collapsibleSet),
+  }
+}
+
+/** 按 groupBy 键分桶（可多层） */
+export function groupBy(
+  tasks: EntityRowOf<'task'>[],
+  keys: GroupKey[],
+  rowStore: RowStore,
+  ctx: RenderContext,
+): RenderGroup[] {
+  if (keys.length === 0) {
+    return [{ key: '', label: '', children: tasks.map(t => toRenderItem(t, ctx)) }]
+  }
+  const first = keys[0]!
+  const rest = keys.slice(1)
+  const buckets = new Map<string, EntityRowOf<'task'>[]>()
+  for (const t of tasks) {
+    for (const gv of groupValues(t, first, rowStore, ctx.tree)) {
+      const arr = buckets.get(gv) ?? []
+      arr.push(t)
+      buckets.set(gv, arr)
+    }
+  }
+  return [...buckets.entries()].map(([key, ts]) => ({
+    key,
+    label: groupLabel(key, first, rowStore, ctx.timeZone ?? 'UTC'),
+    children: rest.length ? groupBy(ts, rest, rowStore, ctx) : ts.map(t => toRenderItem(t, ctx)),
+  }))
+}
+
+// ─── 内置透视 ───────────────────────────────────────────────────────────────
+
+/** 收件箱语义：filter 为 project empty（与内置 inbox / 用户模板副本一致） */
+export function isInboxFilter(filter: FilterNode | null): boolean {
+  return filter != null
+    && filter.op === LEAF_OP.EMPTY
+    && filter.field === FILTER_FIELD.PROJECT
+}
+
+function builtin(
+  id: BuiltinPerspectiveId,
+  overrides: Partial<Omit<Perspective, 'id' | 'name'>> = {},
+): Perspective {
   return {
     id,
-    name,
+    name: BUILTIN_PERSPECTIVE_NAME[id],
     icon: null,
     filter: null,
     groupBy: [],
     sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
-    availabilityFilter: AVAILABILITY_FILTER.AVAILABLE,
-    showCompleted: false,
-    showDropped: false,
-    flaggedOnly: null,
     createdAt: new Date(0).toISOString(),
     updatedAt: null,
     ...overrides,
@@ -436,38 +433,33 @@ function builtin(id: string, name: string, overrides: Partial<Perspective> = {})
 /** 6 个内置透视（forecast 居首；移除 review） */
 export function builtinPerspectives(): Perspective[] {
   return [
-    // Forecast：availabilityFilter/show* 经 applyBaseFilter 生效；
-    // groupBy/sortBy 必须为空——日块分块与块内序由 renderForecast，勿假装走通用管线。
-    builtin('forecast', '预测', {
-      availabilityFilter: AVAILABILITY_FILTER.REMAINING,
+    // Forecast：groupBy/sortBy 必须为空——日块分块与块内序由 renderForecast，勿假装走通用管线。
+    builtin(BUILTIN_PERSPECTIVE_ID.FORECAST, {
       groupBy: [],
       sortBy: [],
     }),
-    builtin('inbox', '收件箱', {
-      availabilityFilter: AVAILABILITY_FILTER.REMAINING,
+    builtin(BUILTIN_PERSPECTIVE_ID.INBOX, {
       filter: { op: LEAF_OP.EMPTY, field: FILTER_FIELD.PROJECT },
       sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
     }),
-    builtin('projects', '项目', {
+    builtin(BUILTIN_PERSPECTIVE_ID.PROJECTS, {
       groupBy: [GROUP_KEY.PROJECT],
       sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
     }),
-    builtin('tags', '标签', {
-      // 只收已打标任务；未打标不再混进「标签」透视（否则点侧栏具体标签会像「突然变空」）
+    builtin(BUILTIN_PERSPECTIVE_ID.TAGS, {
       filter: { op: LOGIC_OP.NOT, child: { op: LEAF_OP.EMPTY, field: FILTER_FIELD.TAG } },
       groupBy: [GROUP_KEY.TAG],
       sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
     }),
-    builtin('flagged', '旗标', {
+    builtin(BUILTIN_PERSPECTIVE_ID.FLAGGED, {
       filter: { op: LEAF_OP.IS, field: FILTER_FIELD.FLAGGED, value: true },
       sortBy: [
         { field: SORT_FIELD.DUE_DATE, dir: SORT_DIR.ASC },
         { field: SORT_FIELD.FLAGGED, dir: SORT_DIR.DESC },
       ],
     }),
-    builtin('completed', '已完成', {
-      availabilityFilter: AVAILABILITY_FILTER.ALL,
-      showCompleted: true,
+    builtin(BUILTIN_PERSPECTIVE_ID.COMPLETED, {
+      filter: { op: LEAF_OP.IS, field: FILTER_FIELD.STATUS, value: EXPLICIT_STATUS.COMPLETED },
       groupBy: [GROUP_KEY.DUE_DATE],
       sortBy: [{ field: SORT_FIELD.ADDED_AT, dir: SORT_DIR.DESC }],
     }),

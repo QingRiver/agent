@@ -220,50 +220,64 @@ function applyMutationUpsert(
   const patch = mut.patch ?? {}
   const row = rows.find(r => r.entity === mut.entity && r.id === mut.entityId)
   if (row) {
-    // SP-STATE-7 终态锁：domain 终态(DELETED) 的 task 不被 upsert 复活/改写（删除终态不回退）
-    if (mut.entity === 'task' && (row.data as EntityRowOf<'task'>['data']).status === EXPLICIT_STATUS.DELETED) {
-      return 'noop'
-    }
-    if (mut.entity === 'task') {
-      const before = {
-        deferDate: (row.data as EntityRowOf<'task'>['data']).deferDate ?? null,
-        dueDate: (row.data as EntityRowOf<'task'>['data']).dueDate ?? null,
-      }
-      row.data = { ...row.data, ...patch } as typeof row.data
-      if (
-        Object.hasOwn(patch, 'deferDate')
-        || Object.hasOwn(patch, 'dueDate')
-      ) {
-        const norm = normalizeDeferDue(before, patch as { deferDate?: string | null, dueDate?: string | null })
-        ;(row.data as EntityRowOf<'task'>['data']).deferDate = norm.deferDate
-        ;(row.data as EntityRowOf<'task'>['data']).dueDate = norm.dueDate
-      }
-    }
-    else {
-      row.data = { ...row.data, ...patch } as typeof row.data
-    }
-    row.deleted = false // upsert 复活软删实体（创建意图按到达序胜过删除）
-    row.syncId = nextSyncId()
+    return match(mut)
+      .with({ entity: 'task' }, () => {
+        const taskRow = row as EntityRowOf<'task'>
+        // SP-STATE-7 终态锁：domain 终态(DELETED) 的 task 不被 upsert 复活/改写
+        if (taskRow.data.status === EXPLICIT_STATUS.DELETED)
+          return 'noop' as const
+        const before = {
+          deferDate: taskRow.data.deferDate ?? null,
+          dueDate: taskRow.data.dueDate ?? null,
+        }
+        taskRow.data = { ...taskRow.data, ...patch } as typeof taskRow.data
+        if (Object.hasOwn(patch, 'deferDate') || Object.hasOwn(patch, 'dueDate')) {
+          const norm = normalizeDeferDue(
+            before,
+            patch as { deferDate?: string | null, dueDate?: string | null },
+          )
+          taskRow.data.deferDate = norm.deferDate
+          taskRow.data.dueDate = norm.dueDate
+        }
+        taskRow.deleted = false
+        taskRow.syncId = nextSyncId()
+        return 'applied' as const
+      })
+      .otherwise(() => {
+        row.data = { ...row.data, ...patch } as typeof row.data
+        row.deleted = false // upsert 复活软删实体（创建意图按到达序胜过删除）
+        row.syncId = nextSyncId()
+        return 'applied' as const
+      })
   }
-  else {
-    let data = { ...patch } as EntityRow['data']
-    if (mut.entity === 'task') {
+
+  return match(mut)
+    .with({ entity: 'task' }, (m) => {
       const norm = normalizeDeferDue(
         { deferDate: null, dueDate: null },
         patch as { deferDate?: string | null, dueDate?: string | null },
       )
-      data = { ...data, ...norm } as typeof data
-    }
-    rows.push({
-      entity: mut.entity,
-      id: mut.entityId,
-      userId,
-      syncId: nextSyncId(),
-      deleted: false,
-      data,
-    } as EntityRow)
-  }
-  return 'applied'
+      rows.push({
+        entity: 'task',
+        id: m.entityId,
+        userId,
+        syncId: nextSyncId(),
+        deleted: false,
+        data: { ...patch, ...norm } as EntityRowOf<'task'>['data'],
+      })
+      return 'applied' as const
+    })
+    .otherwise((m) => {
+      rows.push({
+        entity: m.entity,
+        id: m.entityId,
+        userId,
+        syncId: nextSyncId(),
+        deleted: false,
+        data: { ...patch } as EntityRow['data'],
+      } as EntityRow)
+      return 'applied' as const
+    })
 }
 
 /**

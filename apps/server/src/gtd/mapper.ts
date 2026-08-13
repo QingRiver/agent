@@ -101,10 +101,6 @@ export function perspectiveToRow(p: Perspective, userId: string): PerspectiveIns
     filter: p.filter,
     groupBy: p.groupBy,
     sortBy: p.sortBy,
-    availabilityFilter: p.availabilityFilter,
-    showCompleted: p.showCompleted,
-    showDropped: p.showDropped,
-    flaggedOnly: p.flaggedOnly,
     createdAt: new Date(p.createdAt),
     updatedAt: toDate(p.updatedAt),
   }

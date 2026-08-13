@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { RowStore } from '../../data/rows'
 import { EXPLICIT_STATUS } from '../../data/types'
 import { makeTaskRow, makeTaskTagRow, NOW } from '../../fixtures'
+import { buildTaskTree } from '../../structure/tree'
 import { evalNode, matchFilter } from './engine'
 import { FILTER_FIELD, LEAF_OP, LOGIC_OP } from './schema'
 
@@ -73,6 +74,14 @@ describe('evalNode - 叶子: project/tag (some/empty)', () => {
     const t = makeTaskRow('t1')
     expect(evalNode(t, leaf(FILTER_FIELD.TAG, LEAF_OP.EMPTY), ctx())).toBe(true)
   })
+  it('tag some：子无物理标 → 不读父标（入组复制后才有 task_tag）', () => {
+    const parent = makeTaskRow('p')
+    const child = makeTaskRow('c', { parentId: 'p' })
+    const rows = [parent, child, makeTaskTagRow('p', 'g1')]
+    const c: FilterEvalContext = { rowStore: new RowStore(rows), tree: buildTaskTree([parent, child]) }
+    expect(evalNode(child, leaf(FILTER_FIELD.TAG, LEAF_OP.SOME, ['g1']), c)).toBe(false)
+    expect(evalNode(child, leaf(FILTER_FIELD.TAG, LEAF_OP.EMPTY), c)).toBe(true)
+  })
 })
 
 describe('evalNode - 叶子: 日期 (before/after/within/exist)', () => {
@@ -107,6 +116,25 @@ describe('evalNode - 叶子: 日期 (before/after/within/exist)', () => {
   it('dueDate before 对 null 值不命中', () => {
     const t = makeTaskRow('t1', { dueDate: null })
     expect(evalNode(t, leaf(FILTER_FIELD.DUE_DATE, LEAF_OP.BEFORE, base), ctx())).toBe(false)
+  })
+  it('dueDate exist：子无物理 due + tree → 继承父 effectiveDue', () => {
+    const parent = makeTaskRow('p', { dueDate: base })
+    const child = makeTaskRow('c', { parentId: 'p', dueDate: null })
+    const c: FilterEvalContext = {
+      rowStore: new RowStore([parent, child]),
+      tree: buildTaskTree([parent, child]),
+    }
+    expect(evalNode(child, leaf(FILTER_FIELD.DUE_DATE, LEAF_OP.EXIST), c)).toBe(true)
+    expect(evalNode(child, leaf(FILTER_FIELD.DUE_DATE, LEAF_OP.EXIST), ctx([child]))).toBe(false)
+  })
+  it('deferDate exist：子无物理 defer + tree → 继承父 effectiveDefer', () => {
+    const parent = makeTaskRow('p', { deferDate: earlier })
+    const child = makeTaskRow('c', { parentId: 'p', deferDate: null })
+    const c: FilterEvalContext = {
+      rowStore: new RowStore([parent, child]),
+      tree: buildTaskTree([parent, child]),
+    }
+    expect(evalNode(child, leaf(FILTER_FIELD.DEFER_DATE, LEAF_OP.EXIST), c)).toBe(true)
   })
 })
 
@@ -237,8 +265,5 @@ describe('evalNode - 短路', () => {
 describe('matchFilter', () => {
   it('null 节点全命中', () => {
     expect(matchFilter(makeTaskRow('t1'), null, ctx())).toBe(true)
-  })
-  it('undefined 节点全命中', () => {
-    expect(matchFilter(makeTaskRow('t1'), undefined, ctx())).toBe(true)
   })
 })

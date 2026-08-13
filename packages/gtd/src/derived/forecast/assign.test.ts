@@ -24,9 +24,9 @@ import {
 describe('pickByTier', () => {
   it('逾期 > 截止 > 推迟 > 计划 > 旗标；皆空 → null', () => {
     expect(pickByTier([
-      { lane: 'flagged', block: FORECAST_STRIP.TODAY },
-      { lane: 'planned', block: FORECAST_STRIP.TODAY },
-      { lane: 'due', block: FORECAST_STRIP.TODAY },
+      { lane: 'flagged', block: FORECAST_STRIP.NOW },
+      { lane: 'planned', block: FORECAST_STRIP.NOW },
+      { lane: 'due', block: FORECAST_STRIP.NOW },
     ])?.lane).toBe('due')
     expect(pickByTier([null, null])).toBeNull()
   })
@@ -35,7 +35,7 @@ describe('pickByTier', () => {
 describe('速查例', () => {
   it('未到截止，开截止，无计划 → 不出现', () => {
     const t = makeTaskRow('e1', { dueDate: LATER_DAY })
-    expect(assignForecastBlock(t, opts([FORECAST_STRIP.TODAY]), NOW, TZ)).toBeNull()
+    expect(assignForecastBlock(t, opts([FORECAST_STRIP.NOW]), NOW, TZ)).toBeNull()
   })
 
   it('未到截止 + 滚动（已解锁、锚日在时段内）→ 计划锚日', () => {
@@ -43,7 +43,7 @@ describe('速查例', () => {
       dueDate: LATER_DAY,
       plannedMode: PLANNED_MODE.ROLLING,
     })
-    expect(assignForecastBlock(t, opts([FORECAST_STRIP.TODAY]), NOW, TZ)).toBe(FORECAST_STRIP.TODAY)
+    expect(assignForecastBlock(t, opts([FORECAST_STRIP.NOW]), NOW, TZ)).toBe(FORECAST_STRIP.NOW)
   })
 
   it('时段内截止 + 计划同日 → 截止', () => {
@@ -52,9 +52,9 @@ describe('速查例', () => {
       plannedMode: PLANNED_MODE.ON,
       plannedDate: TODAY,
     })
-    expect(assignForecastBlock(t, opts([FORECAST_STRIP.TODAY]), NOW, TZ)).toBe(FORECAST_STRIP.TODAY)
-    const { due } = laneOverdueDue(t, opts([FORECAST_STRIP.TODAY]), NOW, TZ)
-    const planned = lanePlanned(t, opts([FORECAST_STRIP.TODAY]), NOW, TZ)
+    expect(assignForecastBlock(t, opts([FORECAST_STRIP.NOW]), NOW, TZ)).toBe(FORECAST_STRIP.NOW)
+    const { due } = laneOverdueDue(t, opts([FORECAST_STRIP.NOW]), NOW, TZ)
+    const planned = lanePlanned(t, opts([FORECAST_STRIP.NOW]), NOW, TZ)
     expect(due).not.toBeNull()
     expect(planned).not.toBeNull()
     expect(pickByTier([due, planned])?.lane).toBe('due')
@@ -62,7 +62,7 @@ describe('速查例', () => {
 
   it('已截止，开逾期+过去 → 过去', () => {
     const t = makeTaskRow('e4', { dueDate: YESTERDAY })
-    expect(assignForecastBlock(t, opts([FORECAST_STRIP.PAST, FORECAST_STRIP.TODAY]), NOW, TZ))
+    expect(assignForecastBlock(t, opts([FORECAST_STRIP.PAST, FORECAST_STRIP.NOW]), NOW, TZ))
       .toBe(FORECAST_STRIP.PAST)
   })
 
@@ -72,8 +72,8 @@ describe('速查例', () => {
       plannedMode: PLANNED_MODE.ON,
       plannedDate: TODAY,
     })
-    expect(assignForecastBlock(t, opts([FORECAST_STRIP.TODAY]), NOW, TZ))
-      .toBe(FORECAST_STRIP.TODAY)
+    expect(assignForecastBlock(t, opts([FORECAST_STRIP.NOW]), NOW, TZ))
+      .toBe(FORECAST_STRIP.NOW)
   })
 
   it('墙钟未解锁 + 仅滚动 → 不出现', () => {
@@ -81,17 +81,17 @@ describe('速查例', () => {
       deferDate: TOMORROW,
       plannedMode: PLANNED_MODE.ROLLING,
     })
-    expect(assignForecastBlock(t, opts([FORECAST_STRIP.TODAY]), NOW, TZ)).toBeNull()
+    expect(assignForecastBlock(t, opts([FORECAST_STRIP.NOW]), NOW, TZ)).toBeNull()
   })
 
   it('时段内解锁 → 推迟', () => {
     const t = makeTaskRow('e7', { deferDate: TOMORROW })
-    expect(assignForecastBlock(t, opts([FORECAST_STRIP.TOMORROW]), NOW, TZ)).toBe(FORECAST_STRIP.TOMORROW)
+    expect(assignForecastBlock(t, opts([FORECAST_STRIP.LATER]), NOW, TZ)).toBe('2026-07-17')
   })
 
   it('墙钟已解锁 + 仅旗标，锚日在时段内 → 旗标', () => {
     const t = makeTaskRow('e8', { flagged: true })
-    expect(assignForecastBlock(t, opts([FORECAST_STRIP.TODAY]), NOW, TZ)).toBe(FORECAST_STRIP.TODAY)
+    expect(assignForecastBlock(t, opts([FORECAST_STRIP.NOW]), NOW, TZ)).toBe(FORECAST_STRIP.NOW)
   })
 
   it('大窗含今日与下周；下周才解锁 + 滚动 → 推迟栏（计划空）', () => {
@@ -100,9 +100,7 @@ describe('速查例', () => {
       plannedMode: PLANNED_MODE.ROLLING,
     })
     const o = opts([
-      FORECAST_STRIP.TODAY,
-      FORECAST_STRIP.TOMORROW,
-      FORECAST_STRIP.DAY_AFTER,
+      FORECAST_STRIP.NOW,
       FORECAST_STRIP.LATER,
     ])
     expect(lanePlanned(t, o, NOW, TZ)).toBeNull()
@@ -116,9 +114,7 @@ describe('速查例', () => {
     })
     const o = opts(
       [
-        FORECAST_STRIP.TODAY,
-        FORECAST_STRIP.TOMORROW,
-        FORECAST_STRIP.DAY_AFTER,
+        FORECAST_STRIP.NOW,
         FORECAST_STRIP.LATER,
       ],
       { ...DEFAULT_FORECAST_SIGNALS, includeDeferred: false },
@@ -130,8 +126,8 @@ describe('速查例', () => {
 describe('assignForecastBlock 回归', () => {
   it('仅 rolling → 今日；多日选中不复制到明天', () => {
     const t = makeTaskRow('r1', { plannedMode: PLANNED_MODE.ROLLING, plannedDate: null })
-    const o = opts([FORECAST_STRIP.TODAY, FORECAST_STRIP.TOMORROW, FORECAST_STRIP.DAY_AFTER])
-    expect(assignForecastBlock(t, o, NOW, TZ)).toBe(FORECAST_STRIP.TODAY)
+    const o = opts([FORECAST_STRIP.NOW, FORECAST_STRIP.LATER])
+    expect(assignForecastBlock(t, o, NOW, TZ)).toBe(FORECAST_STRIP.NOW)
   })
 
   it('rolling + 过期 due → 过去', () => {
@@ -140,7 +136,7 @@ describe('assignForecastBlock 回归', () => {
       plannedDate: null,
       dueDate: YESTERDAY,
     })
-    const o = opts([FORECAST_STRIP.PAST, FORECAST_STRIP.TODAY])
+    const o = opts([FORECAST_STRIP.PAST, FORECAST_STRIP.NOW])
     expect(assignForecastBlock(t, o, NOW, TZ)).toBe(FORECAST_STRIP.PAST)
   })
 
@@ -150,13 +146,13 @@ describe('assignForecastBlock 回归', () => {
       plannedDate: null,
       deferDate: TOMORROW,
     })
-    const o = opts([FORECAST_STRIP.TODAY, FORECAST_STRIP.TOMORROW])
-    expect(assignForecastBlock(t, o, NOW, TZ)).toBe(FORECAST_STRIP.TOMORROW)
+    const o = opts([FORECAST_STRIP.NOW, FORECAST_STRIP.LATER])
+    expect(assignForecastBlock(t, o, NOW, TZ)).toBe('2026-07-17')
   })
 
   it('due 今日 → 今日', () => {
     const t = makeTaskRow('d1', { dueDate: TODAY })
-    expect(assignForecastBlock(t, opts([FORECAST_STRIP.TODAY]), NOW, TZ)).toBe(FORECAST_STRIP.TODAY)
+    expect(assignForecastBlock(t, opts([FORECAST_STRIP.NOW]), NOW, TZ)).toBe(FORECAST_STRIP.NOW)
   })
 
   it('planned on 明天 → 明天', () => {
@@ -164,18 +160,18 @@ describe('assignForecastBlock 回归', () => {
       plannedMode: PLANNED_MODE.ON,
       plannedDate: TOMORROW,
     })
-    expect(assignForecastBlock(t, opts([FORECAST_STRIP.TOMORROW]), NOW, TZ)).toBe(FORECAST_STRIP.TOMORROW)
+    expect(assignForecastBlock(t, opts([FORECAST_STRIP.LATER]), NOW, TZ)).toBe('2026-07-17')
   })
 
   it('仅 flagged → 今日', () => {
     const t = makeTaskRow('f1', { flagged: true })
-    expect(assignForecastBlock(t, opts([FORECAST_STRIP.TODAY]), NOW, TZ)).toBe(FORECAST_STRIP.TODAY)
+    expect(assignForecastBlock(t, opts([FORECAST_STRIP.NOW]), NOW, TZ)).toBe(FORECAST_STRIP.NOW)
   })
 
   it('flagged + 后天 defer → 后天（推迟栏）', () => {
     const t = makeTaskRow('f2', { flagged: true, deferDate: DAY_AFTER })
-    const o = opts([FORECAST_STRIP.TODAY, FORECAST_STRIP.TOMORROW, FORECAST_STRIP.DAY_AFTER])
-    expect(assignForecastBlock(t, o, NOW, TZ)).toBe(FORECAST_STRIP.DAY_AFTER)
+    const o = opts([FORECAST_STRIP.NOW, FORECAST_STRIP.LATER])
+    expect(assignForecastBlock(t, o, NOW, TZ)).toBe('2026-07-18')
   })
 
   it('以后窗：远期 due → 该日 YYYY-MM-DD 块', () => {
@@ -189,9 +185,9 @@ describe('assignForecastBlock 回归', () => {
     const dueOnLaToday = '2026-07-15T12:00:00.000Z'
     const t = makeTaskRow('tz1', { dueDate: dueOnLaToday })
     const la = 'America/Los_Angeles'
-    const oLa = opts([FORECAST_STRIP.PAST, FORECAST_STRIP.TODAY], DEFAULT_FORECAST_SIGNALS, now, la)
-    expect(assignForecastBlock(t, oLa, now, la)).toBe(FORECAST_STRIP.TODAY)
-    const oUtc = opts([FORECAST_STRIP.PAST, FORECAST_STRIP.TODAY], DEFAULT_FORECAST_SIGNALS, now, 'UTC')
+    const oLa = opts([FORECAST_STRIP.PAST, FORECAST_STRIP.NOW], DEFAULT_FORECAST_SIGNALS, now, la)
+    expect(assignForecastBlock(t, oLa, now, la)).toBe(FORECAST_STRIP.NOW)
+    const oUtc = opts([FORECAST_STRIP.PAST, FORECAST_STRIP.NOW], DEFAULT_FORECAST_SIGNALS, now, 'UTC')
     expect(assignForecastBlock(t, oUtc, now, 'UTC')).toBe(FORECAST_STRIP.PAST)
   })
 })

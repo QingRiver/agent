@@ -1,8 +1,9 @@
 import type { PerspectiveInput } from '@agent/gtd'
 import type { DirTreeNode } from '@agent/project'
 import type { GtdSelection } from '@stores/gtd-store'
+import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { builtinPerspectives, sortTags } from '@agent/gtd'
+import { BUILTIN_PERSPECTIVE_ID, BUILTIN_PERSPECTIVE_NAME, FILTER_FIELD, sortTags } from '@agent/gtd'
 import { GtdPerspectiveEditor } from '@components/gtd/GtdPerspectiveEditor'
 import { TagManager } from '@components/tags/TagManager'
 import { Button } from '@components/ui/button'
@@ -29,30 +30,21 @@ import { DirStore } from '@stores/dir-store'
 import { useAtomValue } from 'jotai'
 import {
   CalendarDays,
-  CheckCircle2,
   Download,
-  Flag,
   GripVertical,
-  Inbox,
   Layers,
   Plus,
   Settings2,
   Sparkles,
   Tag,
-  Telescope,
   Upload,
 } from 'lucide-react'
 import { useRef, useState } from 'react'
-
-const PERSPECTIVE_ICONS: Record<string, typeof Inbox> = {
-  inbox: Inbox,
-  projects: Layers,
-  tags: Tag,
-  forecast: CalendarDays,
-  flagged: Flag,
-  review: Telescope,
-  completed: CheckCircle2,
-}
+import {
+  selectPerspective,
+  selectProjectFocus,
+  selectTagFocus,
+} from '../../gtd/view-options'
 
 function NavItem({
   active,
@@ -63,7 +55,7 @@ function NavItem({
   dragHandle,
 }: {
   active: boolean
-  icon?: typeof Inbox
+  icon?: LucideIcon
   label: string
   onClick: () => void
   indent?: number
@@ -136,20 +128,23 @@ function ProjectList({
   onSelect: (sel: GtdSelection) => void
 }) {
   const projects = nodes.filter(n => n.dir.kind === 'project')
+  // DnD id 仍用 project:<id>，与 selection 解耦
   const items = projects.map(n => `project:${n.dir.id}`)
   return (
     <SortableContext items={items} strategy={verticalListSortingStrategy}>
       {projects.map((n) => {
         const sid = `project:${n.dir.id}`
+        const active = selection.focus?.field === FILTER_FIELD.PROJECT
+          && selection.focus.id === n.dir.id
         return (
           <SortableNavItem
             key={n.dir.id}
             sortableId={sid}
-            active={selection.kind === 'project' && selection.id === n.dir.id}
+            active={active}
             icon={Layers}
             label={n.dir.name}
             indent={0}
-            onClick={() => onSelect({ kind: 'project', id: n.dir.id })}
+            onClick={() => onSelect(selectProjectFocus(n.dir.id))}
           />
         )
       })}
@@ -183,12 +178,11 @@ export function GtdSidebar() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  const perspectives = builtinPerspectives()
   const dirs = useAtomValue(DirStore.dirsAtom)
   const dirsById = useAtomValue(DirStore.dirsByIdAtom)
   const dirTree = useAtomValue(DirStore.dirTreeAtom)
   const flatTags = sortTags(rowStore.liveTags())
-  const customPerspectives = rowStore.livePerspectives().map(p => ({ id: p.id, name: p.data.name }))
+  const userPerspectives = rowStore.livePerspectives().map(p => ({ id: p.id, name: p.data.name }))
 
   const syncLabel = syncStatus === 'syncing'
     ? '同步中…'
@@ -285,48 +279,39 @@ export function GtdSidebar() {
         />
 
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-          <div className="mb-3 space-y-0.5">
-            {perspectives.map((p) => {
-              const Icon = PERSPECTIVE_ICONS[p.id]
-              return (
-                <NavItem
-                  key={p.id}
-                  active={selection.kind === 'perspective' && selection.id === p.id}
-                  icon={Icon}
-                  label={p.name}
-                  onClick={() => setSelection({ kind: 'perspective', id: p.id })}
-                />
-              )
-            })}
-          </div>
-
           <div className="mb-1 flex items-center justify-between px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            <span>自定义透视</span>
+            <span>透视</span>
             <button
               type="button"
               className="flex size-8 items-center justify-center rounded-md hover:bg-accent hover:text-foreground"
               onClick={() => setPerspectiveEditorId('new')}
-              title="新建自定义透视"
+              title="新建透视"
             >
               <Plus className="size-3.5" />
             </button>
           </div>
           <div className="mb-3 space-y-0.5">
-            {customPerspectives.map(perspective => (
+            <NavItem
+              active={selection.focus == null && selection.perspectiveId === BUILTIN_PERSPECTIVE_ID.FORECAST}
+              icon={CalendarDays}
+              label={BUILTIN_PERSPECTIVE_NAME[BUILTIN_PERSPECTIVE_ID.FORECAST]}
+              onClick={() => setSelection(selectPerspective(BUILTIN_PERSPECTIVE_ID.FORECAST))}
+            />
+            {userPerspectives.map(perspective => (
               <div key={perspective.id} className="group flex items-center gap-1">
                 <div className="min-w-0 flex-1">
                   <NavItem
-                    active={selection.kind === 'perspective' && selection.id === perspective.id}
+                    active={selection.focus == null && selection.perspectiveId === perspective.id}
                     icon={Sparkles}
                     label={perspective.name}
-                    onClick={() => setSelection({ kind: 'perspective', id: perspective.id })}
+                    onClick={() => setSelection(selectPerspective(perspective.id))}
                   />
                 </div>
                 <button
                   type="button"
                   className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground group-hover:opacity-100"
                   onClick={() => setPerspectiveEditorId(perspective.id)}
-                  title="编辑自定义透视"
+                  title="编辑透视"
                 >
                   <Settings2 className="size-3.5" />
                 </button>
@@ -334,15 +319,12 @@ export function GtdSidebar() {
                   type="button"
                   className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 group-hover:opacity-100"
                   onClick={() => removePerspective(perspective.id)}
-                  title="删除自定义透视"
+                  title="删除透视"
                 >
                   ×
                 </button>
               </div>
             ))}
-            {customPerspectives.length === 0 && (
-              <p className="px-2 py-1 text-xs text-muted-foreground">暂无自定义透视</p>
-            )}
           </div>
 
           <div className="mb-1 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -401,10 +383,10 @@ export function GtdSidebar() {
             {flatTags.map(tag => (
               <NavItem
                 key={tag.id}
-                active={selection.kind === 'tag' && selection.id === tag.id}
+                active={selection.focus?.field === FILTER_FIELD.TAG && selection.focus.id === tag.id}
                 icon={Tag}
                 label={tag.data.name}
-                onClick={() => setSelection({ kind: 'tag', id: tag.id })}
+                onClick={() => setSelection(selectTagFocus(tag.id))}
               />
             ))}
             <div className="flex gap-1 px-1 pt-1">

@@ -10,23 +10,25 @@ interface RequireAuthProps {
 }
 
 export function RequireAuth({ children }: RequireAuthProps) {
-  const { user, isLoading } = useAuth()
+  const { user, token, isLoading } = useAuth()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const isPublic = PUBLIC_PATHS.has(pathname)
+  /** token 在会话瞬断耗尽后仍保留：视为已登录，避免误踢登录页 */
+  const authed = user != null || token != null
 
   useEffect(() => {
     if (isLoading || isPublic)
       return
-    if (!user)
+    if (!authed)
       void navigate({ to: '/login' })
-  }, [isLoading, isPublic, user, navigate])
+  }, [isLoading, isPublic, authed, navigate])
 
   useEffect(() => {
-    if (isLoading || !user || !isPublic)
+    if (isLoading || !authed || !isPublic)
       return
     void navigate({ to: '/' })
-  }, [isLoading, isPublic, user, navigate])
+  }, [isLoading, isPublic, authed, navigate])
 
   if (isPublic)
     return <>{children}</>
@@ -39,7 +41,7 @@ export function RequireAuth({ children }: RequireAuthProps) {
     )
   }
 
-  if (!user)
+  if (!authed)
     return null
 
   return <>{children}</>

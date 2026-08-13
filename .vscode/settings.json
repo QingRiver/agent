@@ -30,7 +30,7 @@
     "editor.defaultFormatter": "dbaeumer.vscode-eslint"
   },
   "[json]": {
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+    "editor.defaultFormatter": "vscode.json-language-features"
   },
   "tailwindCSS.lint.suggestCanonicalClasses": "error",
   "explorer.fileNesting.enabled": true,

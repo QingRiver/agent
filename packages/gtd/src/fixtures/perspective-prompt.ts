@@ -1,6 +1,6 @@
 import type { PerspectiveInput, PerspectiveQuery } from '../view/perspective-input'
 import {
-  AVAILABILITY_FILTER,
+  BUILTIN_PERSPECTIVE_IDS,
   EXPLICIT_STATUS,
   FILTER_FIELD,
   GROUP_KEY,
@@ -23,15 +23,11 @@ export const PROMPT_FIXTURE_CONTEXT = {
   tags: [
     { id: 'tag-urgent', name: '紧急' },
   ],
-  builtinPerspectiveIds: ['inbox', 'projects', 'tags', 'forecast', 'flagged', 'review', 'completed'],
+  builtinPerspectiveIds: [...BUILTIN_PERSPECTIVE_IDS],
 }
 
 /** 本周到期且已旗标 — 一次性 Query（相对日期 + 嵌套 and） */
 export const QUERY_FLAGGED_DUE_THIS_WEEK: PerspectiveQuery = {
-  availabilityFilter: AVAILABILITY_FILTER.AVAILABLE,
-  showCompleted: false,
-  showDropped: false,
-  flaggedOnly: null,
   filter: {
     op: LOGIC_OP.AND,
     children: [
@@ -54,10 +50,6 @@ export const QUERY_FLAGGED_DUE_THIS_WEEK: PerspectiveQuery = {
 export const PERSIST_RENOVATION_ACTIVE: PerspectiveInput = {
   name: '装修进行中',
   icon: null,
-  availabilityFilter: AVAILABILITY_FILTER.REMAINING,
-  showCompleted: false,
-  showDropped: false,
-  flaggedOnly: null,
   filter: {
     op: LOGIC_OP.AND,
     children: [
@@ -73,10 +65,6 @@ export const PERSIST_RENOVATION_ACTIVE: PerspectiveInput = {
 export const PERSIST_INBOX_TRIAGE: PerspectiveInput = {
   name: 'Inbox 整理',
   icon: null,
-  availabilityFilter: AVAILABILITY_FILTER.REMAINING,
-  showCompleted: false,
-  showDropped: false,
-  flaggedOnly: null,
   filter: { op: LEAF_OP.EMPTY, field: FILTER_FIELD.PROJECT },
   groupBy: [],
   sortBy: [{ field: SORT_FIELD.ADDED_AT, dir: SORT_DIR.DESC }],
@@ -84,10 +72,6 @@ export const PERSIST_INBOX_TRIAGE: PerspectiveInput = {
 
 /** 非法：flagged + within（flagged 仅支持 is/is_not） */
 export const INVALID_FLAGGED_WITHIN: PerspectiveQuery = {
-  availabilityFilter: AVAILABILITY_FILTER.ALL,
-  showCompleted: false,
-  showDropped: false,
-  flaggedOnly: null,
   filter: {
     op: LEAF_OP.WITHIN,
     field: FILTER_FIELD.FLAGGED,

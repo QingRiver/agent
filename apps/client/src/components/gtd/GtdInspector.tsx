@@ -1,6 +1,6 @@
 import type { PerspectiveEntityRef } from '@agent/gtd'
 import type { DirDto } from '@apis/dir-api'
-import { EXPLICIT_STATUS, GROUP_TYPE, PLANNED_MODE } from '@agent/gtd'
+import { EXPLICIT_STATUS, FILTER_FIELD, GROUP_TYPE, PLANNED_MODE } from '@agent/gtd'
 import { GTD_TIME_END_OF_DAY, GTD_TIME_START_OF_DAY, startOfLocalDayIso } from '@components/gtd/gtd-datetime'
 import { GtdDateTimeField } from '@components/gtd/GtdDateTimeField'
 import { GtdRepeatEditor } from '@components/gtd/GtdRepeatEditor'
@@ -20,6 +20,7 @@ export function GtdInspector() {
     selectedProjectId,
     selection,
     patchTask,
+    moveTask,
     setTaskPlanned,
     dropTask,
     restoreTask,
@@ -46,7 +47,7 @@ export function GtdInspector() {
   const task = selectedTaskId ? rowStore.findLive('task', selectedTaskId) : null
   // project 退出 GTD sync，dir 信息来自 DirStore（dirsById 投影）
   const dirId = selectedProjectId
-    ?? (selection.kind === 'project' ? selection.id : null)
+    ?? (selection.focus?.field === FILTER_FIELD.PROJECT ? selection.focus.id : null)
   const dir = !task && dirId ? dirsById.get(dirId) ?? null : null
 
   if (task) {
@@ -87,7 +88,7 @@ export function GtdInspector() {
             <Select
               value={derivedProjectId ?? ''}
               disabled={!!task.data.parentId}
-              onChange={e => patchTask(task.id, { mountDirId: e.target.value || null })}
+              onChange={e => moveTask(task.id, { mountDirId: e.target.value || null })}
             >
               <option value="">收件箱</option>
               {projectRoots.map(p => (
@@ -288,7 +289,7 @@ export function GtdInspector() {
         onRename={renameDir}
         onDelete={dir.kind === 'project' ? removeProject : removeFolder}
         onFocus={dir.kind === 'project' ? () => selectProjectForInspector(dir.id) : undefined}
-        showFocus={selection.kind !== 'project' && selectedProjectId == null}
+        showFocus={selection.focus?.field !== FILTER_FIELD.PROJECT && selectedProjectId == null}
       />
     )
   }

@@ -2,12 +2,11 @@ import type { GroupKey, SortKey } from '../data/schema'
 import type { FilterNode, PerspectiveInputError, PerspectiveResolutionContext } from './filter'
 import { z } from 'zod'
 import {
-  AvailabilityFilterSchema,
   GroupKeySchema,
   SortDirSchema,
   SortFieldSchema,
 } from '../data/schema'
-import { FILTER_FIELD } from '../data/types'
+import { FILTER_FIELD, isBuiltinPerspectiveId } from '../data/types'
 import {
   allowedOpsForField,
   err,
@@ -18,8 +17,7 @@ import {
 
 /**
  * 透视输入校验（UI / MCP 共用）。过滤 DSL 的 schema / 求值 / 校验核心位于
- * {@link ./filter}；本文件只负责顶层 Perspective 形态（name / groupBy / sortBy /
- * availability 等开关）与 filter 树的编排。
+ * {@link ./filter}；本文件只负责顶层 Perspective 形态（name / groupBy / sortBy 等）与 filter 树的编排。
  */
 
 const SortKeyInputSchema = z.object({
@@ -33,10 +31,6 @@ export const PerspectiveInputSchema = z.object({
   filter: FilterNodeSchema.nullable(),
   groupBy: z.array(GroupKeySchema),
   sortBy: z.array(SortKeyInputSchema),
-  availabilityFilter: AvailabilityFilterSchema,
-  showCompleted: z.boolean(),
-  showDropped: z.boolean(),
-  flaggedOnly: z.boolean().nullable(),
 })
 
 export type PerspectiveInput = z.infer<typeof PerspectiveInputSchema>
@@ -56,10 +50,6 @@ interface ResolvedPerspectiveSpec {
   filter: FilterNode | null
   groupBy: GroupKey[]
   sortBy: SortKey[]
-  availabilityFilter: PerspectiveInput['availabilityFilter']
-  showCompleted: boolean
-  showDropped: boolean
-  flaggedOnly: boolean | null
 }
 
 interface ValidatePerspectiveInputOptions {
@@ -118,7 +108,7 @@ export function validatePerspectiveInput(
     }
   }
 
-  if (options.perspectiveId && context.builtinPerspectiveIds?.includes(options.perspectiveId)) {
+  if (options.perspectiveId && isBuiltinPerspectiveId(options.perspectiveId)) {
     errors.push(err(
       'id',
       FILTER_ERROR_CODE.BUILTIN_ID_RESERVED,
@@ -150,10 +140,6 @@ export function validatePerspectiveInput(
     filter,
     groupBy: data.groupBy,
     sortBy: data.sortBy,
-    availabilityFilter: data.availabilityFilter,
-    showCompleted: data.showCompleted,
-    showDropped: data.showDropped,
-    flaggedOnly: data.flaggedOnly,
   }
 
   if (options.mode === 'persist') {

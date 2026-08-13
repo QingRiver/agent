@@ -3,7 +3,7 @@
  *
  * 各函数接收 cmd + rows + nextSyncId，按状态机规则推进任务状态
  * （仅可推进态可推进；同态幂等 noop；异态拒绝 throw），并经 L3 `cascade.ts` 级联
- * （complete/drop/delete 向下、reopen/restore 向上）。complete 重复任务时克隆下一实例。
+ * （complete/drop/delete 向下；reopen/restore 仅自身）。complete 重复任务时克隆下一实例。
  * 纯 rows→rows，不持有状态、不落库；由 `sync/apply.ts` 的 `applyCommand` dispatch 调用。
  *
  * 状态机语义见 `wiki/draft/gtd行为规约.md` SP-STATE-2/3/4/5/6/8。
@@ -168,7 +168,7 @@ export function dropTask(
 }
 
 /**
- * reopen + 向上级联：COMPLETED → ACTIVE（清 completedAt）+ 链路 COMPLETED 祖先转 ACTIVE。
+ * reopen：COMPLETED → ACTIVE（清 completedAt）；仅自身，不上下联动。
  * 仅 completed 可重开；active 幂等 noop；hold/deleted 拒绝。
  * 重复任务（repeatRuleId != null）的 COMPLETED 不可重开（SP-INV-REPEAT-REOPEN）。
  */
@@ -198,7 +198,7 @@ export function reopenTask(
 }
 
 /**
- * restore + 向上级联：HOLD → ACTIVE（清 droppedAt）+ 链路 HOLD 祖先转 ACTIVE。
+ * restore：HOLD → ACTIVE（清 droppedAt）；仅自身，不上下联动。
  * 仅 hold 可恢复；active 幂等 noop；completed/deleted 拒绝。
  */
 export function restoreTask(

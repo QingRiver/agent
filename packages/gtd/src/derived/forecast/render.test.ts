@@ -20,17 +20,39 @@ describe('renderForecast', () => {
     ]
     const groups = renderForecast(
       new RowStore(rows),
-      opts([FORECAST_STRIP.TODAY]),
+      opts([FORECAST_STRIP.NOW]),
       NOW,
       DUE_SOON_MS,
       rows,
       TZ,
     )
-    expect(groups.map(g => g.key)).toEqual([FORECAST_STRIP.TODAY])
+    expect(groups.map(g => g.key)).toEqual([FORECAST_STRIP.NOW])
     expect(groups[0]!.children).toHaveLength(2)
   })
 
-  it('块内 computed 序：OVERDUE 先于 AVAILABLE', () => {
+  it('块内保层级：父在子前，同级按 order', () => {
+    const parent = makeTaskRow('p', {
+      name: '组',
+      groupType: GROUP_TYPE.SEQUENTIAL,
+      dueDate: TODAY,
+      order: 0,
+    })
+    const first = makeTaskRow('c1', { name: '1', parentId: 'p', order: 0 })
+    const second = makeTaskRow('c2', { name: '2', parentId: 'p', order: 1 })
+    const rows = [second, parent, first]
+    const groups = renderForecast(
+      new RowStore(rows),
+      opts([FORECAST_STRIP.NOW]),
+      NOW,
+      DUE_SOON_MS,
+      rows,
+      TZ,
+    )
+    expect(groups[0]!.children.map(c => ('taskId' in c ? c.taskId : ''))).toEqual(['p', 'c1', 'c2'])
+    expect(groups[0]!.children.map(c => ('depth' in c ? c.depth : null))).toEqual([0, 1, 1])
+  })
+
+  it('块内同级按 order（不再按 computed 全局插队）', () => {
     const overdue = makeTaskRow('a', {
       name: '过',
       dueDate: '2026-07-16T08:00:00.000Z',
@@ -44,15 +66,13 @@ describe('renderForecast', () => {
     const rows = [available, overdue]
     const groups = renderForecast(
       new RowStore(rows),
-      opts([FORECAST_STRIP.TODAY]),
+      opts([FORECAST_STRIP.NOW]),
       NOW,
       DUE_SOON_MS,
       rows,
       TZ,
     )
-    expect(groups[0]!.children.map(c => ('taskId' in c ? c.taskId : ''))).toEqual(['a', 'b'])
-    const first = groups[0]!.children[0]!
-    expect('computed' in first && first.computed).toBe(COMPUTED_STATUS.OVERDUE)
+    expect(groups[0]!.children.map(c => ('taskId' in c ? c.taskId : ''))).toEqual(['b', 'a'])
   })
 
   it('以后块标签用时区日历日（上海不因 UTC 错一天）', () => {
@@ -93,7 +113,7 @@ describe('renderForecast', () => {
     const filtered = [child]
     const groups = renderForecast(
       store,
-      opts([FORECAST_STRIP.TODAY]),
+      opts([FORECAST_STRIP.NOW]),
       NOW,
       DUE_SOON_MS,
       filtered,
@@ -125,7 +145,7 @@ describe('renderForecast', () => {
     const filtered = [parent, second]
     const groups = renderForecast(
       store,
-      opts([FORECAST_STRIP.TODAY]),
+      opts([FORECAST_STRIP.NOW]),
       NOW,
       DUE_SOON_MS,
       filtered,

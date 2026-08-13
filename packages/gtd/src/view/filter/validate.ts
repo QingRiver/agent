@@ -1,4 +1,6 @@
+import type { BuiltinPerspectiveId } from '../../data/types'
 import type { EntityRef, FilterNode, PerspectiveInputError, TemporalValue } from './schema'
+import { match, P } from 'ts-pattern'
 import { z } from 'zod'
 import { ExplicitStatusSchema } from '../../data/schema'
 import { FILTER_FIELD } from '../../data/types'
@@ -77,7 +79,7 @@ export interface PerspectiveResolutionContext {
   timeZone: string
   projects: PerspectiveEntityRef[]
   tags: PerspectiveTagRef[]
-  builtinPerspectiveIds?: string[]
+  builtinPerspectiveIds?: readonly BuiltinPerspectiveId[]
 }
 
 // ===== 时区 / 相对日期解析（日界原语见 ../time.ts） =====
@@ -267,206 +269,215 @@ function resolveLeafValue(
   context: PerspectiveResolutionContext,
   allowRelative: boolean,
 ): { ok: true, value: unknown } | { ok: false, errors: PerspectiveInputError[] } {
-  const errors: PerspectiveInputError[] = []
-  const { field, op, value } = node
+  const valuePath = `${path}.value`
 
-  if (isNullaryOp(op)) {
-    if (value !== undefined && value !== null) {
-      errors.push(err(
-        `${path}.value`,
+  return match(node)
+    .with({ op: P.when(isNullaryOp), value: P.optional(P.nullish) }, () => ({
+      ok: true as const,
+      value: null,
+    }))
+    .with({ op: P.when(isNullaryOp) }, ({ op, value }) => ({
+      ok: false as const,
+      errors: [err(
+        valuePath,
         FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
         `${op} 不需要 value`,
         { expected: null, received: value },
-      ))
-      return { ok: false, errors }
-    }
-    return { ok: true, value: null }
-  }
-
-  if (isStatusField(field)) {
-    const parsed = ExplicitStatusSchema.safeParse(value)
-    if (!parsed.success) {
-      errors.push(err(
-        `${path}.value`,
-        FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
-        'status is/is_not 需要 ExplicitStatus',
-        { expected: 'ExplicitStatus', received: value },
-      ))
-      return { ok: false, errors }
-    }
-    return { ok: true, value: parsed.data }
-  }
-
-  if (isFlaggedField(field)) {
-    const parsed = z.boolean().safeParse(value)
-    if (!parsed.success) {
-      errors.push(err(
-        `${path}.value`,
-        FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
-        'flagged is/is_not 需要 boolean',
-        { expected: 'boolean', received: value },
-      ))
-      return { ok: false, errors }
-    }
-    return { ok: true, value: parsed.data }
-  }
-
-  if (isNumericField(field)) {
-    if (op === 'within') {
+      )],
+    }))
+    .with({ field: P.when(isStatusField) }, ({ value }) => {
+      const parsed = ExplicitStatusSchema.safeParse(value)
+      if (!parsed.success) {
+        return {
+          ok: false as const,
+          errors: [err(
+            valuePath,
+            FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
+            'status is/is_not 需要 ExplicitStatus',
+            { expected: 'ExplicitStatus', received: value },
+          )],
+        }
+      }
+      return { ok: true as const, value: parsed.data }
+    })
+    .with({ field: P.when(isFlaggedField) }, ({ value }) => {
+      const parsed = z.boolean().safeParse(value)
+      if (!parsed.success) {
+        return {
+          ok: false as const,
+          errors: [err(
+            valuePath,
+            FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
+            'flagged is/is_not 需要 boolean',
+            { expected: 'boolean', received: value },
+          )],
+        }
+      }
+      return { ok: true as const, value: parsed.data }
+    })
+    .with({ field: P.when(isNumericField), op: 'within' }, ({ value }) => {
       const parsed = z.tuple([z.number(), z.number()]).safeParse(value)
       if (!parsed.success || parsed.data[0] > parsed.data[1]) {
-        errors.push(err(
-          `${path}.value`,
-          parsed.success
-            ? FILTER_ERROR_CODE.INVALID_DATE_RANGE
-            : FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
-          parsed.success ? 'estimate within 起止需升序' : 'estimate within 需要 [number, number]',
-          { expected: '[number, number]', received: value },
-        ))
-        return { ok: false, errors }
+        return {
+          ok: false as const,
+          errors: [err(
+            valuePath,
+            parsed.success
+              ? FILTER_ERROR_CODE.INVALID_DATE_RANGE
+              : FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
+            parsed.success ? 'estimate within 起止需升序' : 'estimate within 需要 [number, number]',
+            { expected: '[number, number]', received: value },
+          )],
+        }
       }
-      return { ok: true, value: parsed.data }
-    }
-    const parsed = z.number().safeParse(value)
-    if (!parsed.success) {
-      errors.push(err(
-        `${path}.value`,
-        FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
-        'estimate 比较需要 number（分钟）',
-        { expected: 'number', received: value },
-      ))
-      return { ok: false, errors }
-    }
-    return { ok: true, value: parsed.data }
-  }
-
-  if (isDateField(field)) {
-    if (op === 'within') {
+      return { ok: true as const, value: parsed.data }
+    })
+    .with({ field: P.when(isNumericField) }, ({ value }) => {
+      const parsed = z.number().safeParse(value)
+      if (!parsed.success) {
+        return {
+          ok: false as const,
+          errors: [err(
+            valuePath,
+            FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
+            'estimate 比较需要 number（分钟）',
+            { expected: 'number', received: value },
+          )],
+        }
+      }
+      return { ok: true as const, value: parsed.data }
+    })
+    .with({ field: P.when(isDateField), op: 'within' }, ({ value }) => {
       const pair = parseTemporalPair(value)
       if (!pair) {
-        errors.push(err(
-          `${path}.value`,
-          FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
-          '日期 within 需要 [TemporalValue, TemporalValue]',
-          { expected: '[TemporalValue, TemporalValue]', received: value },
-        ))
-        return { ok: false, errors }
+        return {
+          ok: false as const,
+          errors: [err(
+            valuePath,
+            FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
+            '日期 within 需要 [TemporalValue, TemporalValue]',
+            { expected: '[TemporalValue, TemporalValue]', received: value },
+          )],
+        }
       }
       const resolved: string[] = []
       for (let i = 0; i < pair.length; i++) {
         const r = resolveTemporalValue(pair[i]!, context.now, context.timeZone, allowRelative)
         if (!r.ok) {
-          errors.push(err(
-            `${path}.value[${i}]`,
-            r.code,
-            r.code === FILTER_ERROR_CODE.INVALID_DATE_TOKEN
-              ? '持久透视不接受相对日期；Query 仅支持白名单 token'
-              : '日期值无效',
-            { received: pair[i] },
-          ))
-          return { ok: false, errors }
+          return {
+            ok: false as const,
+            errors: [err(
+              `${valuePath}[${i}]`,
+              r.code,
+              r.code === FILTER_ERROR_CODE.INVALID_DATE_TOKEN
+                ? '持久透视不接受相对日期；Query 仅支持白名单 token'
+                : '日期值无效',
+              { received: pair[i] },
+            )],
+          }
         }
         resolved.push(r.value)
       }
       if (compareResolvedDates(resolved[0]!, resolved[1]!) > 0) {
-        errors.push(err(
-          `${path}.value`,
-          FILTER_ERROR_CODE.INVALID_DATE_RANGE,
-          '日期 within 起止需升序',
-          { expected: 'from <= to', received: resolved },
-        ))
-        return { ok: false, errors }
+        return {
+          ok: false as const,
+          errors: [err(
+            valuePath,
+            FILTER_ERROR_CODE.INVALID_DATE_RANGE,
+            '日期 within 起止需升序',
+            { expected: 'from <= to', received: resolved },
+          )],
+        }
       }
-      return { ok: true, value: resolved }
-    }
-
-    const temporal = parseTemporalValue(value)
-    if (!temporal) {
-      errors.push(err(
-        `${path}.value`,
-        FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
-        '日期运算符需要 TemporalValue',
-        { expected: 'TemporalValue', received: value },
-      ))
-      return { ok: false, errors }
-    }
-    const resolved = resolveTemporalValue(temporal, context.now, context.timeZone, allowRelative)
-    if (!resolved.ok) {
-      errors.push(err(
-        `${path}.value`,
-        resolved.code,
-        resolved.code === FILTER_ERROR_CODE.INVALID_DATE_TOKEN
-          ? '持久透视不接受相对日期；Query 仅支持白名单 token'
-          : '日期值无效',
-        { received: temporal },
-      ))
-      return { ok: false, errors }
-    }
-    return { ok: true, value: resolved.value }
-  }
-
-  // 实体字段：some
-  const kind = entityKindForField(field)
-  if (kind) {
-    const refs = parseEntityRefArray(value)
-    if (!refs) {
-      errors.push(err(
-        `${path}.value`,
-        FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
-        `${field} some 需要 EntityRef[]`,
-        { expected: 'EntityRef[]', received: value },
-      ))
-      return { ok: false, errors }
-    }
-    const ids: string[] = []
-    for (let i = 0; i < refs.length; i++) {
-      const resolved = resolveEntityRef(refs[i]!, kind, context)
+      return { ok: true as const, value: resolved }
+    })
+    .with({ field: P.when(isDateField) }, ({ value }) => {
+      const temporal = parseTemporalValue(value)
+      if (!temporal) {
+        return {
+          ok: false as const,
+          errors: [err(
+            valuePath,
+            FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
+            '日期运算符需要 TemporalValue',
+            { expected: 'TemporalValue', received: value },
+          )],
+        }
+      }
+      const resolved = resolveTemporalValue(temporal, context.now, context.timeZone, allowRelative)
       if (!resolved.ok) {
-        errors.push({ ...resolved.error, path: `${path}.value[${i}]` })
-        return { ok: false, errors }
+        return {
+          ok: false as const,
+          errors: [err(
+            valuePath,
+            resolved.code,
+            resolved.code === FILTER_ERROR_CODE.INVALID_DATE_TOKEN
+              ? '持久透视不接受相对日期；Query 仅支持白名单 token'
+              : '日期值无效',
+            { received: temporal },
+          )],
+        }
       }
-      ids.push(resolved.id)
-    }
-    return { ok: true, value: ids }
-  }
-
-  errors.push(err(
-    `${path}.value`,
-    FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
-    `无法解析 field=${field} op=${op} 的 value`,
-    { expected: expectedValueDescription(field, op), received: value },
-  ))
-  return { ok: false, errors }
+      return { ok: true as const, value: resolved.value }
+    })
+    .with({ field: P.when(isEntityField) }, ({ field, value }) => {
+      const kind = entityKindForField(field)!
+      const refs = parseEntityRefArray(value)
+      if (!refs) {
+        return {
+          ok: false as const,
+          errors: [err(
+            valuePath,
+            FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
+            `${field} some 需要 EntityRef[]`,
+            { expected: 'EntityRef[]', received: value },
+          )],
+        }
+      }
+      const ids: string[] = []
+      for (let i = 0; i < refs.length; i++) {
+        const resolved = resolveEntityRef(refs[i]!, kind, context)
+        if (!resolved.ok) {
+          return {
+            ok: false as const,
+            errors: [{ ...resolved.error, path: `${valuePath}[${i}]` }],
+          }
+        }
+        ids.push(resolved.id)
+      }
+      return { ok: true as const, value: ids }
+    })
+    .otherwise(({ field, op, value }) => ({
+      ok: false as const,
+      errors: [err(
+        valuePath,
+        FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
+        `无法解析 field=${field} op=${op} 的 value`,
+        { expected: expectedValueDescription(field, op), received: value },
+      )],
+    }))
 }
 
 // ===== 递归校验 =====
 
 /** 计算节点数（含自身） */
 function countNodes(node: FilterNode): number {
-  switch (node.op) {
-    case LOGIC_OP.AND:
-    case LOGIC_OP.OR:
-      return 1 + node.children.reduce((sum, c) => sum + countNodes(c), 0)
-    case LOGIC_OP.NOT:
-      return 1 + countNodes(node.child)
-    default:
-      return 1
-  }
+  return match(node)
+    .with({ op: P.union(LOGIC_OP.AND, LOGIC_OP.OR) }, n =>
+      1 + n.children.reduce((sum, c) => sum + countNodes(c), 0))
+    .with({ op: LOGIC_OP.NOT }, n => 1 + countNodes(n.child))
+    .otherwise(() => 1)
 }
 
 /** 计算深度（叶子=1，每层逻辑 +1） */
 function nodeDepth(node: FilterNode): number {
-  switch (node.op) {
-    case LOGIC_OP.AND:
-    case LOGIC_OP.OR: {
-      const childDepths = node.children.map(c => nodeDepth(c))
-      return 1 + (node.children.length === 0 ? 0 : Math.max(...childDepths))
-    }
-    case LOGIC_OP.NOT:
-      return 1 + nodeDepth(node.child)
-    default:
-      return 1
-  }
+  return match(node)
+    .with({ op: P.union(LOGIC_OP.AND, LOGIC_OP.OR) }, (n) => {
+      const childDepths = n.children.map(c => nodeDepth(c))
+      return 1 + (n.children.length === 0 ? 0 : Math.max(...childDepths))
+    })
+    .with({ op: LOGIC_OP.NOT }, n => 1 + nodeDepth(n.child))
+    .otherwise(() => 1)
 }
 
 function resolveNode(
@@ -475,51 +486,48 @@ function resolveNode(
   context: PerspectiveResolutionContext,
   allowRelative: boolean,
 ): { ok: true, value: FilterNode } | { ok: false, errors: PerspectiveInputError[] } {
-  switch (node.op) {
-    case LOGIC_OP.AND:
-    case LOGIC_OP.OR: {
-      if (node.children.length === 0) {
+  return match(node)
+    .with({ op: P.union(LOGIC_OP.AND, LOGIC_OP.OR) }, (n) => {
+      if (n.children.length === 0) {
         return {
-          ok: false,
-          errors: [err(`${path}.children`, FILTER_ERROR_CODE.INVALID_SHAPE, `${node.op} 至少需要 1 个子节点`)],
+          ok: false as const,
+          errors: [err(`${path}.children`, FILTER_ERROR_CODE.INVALID_SHAPE, `${n.op} 至少需要 1 个子节点`)],
         }
       }
       const children: FilterNode[] = []
-      for (let i = 0; i < node.children.length; i++) {
-        const r = resolveNode(node.children[i]!, `${path}.children[${i}]`, context, allowRelative)
+      for (let i = 0; i < n.children.length; i++) {
+        const r = resolveNode(n.children[i]!, `${path}.children[${i}]`, context, allowRelative)
         if (!r.ok)
           return r
         children.push(r.value)
       }
-      return { ok: true, value: { op: node.op, children } }
-    }
-    case LOGIC_OP.NOT: {
-      const r = resolveNode(node.child, `${path}.child`, context, allowRelative)
+      return { ok: true as const, value: { op: n.op, children } }
+    })
+    .with({ op: LOGIC_OP.NOT }, (n) => {
+      const r = resolveNode(n.child, `${path}.child`, context, allowRelative)
       if (!r.ok)
         return r
-      return { ok: true, value: { op: LOGIC_OP.NOT, child: r.value } }
-    }
-    default: {
-      // 叶子
-      const allowed = allowedOpsForField(node.field)
-      if (!allowed.includes(node.op)) {
+      return { ok: true as const, value: { op: LOGIC_OP.NOT, child: r.value } }
+    })
+    .otherwise((leaf) => {
+      const allowed = allowedOpsForField(leaf.field)
+      if (!allowed.includes(leaf.op)) {
         return {
-          ok: false,
+          ok: false as const,
           errors: [err(
             `${path}.op`,
             FILTER_ERROR_CODE.INVALID_FIELD_OP,
-            `字段 ${node.field} 不支持运算符 ${node.op}`,
-            { expected: allowed, received: node.op },
+            `字段 ${leaf.field} 不支持运算符 ${leaf.op}`,
+            { expected: allowed, received: leaf.op },
           )],
         }
       }
-      const v = resolveLeafValue(node, path, context, allowRelative)
+      const v = resolveLeafValue(leaf, path, context, allowRelative)
       if (!v.ok)
         return v
-      const leaf: FilterNode = { op: node.op, field: node.field, value: v.value }
-      return { ok: true, value: leaf }
-    }
-  }
+      const out: FilterNode = { op: leaf.op, field: leaf.field, value: v.value }
+      return { ok: true as const, value: out }
+    })
 }
 
 interface ValidateFilterNodeOptions {

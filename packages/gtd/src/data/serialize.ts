@@ -4,6 +4,7 @@
  */
 import type { FilterNode } from '../view/filter'
 import type { EntityRow, EntityRowOf, SyncEntity } from './sync-schema'
+import { match } from 'ts-pattern'
 import { z } from 'zod'
 import { EntityRowSchema } from './sync-schema'
 
@@ -57,52 +58,50 @@ export function remapRowIds(rows: EntityRow[], userId: string): EntityRow[] {
 
   return rows.map((r) => {
     const base = { userId, syncId: 0, deleted: false as const }
-    switch (r.entity) {
-      case 'tag':
-        return {
-          ...base,
-          entity: 'tag' as const,
-          id: mapId(r.id),
-          data: { ...r.data },
-        }
-      case 'perspective': {
-        const { filter, ...rest } = r.data
+    return match(r)
+      .with({ entity: 'tag' }, row => ({
+        ...base,
+        entity: 'tag' as const,
+        id: mapId(row.id),
+        data: { ...row.data },
+      }))
+      .with({ entity: 'perspective' }, (row) => {
+        const { filter, ...rest } = row.data
         return {
           ...base,
           entity: 'perspective' as const,
-          id: mapId(r.id),
+          id: mapId(row.id),
           data: {
             ...rest,
             filter: filter == null ? null : remapFilterNode(filter, idMap),
           },
         }
-      }
-      case 'attachment':
-        return {
-          ...base,
-          entity: 'attachment' as const,
-          id: mapId(r.id),
-          data: { ...r.data, taskId: mapId(r.data.taskId) },
-        }
-      case 'task_tag': {
-        const taskId = mapId(r.data.taskId)
-        const tagId = mapId(r.data.tagId)
+      })
+      .with({ entity: 'attachment' }, row => ({
+        ...base,
+        entity: 'attachment' as const,
+        id: mapId(row.id),
+        data: { ...row.data, taskId: mapId(row.data.taskId) },
+      }))
+      .with({ entity: 'task_tag' }, (row) => {
+        const taskId = mapId(row.data.taskId)
+        const tagId = mapId(row.data.tagId)
         return {
           ...base,
           entity: 'task_tag' as const,
           id: `${taskId}|${tagId}`,
           data: { taskId, tagId },
         }
-      }
-      case 'task': {
-        const d = r.data
+      })
+      .with({ entity: 'task' }, (row) => {
+        const d = row.data
         const repeatRule = d.repeatRule
           ? { ...d.repeatRule, id: mapId(d.repeatRule.id) }
           : (d.repeatRule ?? null)
         return {
           ...base,
           entity: 'task' as const,
-          id: mapId(r.id),
+          id: mapId(row.id),
           data: {
             ...d,
             parentId: mapOpt(d.parentId),
@@ -114,12 +113,8 @@ export function remapRowIds(rows: EntityRow[], userId: string): EntityRow[] {
             repeatRule,
           },
         }
-      }
-      default: {
-        const _exhaustive: never = r
-        return _exhaustive
-      }
-    }
+      })
+      .exhaustive()
   })
 }
 
