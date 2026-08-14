@@ -10,6 +10,7 @@ import { Label } from '@components/ui/label'
 import { Select } from '@components/ui/select'
 import { useGtd } from '@hooks/useGtd'
 import { DirStore } from '@stores/dir-store'
+import { TagsStore } from '@stores/tags-store'
 import { useAtomValue } from 'jotai'
 import { useState } from 'react'
 
@@ -17,14 +18,15 @@ export function GtdInspector() {
   const {
     rowStore,
     selectedTaskId,
-    selectedProjectId,
     selection,
     patchTask,
     moveTask,
     setTaskPlanned,
     dropTask,
     restoreTask,
+    restoreFromTrash,
     deleteTaskLogical,
+    purgeTrash,
     reopenTask,
     completeTask,
     toggleFlag,
@@ -34,25 +36,24 @@ export function GtdInspector() {
     setTaskGroupType,
     setTaskRepeat,
     setTaskTags,
-    renameDir,
-    removeProject,
-    removeFolder,
-    selectProjectForInspector,
   } = useGtd()
   const [childName, setChildName] = useState('')
 
   const dirsById = useAtomValue(DirStore.dirsByIdAtom)
   const projectRoots = useAtomValue(DirStore.projectRefsAtom) as PerspectiveEntityRef[]
+  const catalogTags = useAtomValue(TagsStore.tagsAtom)
 
   const task = selectedTaskId ? rowStore.findLive('task', selectedTaskId) : null
-  // project 退出 GTD sync，dir 信息来自 DirStore（dirsById 投影）
-  const dirId = selectedProjectId
-    ?? (selection.focus?.field === FILTER_FIELD.PROJECT ? selection.focus.id : null)
-  const dir = !task && dirId ? dirsById.get(dirId) ?? null : null
+  // 无选中任务时：selection.focus(PROJECT) 决定检视哪个 dir；有任务时检视任务（mount 见下方派生）
+  const dirId = !task && selection.focus?.field === FILTER_FIELD.PROJECT
+    ? selection.focus.id
+    : null
+  const dir = dirId ? dirsById.get(dirId) ?? null : null
 
   if (task) {
     const done = task.data.status === EXPLICIT_STATUS.COMPLETED
     const dropped = task.data.status === EXPLICIT_STATUS.HOLD
+    const trashed = task.data.status === EXPLICIT_STATUS.DELETED
     const tagIds = rowStore.tagIdsOf(task.id)
     const taskChildren = rowStore.liveTasks().filter(t => t.data.parentId === task.id)
     const repeatRule = task.data.repeatRule ?? null
@@ -99,7 +100,7 @@ export function GtdInspector() {
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">标签</Label>
             <div className="flex flex-wrap gap-1">
-              {rowStore.liveTags().map((tag) => {
+              {catalogTags.map((tag) => {
                 const on = tagIds.includes(tag.id)
                 return (
                   <button
@@ -115,11 +116,25 @@ export function GtdInspector() {
                       on ? 'bg-accent text-accent-foreground' : 'bg-card text-muted-foreground'
                     }`}
                   >
-                    {tag.data.name}
+                    {tag.name}
                   </button>
                 )
               })}
-              {rowStore.liveTags().length === 0 && (
+              {/* 绑定有、目录无：幽灵标仍可见，点击摘掉（不静默丢数据） */}
+              {tagIds
+                .filter(id => !catalogTags.some(t => t.id === id))
+                .map(id => (
+                  <button
+                    key={id}
+                    type="button"
+                    title={`未知标签 ${id}（目录已无；点击摘除）`}
+                    onClick={() => setTaskTags(task.id, tagIds.filter(x => x !== id))}
+                    className="min-h-8 rounded-md border border-dashed border-destructive/40 bg-destructive/5 px-2 py-1 text-xs text-destructive"
+                  >
+                    未知标签
+                  </button>
+                ))}
+              {catalogTags.length === 0 && tagIds.length === 0 && (
                 <span className="text-xs text-muted-foreground">暂无标签</span>
               )}
             </div>
@@ -249,32 +264,47 @@ export function GtdInspector() {
             <Button type="button" className="h-9" variant="outline" onClick={() => toggleFlag(task.id)}>
               {task.data.flagged ? '取消旗标' : '旗标'}
             </Button>
-            {done
+            {trashed
               ? (
-                  <Button type="button" className="h-9" variant="outline" onClick={() => reopenTask(task.id)}>
-                    重开
-                  </Button>
+                  <>
+                    <Button type="button" className="h-9" variant="outline" onClick={() => restoreFromTrash(task.id)}>
+                      移出回收站
+                    </Button>
+                    <Button
+                      type="button"
+                      className="h-9"
+                      variant="ghost"
+                      onClick={() => void purgeTrash([task.id])}
+                    >
+                      永久删除
+                    </Button>
+                  </>
                 )
-              : dropped
+              : done
                 ? (
-                    <Button type="button" className="h-9" variant="outline" onClick={() => restoreTask(task.id)}>
-                      恢复
+                    <Button type="button" className="h-9" variant="outline" onClick={() => reopenTask(task.id)}>
+                      重开
                     </Button>
                   )
-                : (
-                    <>
-                      <Button type="button" className="h-9" variant="outline" onClick={() => completeTask(task.id)}>
-                        完成
+                : dropped
+                  ? (
+                      <Button type="button" className="h-9" variant="outline" onClick={() => restoreTask(task.id)}>
+                        恢复
                       </Button>
-                      <Button type="button" className="h-9" variant="outline" onClick={() => dropTask(task.id)}>
-                        放弃
-                      </Button>
-                      {/* deleteTask command 仅 ACTIVE 可删（SP-STATE-6）；completed/hold 须先 reopen/restore 回 ACTIVE */}
-                      <Button type="button" className="h-9" variant="ghost" onClick={() => deleteTaskLogical(task.id)}>
-                        删除
-                      </Button>
-                    </>
-                  )}
+                    )
+                  : (
+                      <>
+                        <Button type="button" className="h-9" variant="outline" onClick={() => completeTask(task.id)}>
+                          完成
+                        </Button>
+                        <Button type="button" className="h-9" variant="outline" onClick={() => dropTask(task.id)}>
+                          放弃
+                        </Button>
+                        <Button type="button" className="h-9" variant="ghost" onClick={() => deleteTaskLogical(task.id)}>
+                          移到回收站
+                        </Button>
+                      </>
+                    )}
           </div>
         </div>
       </aside>
@@ -286,10 +316,8 @@ export function GtdInspector() {
       <DirInspector
         key={dir.id}
         dir={dir}
-        onRename={renameDir}
-        onDelete={dir.kind === 'project' ? removeProject : removeFolder}
-        onFocus={dir.kind === 'project' ? () => selectProjectForInspector(dir.id) : undefined}
-        showFocus={selection.focus?.field !== FILTER_FIELD.PROJECT && selectedProjectId == null}
+        onRename={(id, name) => void DirStore.rename(id, name)}
+        onDelete={id => void DirStore.delete(id)}
       />
     )
   }
@@ -312,14 +340,10 @@ function DirInspector({
   dir,
   onRename,
   onDelete,
-  onFocus,
-  showFocus,
 }: {
   dir: DirDto
   onRename: (id: string, name: string) => void
   onDelete: (id: string) => void
-  onFocus?: () => void
-  showFocus: boolean
 }) {
   const [name, setName] = useState(dir.name)
 
@@ -337,15 +361,6 @@ function DirInspector({
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {dir.kind === 'project' ? '项目' : '文件夹'}
         </span>
-        {showFocus && onFocus && (
-          <button
-            type="button"
-            className="text-[10px] text-muted-foreground hover:text-foreground"
-            onClick={onFocus}
-          >
-            聚焦
-          </button>
-        )}
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
         <div className="space-y-1">

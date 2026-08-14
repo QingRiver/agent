@@ -45,11 +45,9 @@ function detectCycle(
 export function validateInvariants(rowStore: RowStore): InvariantViolation[] {
   const violations: InvariantViolation[] = []
   const tasks = rowStore.liveTasks()
-  const tags = rowStore.liveTags()
   const attachments = rowStore.liveAttachments()
 
   const taskIds = new Set(tasks.map(t => t.id))
-  const tagIds = new Set(tags.map(t => t.id))
   const attachmentIds = new Set(attachments.map(a => a.id))
   const repeatRuleIds = new Set<string>()
   for (const t of tasks) {
@@ -59,7 +57,8 @@ export function validateInvariants(rowStore: RowStore): InvariantViolation[] {
   }
 
   for (const t of tasks) {
-    // projectId 是 server 派生冗余缓存（非 LWW），不在此校验；位置权威在 mountDirId。
+    // 位置权威在 mountDirId；project 归属经 CatalogProjection.projectOf 注入（非 RowStore）。
+    // task 领域删除 = status=DELETED（≠ envelope.deleted）；task_tag 软删走 envelope.deleted。勿双写。
     if (t.data.parentId && !taskIds.has(t.data.parentId)) {
       violations.push({ code: 'broken_reference', message: `Task ${t.id} parentId 悬空`, entityId: t.id })
     }
@@ -67,11 +66,7 @@ export function validateInvariants(rowStore: RowStore): InvariantViolation[] {
     if (t.data.parentId && !t.data.mountDirId) {
       violations.push({ code: 'invalid_inbox', message: `Task ${t.id} 有 parent 但无 mountDirId`, entityId: t.id })
     }
-    for (const tagId of rowStore.tagIdsOf(t.id)) {
-      if (!tagIds.has(tagId)) {
-        violations.push({ code: 'broken_reference', message: `Task ${t.id} tagId ${tagId} 悬空`, entityId: t.id })
-      }
-    }
+    // tag 目录已退出 sync：不在 RowStore 校验 tagId 是否存在（对齐 mountDirId / dirs）
     for (const attachmentId of rowStore.attachmentIdsOf(t.id)) {
       if (!attachmentIds.has(attachmentId)) {
         violations.push({
@@ -97,8 +92,8 @@ export function validateInvariants(rowStore: RowStore): InvariantViolation[] {
     }
     const terminalMissing
       = (t.data.status === EXPLICIT_STATUS.COMPLETED && !t.data.completedAt)
-        || ((t.data.status === EXPLICIT_STATUS.HOLD
-          || t.data.status === EXPLICIT_STATUS.DELETED) && !t.data.droppedAt)
+        || (t.data.status === EXPLICIT_STATUS.HOLD && !t.data.heldAt)
+        || (t.data.status === EXPLICIT_STATUS.DELETED && !t.data.droppedAt)
     if (terminalMissing) {
       violations.push({ code: 'missing_terminal_timestamp', message: `Task ${t.id} 终态缺时间戳`, entityId: t.id })
     }
@@ -122,7 +117,7 @@ export function validateInvariants(rowStore: RowStore): InvariantViolation[] {
     }
   }
 
-  // 同级 order 唯一：按 mountDirId（位置权威）+ parentId 分组，而非已弃用的 projectId 缓存
+  // 同级 order 唯一：按 mountDirId（位置权威）+ parentId 分组
   const orderKeys = new Set<string>()
   for (const t of tasks) {
     const key = `${t.data.mountDirId ?? ''}|${t.data.parentId ?? ''}|${t.data.order}`

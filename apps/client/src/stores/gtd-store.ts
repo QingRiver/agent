@@ -10,7 +10,6 @@ import type {
   PerspectiveInput,
   RepeatRule,
   SyncEntity,
-  Tag,
   Task,
 } from '@agent/gtd'
 import type { SyncStatus } from '../gtd/sync-engine'
@@ -23,14 +22,16 @@ import {
   DEFAULT_FORECAST_STRIP,
   entityFocusFilter,
   EXPLICIT_STATUS,
-  FILTER_FIELD,
   FORECAST_STRIP_ORDER,
   GROUP_TYPE,
   isBuiltinPerspectiveId,
+  isMutation,
+  isRemotePurgedReason,
   mergeFilter,
   normalizeDeferDue,
   orderBetween,
   orderImportRows,
+  parseRemotePurgedName,
   parseRows,
   PLANNED_MODE,
   reindexSiblings,
@@ -46,7 +47,7 @@ import {
 import { GtdApi } from '@apis/gtd-api'
 import { atom, getDefaultStore } from 'jotai'
 import { isContiguousStripSelection, toggleForecastStrip } from '../gtd/forecast-strip'
-import { applyLocal as applyRows, loadRows, mergeChanges, persistAndQueue } from '../gtd/row-store'
+import { applyLocal as applyRows, loadRows, mergeChanges, persistAndQueue, persistLastSyncId, persistRows, removeOutboxIds } from '../gtd/row-store'
 import { SyncEngine } from '../gtd/sync-engine'
 import {
   DEFAULT_GTD_SELECTION,
@@ -57,6 +58,7 @@ import {
   viewOptionsScope,
 } from '../gtd/view-options'
 import { DirStore } from './dir-store'
+import { TagsStore } from './tags-store'
 
 export type { GtdSelection }
 
@@ -258,16 +260,16 @@ function writeViewOptionsMap(map: Record<string, Partial<PerspectiveViewOptions>
   }
 }
 
-/** 透视校验上下文：projects 来自 dirs 树（统一树），tags 来自 RowStore */
+/** 透视校验上下文：projects/tags 均来自在线目录缓存（DirStore / TagsStore） */
 function perspectiveValidationContext(
-  store: RowStore,
   dirs: { projects: { id: string, name: string }[] },
+  tags: { id: string, name: string }[],
 ) {
   return {
     now: new Date(),
     timeZone: new Intl.DateTimeFormat().resolvedOptions().timeZone,
     projects: dirs.projects,
-    tags: store.liveTags().map(t => ({ id: t.id, name: t.data.name })),
+    tags,
     builtinPerspectiveIds: BUILTIN_PERSPECTIVE_IDS,
   }
 }
@@ -278,8 +280,14 @@ function resolvePerspectiveBase(store: RowStore, perspectiveId: string): Perspec
     return builtin ?? builtinPerspectives()[0]!
   }
   const row = store.livePerspectives().find(p => p.id === perspectiveId)
-  if (row)
-    return { id: row.id, ...row.data }
+  if (row) {
+    // row.data.filter 在 zod 为 unknown；写入时已经 validatePerspectiveInput
+    return {
+      id: row.id,
+      ...row.data,
+      filter: row.data.filter as Perspective['filter'],
+    }
+  }
   return builtinPerspectives()[0]!
 }
 
@@ -312,27 +320,33 @@ function tShape(s: EntityRowOf<'task'>) {
   return { id: s.id, ...s.data }
 }
 
-/**
- * 重排 dir 同级（fractional order）：按 parentId 过滤同级 → targetOrder 算新 sortOrder +
- * 受影响兄弟 → DirStore.reorderBatch 单次落库。project 根（parentId=null）与 dir 子节点统一走此。
- */
-async function reorderDirSibling(
-  id: string,
-  target: { beforeId: string | null, afterId: string | null },
-  parentId: string | null,
-): Promise<void> {
-  const dirs = getDefaultStore().get(DirStore.dirsAtom)
-  const siblings = dirs
-    .filter(d => d.id !== id && d.parentId === parentId)
-    .map(d => ({ id: d.id, order: d.sortOrder }))
-  const result = targetOrder(siblings, target.beforeId, target.afterId)
-  const updates: { id: string, sortOrder: number }[] = [{ id, sortOrder: result.order }]
-  for (const sib of siblings) {
-    const order = result.reindexed.get(sib.id)
-    if (order != null)
-      updates.push({ id: sib.id, sortOrder: order })
+/** server soft reject：目录缺失 / 远端 purge → 不 syncLocked */
+function isSoftReject(reason: string): boolean {
+  return /^tag .+ not found$/.test(reason) || isRemotePurgedReason(reason)
+}
+
+/** 从 outbox 条目解析关联的 task id */
+function taskIdFromOutboxItem(item: GtdMutation | GtdCommand): string | null {
+  if (isMutation(item)) {
+    if (item.entity === 'task')
+      return item.entityId
+    if (item.op === 'upsert' && item.entity === 'task_tag')
+      return item.patch.taskId
+    if (item.op === 'upsert' && item.entity === 'attachment') {
+      const tid = item.patch?.taskId
+      return typeof tid === 'string' ? tid : null
+    }
+    if (item.op === 'delete' && item.entity === 'task_tag') {
+      const bar = item.entityId.indexOf('|')
+      return bar > 0 ? item.entityId.slice(0, bar) : null
+    }
+    if (item.op === 'delete' && item.entity === 'attachment') {
+      // attachment delete 无 taskId；无法从 entityId 反查
+      return null
+    }
+    return null
   }
-  await DirStore.reorderBatch(updates)
+  return item.taskId
 }
 
 // ---------------- Store ----------------
@@ -362,28 +376,15 @@ function maxSyncId(rows: EntityRow[]): number {
 export class GtdStore {
   static readonly userIdAtom = atom<string | undefined>(undefined)
   static readonly rowsAtom = atom<EntityRow[]>([])
-  static readonly rowStoreAtom = atom((get) => {
-    // 注入 dirs 派生投影：projectOf / dirNameOf（分组标题用名）。
-    // 捕获 dirsById 值（非 get），rowStoreAtom 依赖 dirsAtom → dirs 变即重算 RowStore。
-    const dirsById = get(DirStore.dirsByIdAtom)
-    return new RowStore(get(GtdStore.rowsAtom), {
-      projectOf: task => DirStore.projectOf(dirsById, task.data.mountDirId),
-      dirNameOf: (dirId) => {
-        const name = dirsById.get(dirId)?.name
-        return name != null && name !== '' ? name : null
-      },
-    })
-  })
+  static readonly rowStoreAtom = atom(get => new RowStore(get(GtdStore.rowsAtom)))
 
   static readonly selectionAtom = atom<GtdSelection>(readSelection())
   static readonly forecastStripAtom = atom<ForecastStripKey[]>(readForecastStrip())
   static readonly forecastSignalsAtom = atom<ForecastSignalOptions>(readForecastSignals())
   static readonly viewOptionsAtom = atom<Record<string, Partial<PerspectiveViewOptions>>>(readViewOptionsMap())
   static readonly selectedTaskIdAtom = atom<string | null>(null)
-  static readonly selectedProjectIdAtom = atom<string | null>(null)
   static readonly isLoadingAtom = atom(false)
   static readonly syncStatusAtom = atom<SyncStatus>('idle')
-  static readonly savingAtom = atom(get => get(GtdStore.syncStatusAtom) === 'syncing')
   static readonly syncLockedAtom = atom(false)
   static readonly errorAtom = atom<string | null>(null)
   static readonly dueSoonMs = DUE_SOON_MS
@@ -406,7 +407,6 @@ export class GtdStore {
       await engine.logout()
       s.set(GtdStore.rowsAtom, [])
       s.set(GtdStore.selectedTaskIdAtom, null)
-      s.set(GtdStore.selectedProjectIdAtom, null)
       s.set(GtdStore.errorAtom, null)
       return
     }
@@ -426,10 +426,27 @@ export class GtdStore {
       // syncEngine 启动 + 注册 onSynced（背景 pull/push 后以服务端权威 changes 刷内存）
       const engine = getSyncEngine()
       engine.setStatusListener(status => s.set(GtdStore.syncStatusAtom, status))
-      engine.setRejectedListener((rejected) => {
-        // reject 锁前端（不做乐观行回滚），用户点「恢复」→ clear 本地 + pull 服务端
+      engine.setRejectedListener((rejected, outboxSnapshot) => {
+        const soft = rejected.filter(r => isSoftReject(r.reason))
+        const hard = rejected.filter(r => !isSoftReject(r.reason))
+        const remotePurged = soft.filter(r => isRemotePurgedReason(r.reason))
+        if (remotePurged.length > 0)
+          GtdStore.forkRemotePurgedToTrash(remotePurged, outboxSnapshot)
+        if (hard.length === 0) {
+          if (rejected.length) {
+            const msgs = soft.map((r) => {
+              if (isRemotePurgedReason(r.reason)) {
+                const name = parseRemotePurgedName(r.reason) ?? '任务'
+                return `任务「${name}」已在远端被删除`
+              }
+              return r.reason
+            })
+            s.set(GtdStore.errorAtom, msgs.join('；'))
+          }
+          return
+        }
         s.set(GtdStore.syncLockedAtom, true)
-        s.set(GtdStore.errorAtom, rejected.map(r => r.reason).join('; '))
+        s.set(GtdStore.errorAtom, hard.map(r => r.reason).join('; '))
       })
       engine.setSyncedListener((changes) => {
         if (gen !== GtdStore.loadGeneration)
@@ -458,10 +475,6 @@ export class GtdStore {
     s.set(GtdStore.selectionAtom, sel)
     writeSelection(sel)
     s.set(GtdStore.selectedTaskIdAtom, null)
-    s.set(
-      GtdStore.selectedProjectIdAtom,
-      sel.focus?.field === FILTER_FIELD.PROJECT ? sel.focus.id : null,
-    )
   }
 
   /** 三段条点击：连续多选扩展/端点收缩 */
@@ -505,14 +518,6 @@ export class GtdStore {
 
   static selectTask(taskId: string | null): void {
     GtdStore.store().set(GtdStore.selectedTaskIdAtom, taskId)
-    if (taskId)
-      GtdStore.store().set(GtdStore.selectedProjectIdAtom, null)
-  }
-
-  static selectProjectForInspector(projectId: string | null): void {
-    GtdStore.store().set(GtdStore.selectedProjectIdAtom, projectId)
-    if (projectId)
-      GtdStore.store().set(GtdStore.selectedTaskIdAtom, null)
   }
 
   /**
@@ -561,8 +566,15 @@ export class GtdStore {
     return true
   }
 
-  static async flushSave(): Promise<void> {
-    await getSyncEngine().sync()
+  /**
+   * REST 改了绑定行（删标 untag 等）后：pull 进 IDB，并强制刷 rowsAtom。
+   * 不依赖 GtdSync 是否挂载 / onSynced 是否已注册。
+   */
+  static async refreshBindingsFromServer(): Promise<void> {
+    const s = GtdStore.store()
+    const engine = getSyncEngine()
+    await engine.syncRemoteBindings()
+    s.set(GtdStore.rowsAtom, await loadRows())
   }
 
   /**
@@ -601,6 +613,7 @@ export class GtdStore {
         plannedMode: PLANNED_MODE.NONE,
         plannedDate: null,
         completedAt: null,
+        heldAt: null,
         droppedAt: null,
         flagged: false,
         estimateMinutes: null,
@@ -614,18 +627,18 @@ export class GtdStore {
     })
   }
 
-  static addProjectTask(projectId: string, name: string): void {
+  static addProjectTask(mountDirId: string, name: string): void {
     const trimmed = name.trim()
     if (!trimmed)
       return
     GtdStore.applyLocal((store) => {
       const now = nowIso()
       const id = newId()
-      const siblings = store.liveTasks().filter(t => t.data.mountDirId === projectId && t.data.parentId == null).map(tShape)
+      const siblings = store.liveTasks().filter(t => t.data.mountDirId === mountDirId && t.data.parentId == null).map(tShape)
       const data = {
         name: trimmed,
         note: null,
-        mountDirId: projectId,
+        mountDirId,
         parentId: null,
         order: nextOrder(siblings),
         status: EXPLICIT_STATUS.ACTIVE,
@@ -635,6 +648,7 @@ export class GtdStore {
         plannedMode: PLANNED_MODE.NONE,
         plannedDate: null,
         completedAt: null,
+        heldAt: null,
         droppedAt: null,
         flagged: false,
         estimateMinutes: null,
@@ -674,6 +688,7 @@ export class GtdStore {
         plannedMode: PLANNED_MODE.NONE,
         plannedDate: null,
         completedAt: null,
+        heldAt: null,
         droppedAt: null,
         flagged: false,
         estimateMinutes: null,
@@ -828,9 +843,119 @@ export class GtdStore {
       const task = store.findLive('task', taskId)
       if (!task)
         throw new Error('任务不存在')
-      // deleteTask command 仅 ACTIVE 可删（SP-STATE-6）；completed/hold 须先 reopen/restore 回 ACTIVE
+      // delete → 进回收站；仅 ACTIVE（SP-STATE-6）
       return [cmd({ type: 'delete', taskId })]
     })
+  }
+
+  /** 移出回收站：DELETED → ACTIVE（仅自身） */
+  static restoreFromTrash(taskId: string): void {
+    GtdStore.applyLocal((store) => {
+      const task = store.findLive('task', taskId)
+      if (!task)
+        throw new Error('任务不存在')
+      return [cmd({ type: 'restore_from_trash', taskId })]
+    })
+  }
+
+  /**
+   * 在线永久删除回收站任务（旁路 outbox）。
+   * 须 online；成功后 merge 权威 changes。
+   */
+  static async purgeTrash(taskIds: string[]): Promise<void> {
+    const s = GtdStore.store()
+    if (!navigator.onLine) {
+      s.set(GtdStore.errorAtom, '永久删除需要联网')
+      return
+    }
+    if (taskIds.length === 0)
+      return
+    try {
+      const res = await GtdApi.purgeTrash({ taskIds })
+      s.set(GtdStore.rowsAtom, mergeChanges(s.get(GtdStore.rowsAtom), res.changes))
+      await persistRows(res.changes)
+      await persistLastSyncId(res.serverSyncId)
+      if (res.skipped.length > 0) {
+        s.set(
+          GtdStore.errorAtom,
+          res.skipped.map(x => `${x.id}: ${x.reason}`).join('; '),
+        )
+      }
+      else {
+        s.set(GtdStore.errorAtom, null)
+      }
+      const sel = s.get(GtdStore.selectedTaskIdAtom)
+      if (sel && taskIds.includes(sel))
+        s.set(GtdStore.selectedTaskIdAtom, null)
+    }
+    catch (e) {
+      s.set(GtdStore.errorAtom, e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  /**
+   * REMOTE_PURGED：把本地理应更新的内容 fork 为新 id 进回收站，并清旧 id 相关 outbox。
+   * 在 SyncEngine rebase 前调用（仍持有 outbox 快照）。
+   */
+  private static forkRemotePurgedToTrash(
+    rejected: Array<{ id: string, reason: string }>,
+    outboxSnapshot: Array<GtdMutation | GtdCommand>,
+  ): void {
+    const byOutboxId = new Map(outboxSnapshot.map(i => [i.id, i]))
+    const oldTaskIds = new Set<string>()
+    for (const r of rejected) {
+      const item = byOutboxId.get(r.id)
+      if (!item)
+        continue
+      const tid = taskIdFromOutboxItem(item)
+      if (tid)
+        oldTaskIds.add(tid)
+    }
+    if (oldTaskIds.size === 0)
+      return
+
+    // 清所有仍指向旧 id 的 outbox（含未在本批 rejected 的）
+    const extraOutboxIds = outboxSnapshot
+      .filter((i) => {
+        const tid = taskIdFromOutboxItem(i)
+        return tid != null && oldTaskIds.has(tid)
+      })
+      .map(i => i.id)
+    void removeOutboxIds(extraOutboxIds)
+
+    const s = GtdStore.store()
+    const rows = s.get(GtdStore.rowsAtom)
+    const store = new RowStore(rows)
+    const ts = nowIso()
+
+    for (const oldId of oldTaskIds) {
+      // 含 tombstone：优先 live，否则任意同 id 行
+      const old = store.findLive('task', oldId)
+        ?? rows.find((r): r is EntityRowOf<'task'> => r.entity === 'task' && r.id === oldId)
+      if (!old)
+        continue
+      const newId = crypto.randomUUID()
+      const tagIds = store.tagIdsOf(oldId)
+      GtdStore.applyLocal(() => {
+        const items: Array<GtdMutation | GtdCommand> = [
+          upsertMut('task', newId, {
+            ...old.data,
+            id: newId,
+            status: EXPLICIT_STATUS.DELETED,
+            droppedAt: ts,
+            heldAt: null,
+            completedAt: null,
+            updatedAt: ts,
+            createdAt: ts,
+            repeatedFromTaskId: null,
+          }),
+        ]
+        for (const tagId of tagIds) {
+          items.push(upsertMut('task_tag', `${newId}|${tagId}`, { taskId: newId, tagId }))
+        }
+        return items
+      })
+    }
   }
 
   static toggleFlag(taskId: string): void {
@@ -922,8 +1047,8 @@ export class GtdStore {
         throw new Error('按截止日重复的任务不能清空截止日期')
       if (rule?.anchor === REPEAT_ANCHOR.DEFER && patch.deferDate === null)
         throw new Error('按推迟日重复的任务不能清空推迟日期')
-      // 行模型 task 无 tagIds/attachmentIds；repeatRule/repeatRuleId 由 setTaskRepeat 维护
-      const { id: _id, tagIds: _t, attachmentIds: _a, repeatRuleId: _rid, ...rest } = patch
+      // 行模型：标签走 task_tag；repeatRule/repeatRuleId 由 setTaskRepeat 维护
+      const { id: _id, repeatRuleId: _rid, ...rest } = patch
       const datePatch: { deferDate?: string | null, dueDate?: string | null } = {}
       if (Object.hasOwn(patch, 'deferDate'))
         datePatch.deferDate = patch.deferDate ?? null
@@ -995,10 +1120,11 @@ export class GtdStore {
 
   static addPerspective(input: PerspectiveInput): boolean {
     const dirs = GtdStore.store().get(DirStore.validationRefsAtom)
-    return GtdStore.applyLocal((store) => {
+    const tags = GtdStore.store().get(TagsStore.tagRefsAtom)
+    return GtdStore.applyLocal((_store) => {
       const result = validatePerspectiveInput(
         input,
-        perspectiveValidationContext(store, dirs),
+        perspectiveValidationContext(dirs, tags),
         { mode: 'persist' },
       )
       if (!result.ok)
@@ -1020,12 +1146,13 @@ export class GtdStore {
 
   static patchPerspective(id: string, input: PerspectiveInput): boolean {
     const dirs = GtdStore.store().get(DirStore.validationRefsAtom)
+    const tags = GtdStore.store().get(TagsStore.tagRefsAtom)
     return GtdStore.applyLocal((store) => {
       if (!store.livePerspectives().some(p => p.id === id))
         throw new Error('自定义透视不存在')
       const result = validatePerspectiveInput(
         input,
-        perspectiveValidationContext(store, dirs),
+        perspectiveValidationContext(dirs, tags),
         { mode: 'persist', perspectiveId: id },
       )
       if (!result.ok)
@@ -1047,97 +1174,6 @@ export class GtdStore {
     const selection = s.get(GtdStore.selectionAtom)
     if (selection.perspectiveId === id)
       GtdStore.setSelection(selectPerspective(BUILTIN_PERSPECTIVE_ID.FORECAST))
-  }
-
-  // ---------- Projects / Dirs（在线 Dir API，project=根=纯命名作用域） ----------
-  // project/folder 退出 sync，CRUD 走 DirStore（DirApi）。project facet 全弃用
-  // （type/status/review/default_*/flagged/note 删）；project 仅剩 name（rename）。
-
-  /** 创建 project 根（kind=project，parentId=null） */
-  static async addProject(name: string): Promise<void> {
-    const trimmed = name.trim()
-    if (!trimmed)
-      return
-    await DirStore.createProject(trimmed)
-  }
-
-  /** 改名（project/dir 统一走 DirApi.rename） */
-  static async renameDir(id: string, name: string): Promise<void> {
-    await DirStore.rename(id, name.trim())
-  }
-
-  /** 删 dir/project（须空：无子 dir + 无挂载 task；v1 不级联） */
-  static async removeProject(id: string): Promise<void> {
-    await DirStore.delete(id)
-  }
-
-  /** 移动 dir 到新父（跨 project 级联子树 dirs + task projectId） */
-  static async moveDir(id: string, newParentId: string, sortOrder?: number): Promise<void> {
-    await DirStore.move(id, newParentId, sortOrder)
-  }
-
-  static async reorderProject(
-    id: string,
-    target: { beforeId: string | null, afterId: string | null },
-  ): Promise<void> {
-    await reorderDirSibling(id, target, null)
-  }
-
-  // ---------- Tags ----------
-
-  static addTag(name: string): void {
-    const trimmed = name.trim()
-    if (!trimmed)
-      return
-    GtdStore.applyLocal(() => {
-      const now = nowIso()
-      const id = newId()
-      const data = {
-        name: trimmed,
-        color: null,
-        createdAt: now,
-        updatedAt: null,
-      }
-      return [upsertMut('tag', id, data)]
-    })
-  }
-
-  static patchTag(tagId: string, patch: Partial<Tag>): void {
-    GtdStore.applyLocal(() => {
-      const { id: _id, ...rest } = patch
-      return [upsertMut('tag', tagId, { ...rest, updatedAt: nowIso() })]
-    })
-  }
-
-  static removeTag(tagId: string): void {
-    GtdStore.applyLocal(() => {
-      // project defaultTagIds 已弃用（facet 全删），仅删 tag
-      const items: Array<GtdMutation | GtdCommand> = [cmd({ type: 'delete_tag', payload: { tagId } })]
-      return items
-    })
-  }
-
-  // ---------- Dirs（folder 退出 sync，dir 子节点走 Dir API） ----------
-
-  /** 创建 dir 子节点（kind=dir，须有 parent） */
-  static async addFolder(name: string, parentId: string): Promise<void> {
-    const trimmed = name.trim()
-    if (!trimmed)
-      return
-    await DirStore.createDir(parentId, trimmed)
-  }
-
-  static async reorderFolder(
-    id: string,
-    target: { beforeId: string | null, afterId: string | null },
-  ): Promise<void> {
-    // folder=dir：需查其 parentId 定位同级。reorderDirSibling 内部按 parentId 过滤同级。
-    const dir = GtdStore.store().get(DirStore.dirsByIdAtom).get(id)
-    await reorderDirSibling(id, target, dir?.parentId ?? null)
-  }
-
-  static async removeFolder(id: string): Promise<void> {
-    await DirStore.delete(id)
   }
 
   // ---------- 导入 / 导出（行级 JSON v2.0.0） ----------

@@ -1,3 +1,4 @@
+export * from './binary'
 export * from './engine'
 export * from './helpers'
 export * from './merge'

@@ -50,7 +50,7 @@ describe('view options', () => {
     expect(viewOptionsScope(selectPerspective('custom-uuid'))).toBe('custom-uuid')
   })
 
-  it('resolveAvailabilityFilter：读 overlay 或默认 REMAINING', () => {
+  it('resolveAvailabilityFilter：读 overlay 或默认 REMAINING；trash 默认 ALL', () => {
     expect(resolveAvailabilityFilter('custom-uuid', {
       availabilityFilter: AVAILABILITY_FILTER.AVAILABLE,
     })).toBe(AVAILABILITY_FILTER.AVAILABLE)
@@ -60,6 +60,9 @@ describe('view options', () => {
 
     expect(resolveAvailabilityFilter('custom-uuid', undefined))
       .toBe(AVAILABILITY_FILTER.REMAINING)
+
+    expect(resolveAvailabilityFilter(BUILTIN_PERSPECTIVE_ID.TRASH, undefined))
+      .toBe(AVAILABILITY_FILTER.ALL)
   })
 
   it('parse：任意合法透视键均可；非法 availability 丢弃', () => {

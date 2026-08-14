@@ -19,6 +19,7 @@ import type { EntityRowOf } from '../data/sync-schema'
 import type { AvailabilityFilter, BuiltinPerspectiveId } from '../data/types'
 import type { ForecastOptions } from '../derived/forecast'
 import type { TaskNode, TaskTree } from '../structure/tree'
+import type { CatalogProjection } from './catalog'
 import type { FilterEvalContext, FilterNode } from './filter'
 import {
   AVAILABILITY_FILTER,
@@ -55,7 +56,7 @@ export interface RenderGroup {
   children: Array<RenderGroup | RenderItem>
 }
 
-export interface RenderContext {
+export interface RenderContext extends CatalogProjection {
   rowStore: RowStore
   tree: TaskTree
   now: Date
@@ -67,9 +68,20 @@ export interface RenderContext {
   collapsibleSet: Set<string>
 }
 
-export interface RenderPerspectiveOptions {
+export interface RenderPerspectiveOptions extends CatalogProjection {
   availabilityFilter?: AvailabilityFilter
   forecastOptions?: ForecastOptions
+}
+
+function catalogFromOptions(options?: RenderPerspectiveOptions): CatalogProjection {
+  const catalog: CatalogProjection = {}
+  if (options?.projectOf)
+    catalog.projectOf = options.projectOf
+  if (options?.dirNameOf)
+    catalog.dirNameOf = options.dirNameOf
+  if (options?.tagNameOf)
+    catalog.tagNameOf = options.tagNameOf
+  return catalog
 }
 
 // ─── 入口 ───────────────────────────────────────────────────────────────────
@@ -85,11 +97,21 @@ export function renderPerspective(
 ): RenderGroup[] {
   const availabilityFilter = options?.availabilityFilter ?? DEFAULT_AVAILABILITY_FILTER
   const forecastOptions = options?.forecastOptions
+  const catalog = catalogFromOptions(options)
 
   const tasks = rowStore.liveTasks()
   const tree = buildTaskTree(tasks)
   // ctx 先建（applyBaseFilter 需 ctx）；forecast 传空 collapsibleSet 不塌陷 [SP-COLLAPSE-FORECAST-NOOP]，通用路径 filter 后重算
-  const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map(), timeZone, collapsibleSet: new Set() }
+  const ctx: RenderContext = {
+    rowStore,
+    tree,
+    now,
+    dueSoonIntervalMs,
+    statusCache: new Map(),
+    timeZone,
+    collapsibleSet: new Set(),
+    ...catalog,
+  }
   let filtered = applyBaseFilter(tasks, availabilityFilter, ctx)
 
   if (perspective.id === BUILTIN_PERSPECTIVE_ID.FORECAST) {
@@ -97,7 +119,7 @@ export function renderPerspective(
     return renderForecast(rowStore, opts, now, dueSoonIntervalMs, filtered, timeZone)
   }
 
-  const evalCtx: FilterEvalContext = { rowStore, tree }
+  const evalCtx: FilterEvalContext = { rowStore, tree, ...catalog }
   filtered = filtered.filter(t => matchFilter(t, perspective.filter, evalCtx))
 
   const matchedIds = new Set(filtered.map(t => t.id))
@@ -107,9 +129,9 @@ export function renderPerspective(
   const collapsibleSet = computeCollapsibleSet(tree, matchedIds, expandedIds)
   ctx.collapsibleSet = collapsibleSet
   const visible = tasks.filter(t => expandedIds.has(t.id) && !collapsibleSet.has(t.id))
-  const result = flattenInTreeOrder(tree, visible, perspective.sortBy, rowStore, collapsibleSet)
+  const result = flattenInTreeOrder(tree, visible, perspective.sortBy, rowStore, collapsibleSet, catalog)
 
-  return groupBy(result, perspective.groupBy, rowStore, ctx)
+  return groupBy(result, perspective.groupBy, ctx)
 }
 
 // ─── 1. 可用性 base filter ──────────────────────────────────────────────────
@@ -206,22 +228,22 @@ function compareField(
   a: EntityRowOf<'task'>,
   b: EntityRowOf<'task'>,
   field: string,
-  rowStore: RowStore,
-  tree: TaskTree,
+  ctx: FilterEvalContext,
 ): number {
+  const tree = ctx.tree
   // DUE/DEFER 切 effective（天花板/地板派生，父子继承）；其余字段用 raw 物理值
-  if (field === FILTER_FIELD.DUE_DATE || field === SORT_FIELD.DUE_DATE) {
+  if (tree && (field === FILTER_FIELD.DUE_DATE || field === SORT_FIELD.DUE_DATE)) {
     return compareIso(effectiveDue(a, tree), effectiveDue(b, tree))
   }
-  if (field === FILTER_FIELD.DEFER_DATE || field === SORT_FIELD.DEFER_DATE) {
+  if (tree && (field === FILTER_FIELD.DEFER_DATE || field === SORT_FIELD.DEFER_DATE)) {
     return compareIso(effectiveDefer(a, tree), effectiveDefer(b, tree))
   }
   // ORDER 用 raw 物理值，但 rawValue 不识别 'order'（返回 null 会短路成 0）→ 须在 rawValue 前处理
   if (field === SORT_FIELD.ORDER) {
     return a.data.order - b.data.order
   }
-  const va = rawValue(a, field, rowStore)
-  const vb = rawValue(b, field, rowStore)
+  const va = rawValue(a, field, ctx)
+  const vb = rawValue(b, field, ctx)
   if (va == null && vb == null) {
     return 0
   }
@@ -252,11 +274,13 @@ export function sortTasks(
   sortBy: SortKey[],
   rowStore: RowStore,
   tree: TaskTree,
+  catalog?: CatalogProjection,
 ): EntityRowOf<'task'>[] {
+  const evalCtx: FilterEvalContext = { rowStore, tree, ...catalog }
   const sorted = [...tasks]
   sorted.sort((a, b) => {
     for (const key of sortBy) {
-      const cmp = compareField(a, b, key.field, rowStore, tree)
+      const cmp = compareField(a, b, key.field, evalCtx)
       if (cmp !== 0) {
         return key.dir === SORT_DIR.ASC ? cmp : -cmp
       }
@@ -288,6 +312,7 @@ export function flattenInTreeOrder(
   sortBy: SortKey[],
   rowStore: RowStore,
   collapsibleSet: Set<string> = new Set(),
+  catalog?: CatalogProjection,
 ): EntityRowOf<'task'>[] {
   const visibleIds = new Set(visible.map(t => t.id))
   const out: EntityRowOf<'task'>[] = []
@@ -307,7 +332,7 @@ export function flattenInTreeOrder(
       else
         effective.push(node)
     }
-    const ordered = sortTasks(effective.map(n => n.task), siblingSort, rowStore, tree)
+    const ordered = sortTasks(effective.map(n => n.task), siblingSort, rowStore, tree, catalog)
     for (const task of ordered) {
       const node = effective.find(n => n.task.id === task.id)
       if (!node)
@@ -328,17 +353,16 @@ export function flattenInTreeOrder(
 function groupValues(
   task: EntityRowOf<'task'>,
   key: GroupKey,
-  rowStore: RowStore,
-  tree: TaskTree,
+  ctx: RenderContext,
 ): string[] {
   switch (key) {
-    case GROUP_KEY.PROJECT: return [rowStore.projectOf?.(task) ?? task.data.projectId ?? '']
+    case GROUP_KEY.PROJECT: return [ctx.projectOf?.(task) ?? '']
     case GROUP_KEY.TAG: {
-      const tagIds = rowStore.tagIdsOf(task.id)
+      const tagIds = ctx.rowStore.tagIdsOf(task.id)
       return tagIds.length ? tagIds : ['']
     }
-    case GROUP_KEY.DEFER_DATE: return [effectiveDefer(task, tree) ?? '']
-    case GROUP_KEY.DUE_DATE: return [effectiveDue(task, tree) ?? '']
+    case GROUP_KEY.DEFER_DATE: return [effectiveDefer(task, ctx.tree) ?? '']
+    case GROUP_KEY.DUE_DATE: return [effectiveDue(task, ctx.tree) ?? '']
     case GROUP_KEY.FLAGGED: return [String(task.data.flagged)]
     case GROUP_KEY.STATUS: return [task.data.status]
     case GROUP_KEY.NONE: return ['']
@@ -346,16 +370,16 @@ function groupValues(
   }
 }
 
-function groupLabel(key: string, groupKey: GroupKey, rowStore: RowStore, timeZone: string): string {
+function groupLabel(key: string, groupKey: GroupKey, ctx: RenderContext): string {
   if (groupKey === GROUP_KEY.TAG) {
     if (!key)
       return '无标签'
-    return rowStore.findLive('tag', key)?.data.name ?? key
+    return ctx.tagNameOf?.(key) ?? key
   }
   if (groupKey === GROUP_KEY.PROJECT) {
     if (!key)
       return '无项目'
-    return rowStore.dirNameOf?.(key) ?? key
+    return ctx.dirNameOf?.(key) ?? key
   }
   if (groupKey === GROUP_KEY.DUE_DATE || groupKey === GROUP_KEY.DEFER_DATE) {
     if (!key)
@@ -363,7 +387,7 @@ function groupLabel(key: string, groupKey: GroupKey, rowStore: RowStore, timeZon
     const ms = Date.parse(key)
     if (Number.isNaN(ms))
       return key
-    return formatZonedYmdHm(new Date(ms), timeZone)
+    return formatZonedYmdHm(new Date(ms), ctx.timeZone ?? 'UTC')
   }
   return key
 }
@@ -381,7 +405,6 @@ function toRenderItem(task: EntityRowOf<'task'>, ctx: RenderContext): RenderItem
 export function groupBy(
   tasks: EntityRowOf<'task'>[],
   keys: GroupKey[],
-  rowStore: RowStore,
   ctx: RenderContext,
 ): RenderGroup[] {
   if (keys.length === 0) {
@@ -391,7 +414,7 @@ export function groupBy(
   const rest = keys.slice(1)
   const buckets = new Map<string, EntityRowOf<'task'>[]>()
   for (const t of tasks) {
-    for (const gv of groupValues(t, first, rowStore, ctx.tree)) {
+    for (const gv of groupValues(t, first, ctx)) {
       const arr = buckets.get(gv) ?? []
       arr.push(t)
       buckets.set(gv, arr)
@@ -399,8 +422,8 @@ export function groupBy(
   }
   return [...buckets.entries()].map(([key, ts]) => ({
     key,
-    label: groupLabel(key, first, rowStore, ctx.timeZone ?? 'UTC'),
-    children: rest.length ? groupBy(ts, rest, rowStore, ctx) : ts.map(t => toRenderItem(t, ctx)),
+    label: groupLabel(key, first, ctx),
+    children: rest.length ? groupBy(ts, rest, ctx) : ts.map(t => toRenderItem(t, ctx)),
   }))
 }
 
@@ -430,7 +453,7 @@ function builtin(
   }
 }
 
-/** 6 个内置透视（forecast 居首；移除 review） */
+/** 9 个内置透视（forecast 居首；hold/trash/all 供推荐视图与保留 id） */
 export function builtinPerspectives(): Perspective[] {
   return [
     // Forecast：groupBy/sortBy 必须为空——日块分块与块内序由 renderForecast，勿假装走通用管线。
@@ -443,6 +466,8 @@ export function builtinPerspectives(): Perspective[] {
       sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
     }),
     builtin(BUILTIN_PERSPECTIVE_ID.PROJECTS, {
+      // 与 tags 对称：排除无项目（收件箱），再按项目分组
+      filter: { op: LOGIC_OP.NOT, child: { op: LEAF_OP.EMPTY, field: FILTER_FIELD.PROJECT } },
       groupBy: [GROUP_KEY.PROJECT],
       sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
     }),
@@ -462,6 +487,20 @@ export function builtinPerspectives(): Perspective[] {
       filter: { op: LEAF_OP.IS, field: FILTER_FIELD.STATUS, value: EXPLICIT_STATUS.COMPLETED },
       groupBy: [GROUP_KEY.DUE_DATE],
       sortBy: [{ field: SORT_FIELD.ADDED_AT, dir: SORT_DIR.DESC }],
+    }),
+    builtin(BUILTIN_PERSPECTIVE_ID.HOLD, {
+      filter: { op: LEAF_OP.IS, field: FILTER_FIELD.STATUS, value: EXPLICIT_STATUS.HOLD },
+      sortBy: [{ field: SORT_FIELD.ADDED_AT, dir: SORT_DIR.DESC }],
+    }),
+    // 回收站：status=deleted；须配合 availabilityFilter=all（否则 remaining 滤掉）
+    builtin(BUILTIN_PERSPECTIVE_ID.TRASH, {
+      filter: { op: LEAF_OP.IS, field: FILTER_FIELD.STATUS, value: EXPLICIT_STATUS.DELETED },
+      sortBy: [{ field: SORT_FIELD.ADDED_AT, dir: SORT_DIR.DESC }],
+    }),
+    // 无 DSL 过滤；含完成/搁置需 View Options 可用性切到 all（与 completed 相同）
+    builtin(BUILTIN_PERSPECTIVE_ID.ALL, {
+      filter: null,
+      sortBy: [{ field: SORT_FIELD.ORDER, dir: SORT_DIR.ASC }],
     }),
   ]
 }

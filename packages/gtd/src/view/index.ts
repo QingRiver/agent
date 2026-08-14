@@ -1,3 +1,4 @@
+export * from './catalog'
 export * from './collapse'
 export * from './filter'
 export * from './perspective'

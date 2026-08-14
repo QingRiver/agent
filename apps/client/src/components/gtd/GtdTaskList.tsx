@@ -4,6 +4,7 @@ import {
   DEFAULT_AVAILABILITY_FILTER,
   EXPLICIT_STATUS,
   FILTER_FIELD,
+  fullyVisibleSiblingReorderIds,
   isInboxFilter,
   renderPerspective,
   SORT_FIELD,
@@ -35,6 +36,7 @@ import { useGtd } from '@hooks/useGtd'
 import { cn } from '@lib/utils'
 import { DirStore } from '@stores/dir-store'
 import { GtdStore, resolvePerspective, resolvePerspectiveAvailability } from '@stores/gtd-store'
+import { TagsStore } from '@stores/tags-store'
 import { useAtomValue } from 'jotai'
 import { Settings2 } from 'lucide-react'
 import { useState } from 'react'
@@ -53,7 +55,7 @@ function taskShape(r: EntityRowOf<'task'>) {
 
 function RenderNodes({
   nodes,
-  sortable,
+  reorderableIds,
   collapsed,
   hidden,
   parents,
@@ -61,7 +63,8 @@ function RenderNodes({
   onToggleCollapsed,
 }: {
   nodes: Array<RenderGroup | RenderItem>
-  sortable: boolean
+  /** 整组可见的兄弟成员；仅这些行开拖 */
+  reorderableIds: Set<string>
   collapsed: Set<string>
   hidden: Set<string>
   parents: Set<string>
@@ -88,7 +91,7 @@ function RenderNodes({
                 : null}
               <RenderNodes
                 nodes={node.children}
-                sortable={sortable}
+                reorderableIds={reorderableIds}
                 collapsed={collapsed}
                 hidden={hidden}
                 parents={parents}
@@ -106,7 +109,7 @@ function RenderNodes({
             taskId={node.taskId}
             depth={node.depth}
             computed={node.computed}
-            sortable={sortable}
+            sortable={reorderableIds.has(node.taskId)}
             hasChildren={parents.has(node.taskId)}
             collapsed={collapsed.has(node.taskId)}
             onToggleCollapsed={() => onToggleCollapsed(node.taskId)}
@@ -140,11 +143,12 @@ export function GtdTaskList() {
   )
 
   const dirsById = useAtomValue(DirStore.dirsByIdAtom)
+  const tagsById = useAtomValue(TagsStore.tagsByIdAtom)
   const perspective = resolvePerspective(rowStore, selection)
   const availabilityFilter = resolvePerspectiveAvailability(selection, viewOptionsMap)
   const focus = selection.focus
   const isForecast = selection.perspectiveId === BUILTIN_PERSPECTIVE_ID.FORECAST && focus == null
-  // project 退出 GTD sync，名称来自 DirStore dirsById 投影
+  // project/tag 目录退出 GTD sync，名称来自 DirStore / TagsStore
   const selectedDir = focus?.field === FILTER_FIELD.PROJECT
     ? dirsById.get(focus.id) ?? null
     : null
@@ -153,7 +157,7 @@ export function GtdTaskList() {
     if (focus?.field === FILTER_FIELD.PROJECT)
       return selectedDir?.name ?? '项目'
     if (focus?.field === FILTER_FIELD.TAG)
-      return rowStore.findLive('tag', focus.id)?.data.name ?? '标签'
+      return tagsById.get(focus.id)?.name ?? '标签'
     return perspective.name
   }
   const title = resolveTitle()
@@ -169,6 +173,15 @@ export function GtdTaskList() {
   const tree = renderPerspective(rowStore, perspective, now, GtdStore.dueSoonMs, timeZone, {
     availabilityFilter,
     forecastOptions,
+    projectOf: task => DirStore.projectOf(dirsById, task.data.mountDirId),
+    dirNameOf: (dirId) => {
+      const name = dirsById.get(dirId)?.name
+      return name != null && name !== '' ? name : null
+    },
+    tagNameOf: (tagId) => {
+      const name = tagsById.get(tagId)?.name
+      return name != null && name !== '' ? name : null
+    },
   })
 
   function collectVisibleTaskIds() {
@@ -203,13 +216,17 @@ export function GtdTaskList() {
     return hidden
   }
   const hiddenTaskIds = collectHiddenTaskIds()
+  // 折叠藏起的行不算「可见」——否则父折叠后子仍在 visibleTaskIds，会误判整组可见
+  const shownTaskIds = visibleTaskIds.filter(id => !hiddenTaskIds.has(id))
+  const reorderableIds
+    = perspective.sortBy[0]?.field === SORT_FIELD.ORDER
+      ? fullyVisibleSiblingReorderIds(shownTaskIds, liveTasks)
+      : new Set<string>()
+  const canManualReorder = reorderableIds.size > 0
   const activeCount = liveTasks.filter(t => t.data.status === EXPLICIT_STATUS.ACTIVE).length
 
   const inboxLike = focus == null && isInboxFilter(perspective.filter)
   const canQuickAdd = inboxLike || focus?.field === FILTER_FIELD.PROJECT
-  const canManualReorder
-    = perspective.sortBy[0]?.field === SORT_FIELD.ORDER
-      && (focus?.field === FILTER_FIELD.PROJECT || inboxLike)
 
   const onAdd = () => {
     const name = draft.trim()
@@ -298,8 +315,12 @@ export function GtdTaskList() {
         onDragEnd={({ active, over }) => {
           if (!over || active.id === over.id)
             return
-          const task = rowStore.findLive('task', String(active.id))
-          const overTask = rowStore.findLive('task', String(over.id))
+          const activeId = String(active.id)
+          const overId = String(over.id)
+          if (!reorderableIds.has(activeId) || !reorderableIds.has(overId))
+            return
+          const task = rowStore.findLive('task', activeId)
+          const overTask = rowStore.findLive('task', overId)
           if (
             !task
             || !overTask
@@ -325,7 +346,7 @@ export function GtdTaskList() {
         }}
       >
         <SortableContext
-          items={visibleTaskIds}
+          items={shownTaskIds}
           strategy={verticalListSortingStrategy}
           disabled={!canManualReorder}
         >
@@ -337,7 +358,7 @@ export function GtdTaskList() {
               : (
                   <RenderNodes
                     nodes={tree}
-                    sortable={canManualReorder}
+                    reorderableIds={reorderableIds}
                     collapsed={collapsed}
                     hidden={hiddenTaskIds}
                     parents={parentTaskIds}

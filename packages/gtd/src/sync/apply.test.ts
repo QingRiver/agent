@@ -2,6 +2,7 @@ import type { GtdCommand, GtdMutation, SyncState } from '../sync'
 
 import { describe, expect, it } from 'vitest'
 import { TaskRowDataSchema } from '../data/sync-schema'
+import { EXPLICIT_STATUS } from '../data/types'
 import {
   field,
   findRow,
@@ -9,7 +10,6 @@ import {
   makeMutation,
   makeRepeatRule,
   makeState,
-  makeTagRow,
   makeTaskRow,
   makeTaskTagRow,
   SYNC_NOW,
@@ -141,7 +141,7 @@ describe('applyPush: patch 列合并', () => {
       makeMutation({
         id: 'm1',
         entityId: 't1',
-        patch: { name: '新任务', status: 'active', flagged: false, projectId: null },
+        patch: { name: '新任务', status: 'active', flagged: false, mountDirId: null },
       }),
     ])
     expect(findRow(next.rows, 'task', 't1')).toBeDefined()
@@ -164,6 +164,24 @@ describe('applyPush: patch 列合并', () => {
     const task = findRow(next.rows, 'task', 't1')
     expect(task?.deleted).toBe(false)
     expect(field<string>(task, 'name')).toBe('新名')
+  })
+
+  it('upsert 命中 status=DELETED → noop，status 保持 DELETED（不复活）', () => {
+    const state = makeState([
+      makeTaskRow(
+        't1',
+        { name: '已删', status: EXPLICIT_STATUS.DELETED, droppedAt: SYNC_NOW },
+        { syncId: 1, deleted: false },
+      ),
+    ])
+    const { response, state: next } = push(state, [
+      makeMutation({ id: 'm1', entityId: 't1', patch: { name: '复活' } }),
+    ])
+    expect(response.applied).toContain('m1')
+    const task = findRow(next.rows, 'task', 't1')
+    expect(field<string>(task, 'status')).toBe(EXPLICIT_STATUS.DELETED)
+    expect(field<string>(task, 'name')).toBe('已删')
+    expect(task?.deleted).toBe(false)
   })
 })
 
@@ -360,8 +378,7 @@ describe('applyPush: command complete', () => {
         repeatRuleId: 'r1',
         repeatRule: makeRepeatRule({ id: 'r1', cycle: 'daily', interval: 1, anchor: 'completion' }),
       }, { syncId: 1 }),
-      makeTagRow('g1', {}, { syncId: 2 }),
-      makeTaskTagRow('t1', 'g1', { syncId: 3 }),
+      makeTaskTagRow('t1', 'g1', { syncId: 2 }),
     ])
     const { state: next } = push(state, [], [
       makeCommand({ id: 'c1', taskId: 't1', clientGenerated: { nextTaskId: nextId }, clientTs: '2026-07-17T09:00:00Z' }),
@@ -474,13 +491,21 @@ describe('applyPush: changes 返回', () => {
   it('changes 行带 entity 判别字段', () => {
     const state = makeState([
       makeTaskRow('t1', {}, { syncId: 1 }),
-      makeTagRow('g1', {}, { syncId: 2 }),
     ])
     const { response } = push(state, [
       makeMutation({ id: 'm1', entity: 'task_tag', entityId: 't1|g1', patch: { taskId: 't1', tagId: 'g1' } }),
     ])
     expect(response.changes.every(r => typeof r.entity === 'string')).toBe(true)
     expect(response.changes.some(r => r.entity === 'task_tag')).toBe(true)
+  })
+
+  it('task_tag upsert 不要求 SyncState 内有 tag 行（目录已退出 sync）', () => {
+    const state = makeState([makeTaskRow('t1', {}, { syncId: 1 })])
+    const { response } = push(state, [
+      makeMutation({ id: 'm1', entity: 'task_tag', entityId: 't1|g1', patch: { taskId: 't1', tagId: 'g1' } }),
+    ])
+    expect(response.applied).toContain('m1')
+    expect(response.rejected).toEqual([])
   })
 
   it('changes 行 syncId 递增且 > lastSyncId', () => {
@@ -497,28 +522,6 @@ describe('applyPush: changes 返回', () => {
 })
 
 // ============================================================
-// applyPush: 级联软删（副作用行各推进 sync_id）
-// ============================================================
-
-describe('applyPush: 级联软删', () => {
-  it('delete_tag: tag 软删 + 关联 task_tag 行软删', () => {
-    const state = makeState([
-      makeTagRow('g1', {}, { syncId: 1 }),
-      makeTaskTagRow('t1', 'g1', { syncId: 2 }),
-      makeTaskTagRow('t2', 'g1', { syncId: 3 }),
-    ])
-    const { response, state: next } = push(state, [], [
-      makeCommand({ id: 'c1', type: 'delete_tag', payload: { tagId: 'g1' } }),
-    ])
-    expect(findRow(next.rows, 'tag', 'g1')?.deleted).toBe(true)
-    expect(findRow(next.rows, 'task_tag', 't1|g1')?.deleted).toBe(true)
-    expect(findRow(next.rows, 'task_tag', 't2|g1')?.deleted).toBe(true)
-    expect(findRow(response.changes, 'task_tag', 't1|g1')).toBeDefined()
-    expect(findRow(response.changes, 'task_tag', 't2|g1')).toBeDefined()
-  })
-})
-
-// ============================================================
 // applyPush: 关联表独立版本（不污染父 task sync_id）
 // ============================================================
 
@@ -526,7 +529,6 @@ describe('applyPush: 关联表独立版本', () => {
   it('task_tag upsert 不推进父 task 的 syncId', () => {
     const state = makeState([
       makeTaskRow('t1', { name: '名' }, { syncId: 1 }),
-      makeTagRow('g1', {}, { syncId: 2 }),
     ])
     const { state: next } = push(state, [
       makeMutation({
@@ -557,7 +559,6 @@ describe('applyPush: 关联表独立版本', () => {
   it('改 task.name 同时加 task_tag → name 保留，task syncId 只被 name 推进', () => {
     const state = makeState([
       makeTaskRow('t1', { name: '旧名' }, { syncId: 1 }),
-      makeTagRow('g1', {}, { syncId: 2 }),
     ])
     const { state: next } = push(state, [
       makeMutation({ id: 'm1', entityId: 't1', patch: { name: '新名' } }),
@@ -575,7 +576,6 @@ describe('applyPush: 关联表独立版本', () => {
     expect(tagRow?.syncId).not.toBe(task?.syncId)
   })
 })
-
 // ============================================================
 // applyPush: syncId 单调
 // ============================================================

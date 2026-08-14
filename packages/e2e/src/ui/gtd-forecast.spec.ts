@@ -43,7 +43,7 @@ async function wipeGtdData(token: string): Promise<void> {
   )
   const ts = new Date().toISOString()
   const deletions: Mutation[] = pulled.changes
-    .filter(r => r.entity === 'task' || r.entity === 'task_tag' || r.entity === 'tag')
+    .filter(r => r.entity === 'task' || r.entity === 'task_tag')
     .map((r, i) => ({
       id: `wipe-${RUN}-${i}`,
       entityId: r.id,
@@ -63,7 +63,6 @@ function baseTask(name: string, order: number, extra: Record<string, unknown>, t
   return {
     name,
     note: null,
-    projectId: null,
     parentId: null,
     order,
     status: 'active',
@@ -73,6 +72,7 @@ function baseTask(name: string, order: number, extra: Record<string, unknown>, t
     plannedMode: 'none',
     plannedDate: null,
     completedAt: null,
+    heldAt: null,
     droppedAt: null,
     flagged: false,
     estimateMinutes: null,

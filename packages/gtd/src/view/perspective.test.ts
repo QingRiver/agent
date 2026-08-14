@@ -14,7 +14,6 @@ import {
   DUE_SOON_MS,
   makePerspective,
   makeSortKey,
-  makeTagRow,
   makeTaskRow,
   makeTaskTagRow,
   NOW,
@@ -34,7 +33,10 @@ import {
   sortTasks,
 } from './perspective'
 
-function makeCtx(rows: EntityRow[]): RenderContext {
+function makeCtx(
+  rows: EntityRow[],
+  catalog?: { projectOf?: (t: EntityRowOf<'task'>) => string | null, dirNameOf?: (id: string) => string | null, tagNameOf?: (id: string) => string | null },
+): RenderContext {
   const tasks = rows.filter((r): r is EntityRowOf<'task'> => r.entity === 'task')
   return {
     rowStore: new RowStore(rows),
@@ -43,6 +45,7 @@ function makeCtx(rows: EntityRow[]): RenderContext {
     dueSoonIntervalMs: DUE_SOON_MS,
     statusCache: new Map(),
     collapsibleSet: new Set(),
+    ...catalog,
   }
 }
 
@@ -92,7 +95,7 @@ describe('applyBaseFilter', () => {
     const active = makeTaskRow('a')
     const hold = makeTaskRow('h', {
       status: EXPLICIT_STATUS.HOLD,
-      droppedAt: NOW.toISOString(),
+      heldAt: NOW.toISOString(),
     })
     const remaining = applyBaseFilter(
       [active, hold],
@@ -136,32 +139,38 @@ describe('expandDescendants', () => {
 
 describe('groupBy', () => {
   it('按 project 分组', () => {
-    const t1 = makeTaskRow('a', { projectId: 'p1' })
-    const t2 = makeTaskRow('b', { projectId: 'p2' })
-    const ctx = makeCtx([t1, t2])
-    const groups = groupBy([t1, t2], [GROUP_KEY.PROJECT], ctx.rowStore, ctx)
+    const t1 = makeTaskRow('a', { mountDirId: 'p1' })
+    const t2 = makeTaskRow('b', { mountDirId: 'p2' })
+    const ctx = makeCtx([t1, t2], {
+      projectOf: t => t.data.mountDirId,
+    })
+    const groups = groupBy([t1, t2], [GROUP_KEY.PROJECT], ctx)
     expect(groups).toHaveLength(2)
   })
 
   it('project 分组标题经 dirNameOf 解析为名称', () => {
-    const t = makeTaskRow('a', { projectId: 'p1' })
-    const store = new RowStore([t], { dirNameOf: id => id === 'p1' ? '项目甲' : null })
-    const ctx: RenderContext = {
-      rowStore: store,
-      tree: buildTaskTree([t]),
-      now: NOW,
-      dueSoonIntervalMs: DUE_SOON_MS,
-      statusCache: new Map(),
-      collapsibleSet: new Set(),
-    }
-    const groups = groupBy([t], [GROUP_KEY.PROJECT], store, ctx)
+    const t = makeTaskRow('a', { mountDirId: 'p1' })
+    const ctx = makeCtx([t], {
+      projectOf: () => 'p1',
+      dirNameOf: id => id === 'p1' ? '项目甲' : null,
+    })
+    const groups = groupBy([t], [GROUP_KEY.PROJECT], ctx)
     expect(groups).toEqual([expect.objectContaining({ key: 'p1', label: '项目甲' })])
+  })
+
+  it('tag 分组标题经 tagNameOf 解析为名称', () => {
+    const t = makeTaskRow('a')
+    const ctx = makeCtx([t, makeTaskTagRow('a', 'g1')], {
+      tagNameOf: id => id === 'g1' ? '情境·电话' : null,
+    })
+    const groups = groupBy([t], [GROUP_KEY.TAG], ctx)
+    expect(groups).toEqual([expect.objectContaining({ key: 'g1', label: '情境·电话' })])
   })
 
   it('tag 多归属：一 task 进多组', () => {
     const t = makeTaskRow('a')
     const ctx = makeCtx([t, makeTaskTagRow('a', 'g1'), makeTaskTagRow('a', 'g2')])
-    const groups = groupBy([t], [GROUP_KEY.TAG], ctx.rowStore, ctx)
+    const groups = groupBy([t], [GROUP_KEY.TAG], ctx)
     expect(groups).toHaveLength(2)
   })
 
@@ -170,7 +179,7 @@ describe('groupBy', () => {
     const t = makeTaskRow('a', { dueDate: iso })
     const ctx = makeCtx([t])
     ctx.timeZone = 'Asia/Shanghai'
-    const groups = groupBy([t], [GROUP_KEY.DUE_DATE], ctx.rowStore, ctx)
+    const groups = groupBy([t], [GROUP_KEY.DUE_DATE], ctx)
     expect(groups).toEqual([expect.objectContaining({
       key: iso,
       label: '2026-08-08 23:59',
@@ -233,7 +242,6 @@ describe('renderPerspective', () => {
   })
 
   it('点具体标签：入组已复制 task_tag 的子命中；纯未打标任务不进标签透视', () => {
-    const tag = makeTagRow('tag-aaa', { name: 'aaa' })
     const parent = makeTaskRow('fa54', {
       name: 'aaa',
       groupType: 'sequential',
@@ -243,17 +251,18 @@ describe('renderPerspective', () => {
     const child = makeTaskRow('d844', { name: '4', parentId: 'fa54', order: 3 })
     const orphan = makeTaskRow('lonely')
     // 子任务带物理 task_tag（模拟 OF 入组复制后的状态）；未复制的 orphan 不进透视
+    // 标签目录不在 RowStore；分组标题经 tagNameOf 注入（对齐 TagsStore）
     const store = new RowStore([
       parent,
       child,
       orphan,
-      tag,
       makeTaskTagRow('fa54', 'tag-aaa'),
       makeTaskTagRow('d844', 'tag-aaa'),
     ])
+    const catalog = { tagNameOf: (id: string) => id === 'tag-aaa' ? 'aaa' : null }
 
     const tagsPersp = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.TAGS)!
-    const tagsGroups = renderPerspective(store, tagsPersp, NOW, DUE_SOON_MS, 'UTC')
+    const tagsGroups = renderPerspective(store, tagsPersp, NOW, DUE_SOON_MS, 'UTC', catalog)
     expect(tagsGroups.map(g => g.label)).toEqual(['aaa'])
     expect(tagsGroups[0]?.children.map(c => 'taskId' in c ? c.taskId : null)).toEqual(['fa54', 'd844'])
 
@@ -261,13 +270,12 @@ describe('renderPerspective', () => {
       filter: { op: LEAF_OP.SOME, field: FILTER_FIELD.TAG, value: ['tag-aaa'] },
       sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })],
     })
-    const tagGroups = renderPerspective(store, tagSel, NOW, DUE_SOON_MS, 'UTC')
+    const tagGroups = renderPerspective(store, tagSel, NOW, DUE_SOON_MS, 'UTC', catalog)
     const ids = tagGroups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null)
     expect(ids).toEqual(['fa54', 'd844'])
   })
 
   it('标签+全部/未完成：串行后序 blocked 有物理标可见；仅可执行仍藏', () => {
-    const tag = makeTagRow('tag-aaa', { name: 'aaa' })
     const parent = makeTaskRow('p', {
       name: '组',
       groupType: 'sequential',
@@ -279,7 +287,6 @@ describe('renderPerspective', () => {
       parent,
       first,
       second,
-      tag,
       makeTaskTagRow('p', 'tag-aaa'),
       makeTaskTagRow('c1', 'tag-aaa'),
       makeTaskTagRow('c2', 'tag-aaa'),
@@ -378,20 +385,22 @@ describe('renderPerspective', () => {
 
 describe('inbox 透视', () => {
   it('project empty：含 Inbox 内子动作（OF 语义）', () => {
-    const parent = makeTaskRow('inbox-parent', { projectId: null, mountDirId: null })
-    const child = makeTaskRow('inbox-child', { parentId: 'inbox-parent', projectId: null, mountDirId: null })
-    const inProject = makeTaskRow('in-proj', { mountDirId: 'p1', projectId: 'p1' })
+    const parent = makeTaskRow('inbox-parent', { mountDirId: null })
+    const child = makeTaskRow('inbox-child', { parentId: 'inbox-parent', mountDirId: null })
+    const inProject = makeTaskRow('in-proj', { mountDirId: 'p1' })
     const inbox = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.INBOX)!
     const store = new RowStore([parent, child, inProject])
-    const groups = renderPerspective(store, inbox, NOW, DUE_SOON_MS, 'UTC')
+    const groups = renderPerspective(store, inbox, NOW, DUE_SOON_MS, 'UTC', {
+      projectOf: t => t.data.mountDirId,
+    })
     const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null)
     expect(ids).toEqual(['inbox-parent', 'inbox-child'])
   })
 })
 
 describe('builtinPerspectives', () => {
-  it('返回 6 个内置透视', () => {
-    expect(builtinPerspectives()).toHaveLength(6)
+  it('返回 9 个内置透视', () => {
+    expect(builtinPerspectives()).toHaveLength(9)
   })
 
   it('forecast 居首且无 predicted', () => {
@@ -420,6 +429,15 @@ describe('builtinPerspectives', () => {
     expect(isInboxFilter({ op: LEAF_OP.EMPTY, field: FILTER_FIELD.TAG })).toBe(false)
   })
 
+  it('projects 内置透视排除无项目', () => {
+    const projects = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.PROJECTS)!
+    expect(projects.filter).toEqual({
+      op: LOGIC_OP.NOT,
+      child: { op: LEAF_OP.EMPTY, field: FILTER_FIELD.PROJECT },
+    })
+    expect(projects.groupBy).toEqual([GROUP_KEY.PROJECT])
+  })
+
   it('tags 内置透视排除未打标', () => {
     const tags = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.TAGS)!
     expect(tags.filter).toEqual({
@@ -436,6 +454,29 @@ describe('builtinPerspectives', () => {
       field: FILTER_FIELD.STATUS,
       value: EXPLICIT_STATUS.COMPLETED,
     })
+  })
+
+  it('hold 内置透视用 status=hold DSL', () => {
+    const hold = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.HOLD)!
+    expect(hold.filter).toEqual({
+      op: LEAF_OP.IS,
+      field: FILTER_FIELD.STATUS,
+      value: EXPLICIT_STATUS.HOLD,
+    })
+  })
+
+  it('trash 内置透视用 status=deleted DSL', () => {
+    const trash = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.TRASH)!
+    expect(trash.filter).toEqual({
+      op: LEAF_OP.IS,
+      field: FILTER_FIELD.STATUS,
+      value: EXPLICIT_STATUS.DELETED,
+    })
+  })
+
+  it('all 内置透视无 DSL 过滤', () => {
+    const all = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.ALL)!
+    expect(all.filter).toBeNull()
   })
 })
 

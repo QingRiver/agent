@@ -2,7 +2,7 @@
  * 领域级 + 行级数据工厂（共享：单测 + 未来 client Storybook）。
  *
  * - 领域实体：makeTask/makeTag/makeRepeatRule/makeSortKey/makePerspective
- * - 行级（运行时真相）：makeRow/makeTaskRow/makeTagRow/makeTaskTagRow
+ * - 行级（运行时真相）：makeRow/makeTaskRow/makeTaskTagRow
  */
 import type {
   Perspective,
@@ -28,7 +28,6 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     id: randomUUID(),
     name: 'task',
     note: null,
-    projectId: null,
     mountDirId: null,
     parentId: null,
     order: 0,
@@ -39,12 +38,11 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     plannedMode: PLANNED_MODE.NONE,
     plannedDate: null,
     completedAt: null,
+    heldAt: null,
     droppedAt: null,
     flagged: false,
     estimateMinutes: null,
     repeatRuleId: null,
-    tagIds: [],
-    attachmentIds: [],
     repeatedFromTaskId: null,
     createdAt: NOW_ISO,
     updatedAt: NOW_ISO,
@@ -119,8 +117,8 @@ export function makeTaskRow(
   dataOverrides: Partial<Task> & { repeatRule?: RepeatRule } = {},
   opts: Partial<Omit<EntityRow, 'entity' | 'id' | 'data'>> = {},
 ): EntityRowOf<'task'> {
-  const { repeatRule, tagIds: _tg, attachmentIds: _at, ...taskOverrides } = dataOverrides
-  const { id: _tid, tagIds: _t, attachmentIds: _a, ...taskFields } = makeTask({ id, ...taskOverrides })
+  const { repeatRule, ...taskOverrides } = dataOverrides
+  const { id: _tid, ...taskFields } = makeTask({ id, ...taskOverrides })
   const data = (repeatRule != null ? { ...taskFields, repeatRule } : taskFields) as EntityRowOf<'task'>['data']
   return {
     entity: 'task',
@@ -130,21 +128,6 @@ export function makeTaskRow(
     deleted: opts.deleted ?? false,
     data,
   }
-}
-
-/** tag 行：data 复用 makeTag（去掉 id，行信封已有 id）。 */
-export function makeTagRow(
-  id: string,
-  dataOverrides: Record<string, unknown> = {},
-  opts: Partial<Omit<EntityRow, 'entity' | 'id' | 'data'>> = {},
-): EntityRow {
-  const { id: _id, ...tagData } = makeTag({ id })
-  return makeRow({
-    ...opts,
-    entity: 'tag',
-    id,
-    data: Object.assign(tagData, dataOverrides),
-  })
 }
 
 /** task_tag 关联行：复合 id「taskId|tagId」。 */

@@ -65,6 +65,7 @@ function taskPatch(name: string, now: string) {
     deferDate: null,
     dueDate: null,
     completedAt: null,
+    heldAt: null,
     droppedAt: null,
     flagged: false,
     estimateMinutes: null,

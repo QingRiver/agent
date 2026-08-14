@@ -1,4 +1,3 @@
-import { TaskUpsertPatchSchema } from '@agent/gtd'
 import { eq, like } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db } from '../db/drizzle'
@@ -70,7 +69,7 @@ async function insertDir(row: {
   })
 }
 
-/** 构造 task upsert patch（mountDirId 权威挂载，projectId 退出 LWW 不在 patch） */
+/** 构造 task upsert patch（mountDirId 权威挂载） */
 function taskPatch(overrides: Partial<Record<string, unknown>> & { name: string }): Record<string, unknown> {
   return {
     status: 'active',
@@ -81,6 +80,7 @@ function taskPatch(overrides: Partial<Record<string, unknown>> & { name: string 
     deferDate: null,
     dueDate: null,
     completedAt: null,
+    heldAt: null,
     droppedAt: null,
     estimateMinutes: null,
     repeatRuleId: null,
@@ -122,6 +122,7 @@ describe('sync-repository e2e (push/pull 落库)', () => {
             deferDate: null,
             dueDate: null,
             completedAt: null,
+            heldAt: null,
             droppedAt: null,
             estimateMinutes: null,
             repeatRuleId: null,
@@ -167,6 +168,7 @@ describe('sync-repository e2e (push/pull 落库)', () => {
             deferDate: null,
             dueDate: null,
             completedAt: null,
+            heldAt: null,
             droppedAt: null,
             estimateMinutes: null,
             repeatRuleId: 'r1',
@@ -222,20 +224,25 @@ describe('sync-repository e2e (push/pull 落库)', () => {
   })
 
   it('push task_tag upsert → 关联行落库 + 独立 syncId', async () => {
-    // 先建 tag
+    // 标签目录经 REST/直接落库；sync 只写 task_tag
+    await db.insert(tags).values({
+      id: 'g1',
+      userId: USER_ID,
+      name: '重要',
+      color: null,
+      deleted: false,
+      createdAt: new Date(NOW),
+      updatedAt: null,
+    }).onConflictDoNothing()
+
     await applyPushToPg(USER_ID, {
       mutations: [
         {
-          id: 'm-tag',
-          entity: 'tag',
-          entityId: 'g1',
+          id: 'm-t1-for-tt',
+          entity: 'task',
+          entityId: 't1',
           op: 'upsert',
-          patch: {
-            name: '重要',
-            color: null,
-            createdAt: NOW,
-            updatedAt: null,
-          },
+          patch: taskPatch({ name: '任务1', mountDirId: null }),
           clientTs: NOW,
         },
       ],
@@ -243,7 +250,6 @@ describe('sync-repository e2e (push/pull 落库)', () => {
       lastSyncId: 0,
     })
 
-    // 建 task_tag
     const res = await applyPushToPg(USER_ID, {
       mutations: [
         {
@@ -286,6 +292,7 @@ describe('sync-repository e2e (push/pull 落库)', () => {
             deferDate: null,
             dueDate: null,
             completedAt: null,
+            heldAt: null,
             droppedAt: null,
             estimateMinutes: null,
             repeatRuleId: null,
@@ -338,7 +345,7 @@ describe('sync-repository e2e (push/pull 落库)', () => {
         entity: 'task',
         entityId: id,
         op: 'upsert',
-        patch: { name, status: 'active', flagged: false, parentId: null, order: 0, groupType: null, deferDate: null, dueDate: null, completedAt: null, droppedAt: null, estimateMinutes: null, repeatRuleId: null, repeatedFromTaskId: null, createdAt: NOW, updatedAt: NOW, note: null },
+        patch: { name, status: 'active', flagged: false, parentId: null, order: 0, groupType: null, deferDate: null, dueDate: null, completedAt: null, heldAt: null, droppedAt: null, estimateMinutes: null, repeatRuleId: null, repeatedFromTaskId: null, createdAt: NOW, updatedAt: NOW, note: null },
         clientTs: NOW,
       }],
       commands: [],
@@ -365,9 +372,9 @@ describe('sync-repository e2e (push/pull 落库)', () => {
     }
   })
 
-  // ---------------- mountDirId 权威挂载 + projectId server 派生 ----------------
+  // ---------------- mountDirId 权威挂载 ----------------
 
-  it(`mountDirId → server 派生 projectId（project 根 + 子 dir 均回溯根）`, async () => {
+  it(`mountDirId 原样落库（project 根 + 子 dir）`, async () => {
     // 建 project 根 + 一级 dir 子节点
     await insertDir({ id: 'dp1', parentId: null, kind: 'project', name: 'P1', projectId: 'dp1', vdir: 'P1', sortOrder: 0 })
     await insertDir({ id: 'dd1', parentId: 'dp1', kind: 'dir', name: 'F1', projectId: 'dp1', vdir: 'P1/F1', sortOrder: 0 })
@@ -401,19 +408,16 @@ describe('sync-repository e2e (push/pull 落库)', () => {
 
     const pullRes = await pullFromPg(USER_ID, 0)
     const rootTask = pullRes.changes.find(r => r.entity === 'task' && r.id === 't-mount-root') as
-      { data: { mountDirId: string | null, projectId: string | null } } | undefined
+      { data: { mountDirId: string | null } } | undefined
     const subTask = pullRes.changes.find(r => r.entity === 'task' && r.id === 't-mount-sub') as
-      { data: { mountDirId: string | null, projectId: string | null } } | undefined
+      { data: { mountDirId: string | null } } | undefined
 
-    // mountDirId 原样落库（权威）；projectId = walkToProjectRoot 派生 = project 根 id
     expect(rootTask?.data.mountDirId).toBe('dp1')
-    expect(rootTask?.data.projectId).toBe('dp1')
     expect(subTask?.data.mountDirId).toBe('dd1')
-    expect(subTask?.data.projectId).toBe('dp1')
   })
 
   it(`死 mountDirId（指向不存在 dir）+ 顶层 task → server 修正为 null（Inbox）`, async () => {
-    // mountDirId 指向不存在的 dir；parentId=null（顶层）→ stamp 应置 mountDirId=null + projectId=null
+    // mountDirId 指向不存在的 dir；parentId=null（顶层）→ stamp 应置 mountDirId=null
     await applyPushToPg(USER_ID, {
       mutations: [{
         id: 'm-dead-mount',
@@ -429,16 +433,8 @@ describe('sync-repository e2e (push/pull 落库)', () => {
 
     const pullRes = await pullFromPg(USER_ID, 0)
     const task = pullRes.changes.find(r => r.entity === 'task' && r.id === 't-dead-mount') as
-      { data: { mountDirId: string | null, projectId: string | null } } | undefined
+      { data: { mountDirId: string | null } } | undefined
 
     expect(task?.data.mountDirId).toBeNull()
-    expect(task?.data.projectId).toBeNull()
-  })
-
-  it(`projectId 退出 LWW：TaskUpsertPatchSchema omit → patch 含 projectId 被 zod 剥离（不可 push）`, () => {
-    // projectId 退出 LWW：schema .omit({projectId:true})，zod 默认 strip 未知键
-    const parsed = TaskUpsertPatchSchema.parse({ projectId: 'should-be-stripped', name: '保留' })
-    expect('projectId' in parsed).toBe(false)
-    expect((parsed as { name: string }).name).toBe('保留')
   })
 })

@@ -16,12 +16,20 @@ import type {
   EntityRowOf,
   ReopenCommand,
   RestoreCommand,
+  RestoreFromTrashCommand,
   SyncEntity,
 } from '../data/sync-schema'
 import type { CascadeStep } from '../inheritance/cascade'
 import type { TaskTree } from '../structure/tree'
 import { EXPLICIT_STATUS } from '../data/types'
-import { planCompleteCascade, planDeleteCascade, planDropCascade, planReopenCascade, planRestoreCascade } from '../inheritance/cascade'
+import {
+  planCompleteCascade,
+  planDeleteCascade,
+  planDropCascade,
+  planReopenCascade,
+  planRestoreCascade,
+  planRestoreFromTrashCascade,
+} from '../inheritance/cascade'
 import { buildTaskTree } from '../structure/tree'
 import { shouldStop } from '../time/date-math'
 import { cloneNextInstance } from './repeat'
@@ -157,7 +165,7 @@ export function dropTask(
     throw new Error(`task ${taskId} not active (current: ${String(status)})`)
   }
   task.data.status = EXPLICIT_STATUS.HOLD
-  task.data.droppedAt = cmd.clientTs
+  task.data.heldAt = cmd.clientTs
   task.syncId = nextSyncId()
 
   // 向下级联：ACTIVE 后代 → HOLD（self 已 HOLD，计划自动跳过；幂等）
@@ -198,7 +206,7 @@ export function reopenTask(
 }
 
 /**
- * restore：HOLD → ACTIVE（清 droppedAt）；仅自身，不上下联动。
+ * restore：HOLD → ACTIVE（清 heldAt）；仅自身，不上下联动。
  * 仅 hold 可恢复；active 幂等 noop；completed/deleted 拒绝。
  */
 export function restoreTask(
@@ -224,8 +232,9 @@ export function restoreTask(
 }
 
 /**
- * deleteTask + 向下级联：自身 + 所有后代 → DELETED（盖 droppedAt），向下软删。
- * 仅 active 可 delete；deleted 幂等 noop；completed/hold 拒绝（SP-STATE-6）。
+ * deleteTask（进回收站）+ 向下级联：自身 + 所有后代 → DELETED（盖 droppedAt）。
+ * 仅 active 可进站；deleted 幂等 noop；completed/hold 拒绝（SP-STATE-6）。
+ * 产品语义：deleted ≡ trashed；永久销毁走在线 purge，不经本 command。
  */
 export function deleteTask(
   cmd: DeleteTaskCommand,
@@ -246,5 +255,31 @@ export function deleteTask(
   }
   const tree: TaskTree = buildTaskTree(liveTasksOf(rows))
   applySteps(rows, planDeleteCascade(taskId, tree), cmd.clientTs, nextSyncId)
+  return 'applied'
+}
+
+/**
+ * restoreFromTrash：DELETED → ACTIVE（清 droppedAt）；仅自身，不上下联动。
+ * 仅 deleted（回收站）可移出；active 幂等 noop；completed/hold 拒绝。
+ */
+export function restoreFromTrash(
+  cmd: RestoreFromTrashCommand,
+  rows: EntityRow[],
+  nextSyncId: () => number,
+): ApplyResult {
+  const taskId = cmd.taskId
+  const task = findLive(rows, 'task', taskId)
+  if (!task) {
+    throw new Error(`task ${taskId} not found`)
+  }
+  const status = task.data.status
+  if (status === EXPLICIT_STATUS.ACTIVE) {
+    return 'noop'
+  }
+  if (status !== EXPLICIT_STATUS.DELETED) {
+    throw new Error(`task ${taskId} not in trash (current: ${String(status)})`)
+  }
+  const tree: TaskTree = buildTaskTree(liveTasksOf(rows))
+  applySteps(rows, planRestoreFromTrashCascade(taskId, tree), cmd.clientTs, nextSyncId)
   return 'applied'
 }

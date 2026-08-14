@@ -56,7 +56,7 @@ describe('状态机 [SP-STATE]', () => {
       expect(t.syncId).toBe(1) // noop 不推进 syncId
     })
     it('hold → 拒绝（rejected）', () => {
-      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 1 })])
+      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 1 })])
       const res = runCmd(state, makeCommand({ id: 'c1', type: 'complete', taskId: 't1' }))
       expect(res.response.rejected).toHaveLength(1)
       expect(field<string>(findRow(res.state.rows, 'task', 't1'), 'status')).toBe(EXPLICIT_STATUS.HOLD)
@@ -88,7 +88,7 @@ describe('状态机 [SP-STATE]', () => {
       expect(findRow(res.state.rows, 'task', 't1')!.syncId).toBe(1)
     })
     it('hold → 拒绝（reopen 只作用于 COMPLETED）', () => {
-      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 1 })])
+      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 1 })])
       const res = runCmd(state, makeCommand({ id: 'c1', type: 'reopen', taskId: 't1' }))
       expect(res.response.rejected).toHaveLength(1)
       expect(field<string>(findRow(res.state.rows, 'task', 't1'), 'status')).toBe(EXPLICIT_STATUS.HOLD)
@@ -119,28 +119,28 @@ describe('状态机 [SP-STATE]', () => {
       }
     })
     it('reopen 子 → HOLD 祖先也不变', () => {
-      const p = makeTaskRow('p', { status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 1 })
+      const p = makeTaskRow('p', { status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 1 })
       const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.COMPLETED, completedAt: SYNC_NOW }, { syncId: 2 })
       const res = runCmd(makeState([p, c]), makeCommand({ id: 'c1', type: 'reopen', taskId: 'c' }))
       expect(res.response.rejected).toHaveLength(0)
       expect(field<string>(findRow(res.state.rows, 'task', 'p'), 'status')).toBe(EXPLICIT_STATUS.HOLD)
-      expect(field<string>(findRow(res.state.rows, 'task', 'p'), 'droppedAt')).toBe(SYNC_NOW)
+      expect(field<string>(findRow(res.state.rows, 'task', 'p'), 'heldAt')).toBe(SYNC_NOW)
       expect(field<string>(findRow(res.state.rows, 'task', 'c'), 'status')).toBe(EXPLICIT_STATUS.ACTIVE)
     })
   })
 
   // SP-STATE-4: 活跃→已取消/搁置（drop）；仅 active；hold 幂等；completed/deleted 拒绝
   describe('drop [SP-STATE-4]', () => {
-    it('active → HOLD，droppedAt 置位', () => {
+    it('active → HOLD，heldAt 置位', () => {
       const state = makeState([makeTaskRow('t1', {}, { syncId: 1 })])
       const res = runCmd(state, makeCommand({ id: 'c1', type: 'drop', taskId: 't1' }))
       expect(res.response.rejected).toHaveLength(0)
       const t = findRow(res.state.rows, 'task', 't1')!
       expect(field<string>(t, 'status')).toBe(EXPLICIT_STATUS.HOLD)
-      expect(field<string>(t, 'droppedAt')).toBe(SYNC_NOW)
+      expect(field<string>(t, 'heldAt')).toBe(SYNC_NOW)
     })
     it('hold → noop（幂等）', () => {
-      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 1 })])
+      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 1 })])
       const res = runCmd(state, makeCommand({ id: 'c1', type: 'drop', taskId: 't1' }))
       expect(res.response.rejected).toHaveLength(0)
       expect(findRow(res.state.rows, 'task', 't1')!.syncId).toBe(1)
@@ -154,14 +154,14 @@ describe('状态机 [SP-STATE]', () => {
 
   // SP-STATE-5: 已取消→活跃（restore）；仅 hold 可恢复；active 幂等；completed/deleted 拒绝
   describe('restore [SP-STATE-5]', () => {
-    it('hold → ACTIVE，droppedAt 清空，syncId 推进', () => {
-      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 1 })])
+    it('hold → ACTIVE，heldAt 清空，syncId 推进', () => {
+      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 1 })])
       const res = runCmd(state, makeCommand({ id: 'c1', type: 'restore', taskId: 't1' }))
       expect(res.response.applied).toContain('c1')
       expect(res.response.rejected).toHaveLength(0)
       const t = findRow(res.state.rows, 'task', 't1')!
       expect(field<string>(t, 'status')).toBe(EXPLICIT_STATUS.ACTIVE)
-      expect(field(t, 'droppedAt')).toBeNull()
+      expect(field(t, 'heldAt')).toBeNull()
       expect(t.syncId).toBe(2)
     })
     it('active → noop（幂等）', () => {
@@ -178,22 +178,22 @@ describe('状态机 [SP-STATE]', () => {
       expect(field<string>(findRow(res.state.rows, 'task', 't1'), 'status')).toBe(EXPLICIT_STATUS.COMPLETED)
     })
     it('restore 子 → 仅自身 ACTIVE，HOLD 祖先不变', () => {
-      const gp = makeTaskRow('gp', { status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 1 })
-      const p = makeTaskRow('p', { parentId: 'gp', status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 2 })
-      const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 3 })
+      const gp = makeTaskRow('gp', { status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 1 })
+      const p = makeTaskRow('p', { parentId: 'gp', status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 2 })
+      const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 3 })
       const res = runCmd(makeState([gp, p, c]), makeCommand({ id: 'c1', type: 'restore', taskId: 'c' }))
       expect(res.response.rejected).toHaveLength(0)
       expect(field<string>(findRow(res.state.rows, 'task', 'c'), 'status')).toBe(EXPLICIT_STATUS.ACTIVE)
-      expect(field(findRow(res.state.rows, 'task', 'c'), 'droppedAt')).toBeNull()
+      expect(field(findRow(res.state.rows, 'task', 'c'), 'heldAt')).toBeNull()
       for (const id of ['p', 'gp']) {
         const t = findRow(res.state.rows, 'task', id)!
         expect(field<string>(t, 'status')).toBe(EXPLICIT_STATUS.HOLD)
-        expect(field<string>(t, 'droppedAt')).toBe(SYNC_NOW)
+        expect(field<string>(t, 'heldAt')).toBe(SYNC_NOW)
       }
     })
     it('restore 子 → COMPLETED 祖先也不变', () => {
       const p = makeTaskRow('p', { status: EXPLICIT_STATUS.COMPLETED, completedAt: SYNC_NOW }, { syncId: 1 })
-      const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 2 })
+      const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 2 })
       const res = runCmd(makeState([p, c]), makeCommand({ id: 'c1', type: 'restore', taskId: 'c' }))
       expect(res.response.rejected).toHaveLength(0)
       expect(field<string>(findRow(res.state.rows, 'task', 'p'), 'status')).toBe(EXPLICIT_STATUS.COMPLETED)
@@ -221,7 +221,7 @@ describe('状态机 [SP-STATE]', () => {
       expect(field<string>(findRow(res.state.rows, 'task', 't1'), 'status')).toBe(EXPLICIT_STATUS.COMPLETED)
     })
     it('hold → 拒绝（仅 active 可删）', () => {
-      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 1 })])
+      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 1 })])
       const res = runCmd(state, makeCommand({ id: 'c1', type: 'delete', taskId: 't1' }))
       expect(res.response.rejected).toHaveLength(1)
       expect(field<string>(findRow(res.state.rows, 'task', 't1'), 'status')).toBe(EXPLICIT_STATUS.HOLD)
@@ -246,30 +246,74 @@ describe('状态机 [SP-STATE]', () => {
     })
   })
 
-  // SP-STATE-7: 已删除终态（无状态回退）—— domain status=DELETED 的 task 行不被 upsert 复活/改写
-  describe('终态锁 [SP-STATE-7]', () => {
-    it('status=DELETED 的 task 行：upsert 不复活、patch 不应用（终态不回退）', () => {
-      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.DELETED, droppedAt: SYNC_NOW }, { syncId: 1, deleted: true })])
+  // SP-STATE-7: 回收站 live 行 upsert noop；已 purge tombstone → REMOTE_PURGED（不 LWW 写活）
+  describe('终态锁 / purge [SP-STATE-7]', () => {
+    it('回收站 live（status=DELETED, envelope 未删）：upsert noop，不写活', () => {
+      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.DELETED, droppedAt: SYNC_NOW, name: '在站' }, { syncId: 1 })])
       const res = runMut(state, makeMutation({ id: 'm1', entityId: 't1', patch: { name: '复活' } }))
       expect(res.response.applied).toContain('m1')
+      expect(res.response.rejected).toHaveLength(0)
       const t = findRow(res.state.rows, 'task', 't1')!
-      expect(t.deleted).toBe(true) // 不复活
-      expect(field<string>(t, 'status')).toBe(EXPLICIT_STATUS.DELETED)
-      expect(field<string>(t, 'name')).toBe('task') // patch 未应用（保留默认名）
+      expect(t.deleted).toBe(false)
+      expect(field<string>(t, 'name')).toBe('在站')
     })
-    it('边界：sync 软删(status=ACTIVE, deleted=true) 仍走 LWW 复活（锁仅作用于 status=DELETED）', () => {
+    it('已 purge（envelope.deleted + status=DELETED）：upsert → REMOTE_PURGED，不写活', () => {
+      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.DELETED, droppedAt: SYNC_NOW, name: '写周报' }, { syncId: 1, deleted: true })])
+      const res = runMut(state, makeMutation({ id: 'm1', entityId: 't1', patch: { name: '复活' } }))
+      expect(res.response.rejected).toHaveLength(1)
+      expect(res.response.rejected[0]?.reason).toBe('REMOTE_PURGED:写周报')
+      const t = findRow(res.state.rows, 'task', 't1')!
+      expect(t.deleted).toBe(true)
+      expect(field<string>(t, 'name')).toBe('写周报')
+    })
+    it('已 purge：command → REMOTE_PURGED', () => {
+      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.DELETED, droppedAt: SYNC_NOW, name: '写周报' }, { syncId: 1, deleted: true })])
+      const res = runCmd(state, makeCommand({ id: 'c1', type: 'complete', taskId: 't1' }))
+      expect(res.response.rejected).toHaveLength(1)
+      expect(res.response.rejected[0]?.reason).toBe('REMOTE_PURGED:写周报')
+    })
+    it('边界：sync 软删(status=ACTIVE, deleted=true) 仍走 LWW 复活（锁仅作用于 purged）', () => {
       const state = makeState([makeTaskRow('t1', {}, { syncId: 1, deleted: true })])
       const res = runMut(state, makeMutation({ id: 'm1', entityId: 't1', patch: { name: '复活' } }))
       const t = findRow(res.state.rows, 'task', 't1')!
-      expect(t.deleted).toBe(false) // status=ACTIVE 非 DELETED，LWW 复活仍成立
+      expect(t.deleted).toBe(false)
       expect(field<string>(t, 'name')).toBe('复活')
+    })
+  })
+
+  describe('restoreFromTrash', () => {
+    it('deleted → ACTIVE，清 droppedAt', () => {
+      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.DELETED, droppedAt: SYNC_NOW }, { syncId: 1 })])
+      const res = runCmd(state, makeCommand({ id: 'c1', type: 'restore_from_trash', taskId: 't1' }))
+      expect(res.response.applied).toContain('c1')
+      const t = findRow(res.state.rows, 'task', 't1')!
+      expect(field<string>(t, 'status')).toBe(EXPLICIT_STATUS.ACTIVE)
+      expect(field<string | null>(t, 'droppedAt')).toBeNull()
+    })
+    it('仅自身：子任务仍留在回收站', () => {
+      const p = makeTaskRow('p', { status: EXPLICIT_STATUS.DELETED, droppedAt: SYNC_NOW }, { syncId: 1 })
+      const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.DELETED, droppedAt: SYNC_NOW }, { syncId: 2 })
+      const res = runCmd(makeState([p, c]), makeCommand({ id: 'c1', type: 'restore_from_trash', taskId: 'p' }))
+      expect(field<string>(findRow(res.state.rows, 'task', 'p'), 'status')).toBe(EXPLICIT_STATUS.ACTIVE)
+      expect(field<string>(findRow(res.state.rows, 'task', 'c'), 'status')).toBe(EXPLICIT_STATUS.DELETED)
+    })
+    it('active → noop', () => {
+      const state = makeState([makeTaskRow('t1', {}, { syncId: 1 })])
+      const res = runCmd(state, makeCommand({ id: 'c1', type: 'restore_from_trash', taskId: 't1' }))
+      expect(res.response.applied).toContain('c1')
+      expect(findRow(res.state.rows, 'task', 't1')!.syncId).toBe(1)
+    })
+    it('hold → 拒绝', () => {
+      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 1 })])
+      const res = runCmd(state, makeCommand({ id: 'c1', type: 'restore_from_trash', taskId: 't1' }))
+      expect(res.response.rejected).toHaveLength(1)
     })
   })
 
   // SP-STATE-8: 已完成↔已取消无直连边；reopen/restore 均只回 ACTIVE，不可互换
   describe('completed↔hold 无直连 [SP-STATE-8]', () => {
     it('reopen on HOLD → 拒绝（completed↔hold 无直连，须先 restore）', () => {
-      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 1 })])
+      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 1 })])
       const res = runCmd(state, makeCommand({ id: 'c1', type: 'reopen', taskId: 't1' }))
       expect(res.response.rejected).toHaveLength(1)
       expect(field<string>(findRow(res.state.rows, 'task', 't1'), 'status')).toBe(EXPLICIT_STATUS.HOLD)
@@ -289,11 +333,11 @@ describe('状态机 [SP-STATE]', () => {
       expect(field(rc.state.rows.find(r => r.id === 't1'), 'completedAt')).toBeNull()
 
       const rs = runCmd(
-        makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, droppedAt: SYNC_NOW }, { syncId: 1 })]),
+        makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { syncId: 1 })]),
         makeCommand({ id: 'c1', type: 'restore', taskId: 't1' }),
       )
       expect(field<string>(findRow(rs.state.rows, 'task', 't1'), 'status')).toBe(EXPLICIT_STATUS.ACTIVE)
-      expect(field(rs.state.rows.find(r => r.id === 't1'), 'droppedAt')).toBeNull()
+      expect(field(rs.state.rows.find(r => r.id === 't1'), 'heldAt')).toBeNull()
     })
   })
 })

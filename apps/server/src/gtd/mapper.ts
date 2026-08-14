@@ -34,14 +34,13 @@ export function tagToRow(tag: Tag, userId: string): TagInsert {
   }
 }
 
-// ---------- Task（repeatRuleId ↔ repeat_rule jsonb；tagIds/attachmentIds 装配） ----------
-export function rowToTask(row: TaskRow, tagIds: string[], attachmentIds: string[]): Task {
+// ---------- Task（标签/附件走独立行；本 mapper 仅 task 列） ----------
+export function rowToTask(row: TaskRow): Task {
   const repeatRule = row.repeatRule as RepeatRule | null
   return TaskSchema.parse({
     id: row.id,
     name: row.name,
     note: row.note,
-    projectId: row.projectId,
     mountDirId: row.mountDirId,
     parentId: row.parentId,
     order: row.sortOrder,
@@ -52,12 +51,11 @@ export function rowToTask(row: TaskRow, tagIds: string[], attachmentIds: string[
     plannedMode: row.plannedMode ?? 'none',
     plannedDate: toISO(row.plannedDate),
     completedAt: toISO(row.completedAt),
+    heldAt: toISO(row.heldAt),
     droppedAt: toISO(row.droppedAt),
     flagged: row.flagged,
     estimateMinutes: row.estimateMinutes,
     repeatRuleId: repeatRule?.id ?? null,
-    tagIds,
-    attachmentIds,
     repeatedFromTaskId: row.repeatedFromTaskId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: (row.updatedAt ?? row.createdAt).toISOString(),
@@ -68,7 +66,6 @@ export function taskToRow(task: Task, userId: string, repeatRule: RepeatRule | n
   return {
     id: task.id,
     userId,
-    projectId: task.projectId,
     mountDirId: task.mountDirId,
     parentId: task.parentId,
     name: task.name,
@@ -81,6 +78,7 @@ export function taskToRow(task: Task, userId: string, repeatRule: RepeatRule | n
     plannedMode: task.plannedMode,
     plannedDate: toDate(task.plannedDate),
     completedAt: toDate(task.completedAt),
+    heldAt: toDate(task.heldAt),
     droppedAt: toDate(task.droppedAt),
     flagged: task.flagged,
     estimateMinutes: task.estimateMinutes,

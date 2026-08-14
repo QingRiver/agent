@@ -35,7 +35,8 @@ export function parseRows(json: string): EntityRow[] {
 }
 
 /**
- * 导入 id remap：GTD 行集内 id 全换新 uuid；mountDirId/projectId 保留；
+ * 导入 id remap：GTD 行集内 id 全换新 uuid；mountDirId 保留；
+ * task_tag.tagId 保留原值（标签 catalog 外部，不 remap）；
  * 递归更新 perspective.filter 内 EntityRef.id；信封重置。
  */
 export function remapRowIds(rows: EntityRow[], userId: string): EntityRow[] {
@@ -52,19 +53,13 @@ export function remapRowIds(rows: EntityRow[], userId: string): EntityRow[] {
     id == null ? null : mapId(id)
 
   for (const r of rows) {
-    if (r.entity === 'task' || r.entity === 'tag' || r.entity === 'perspective' || r.entity === 'attachment')
+    if (r.entity === 'task' || r.entity === 'perspective' || r.entity === 'attachment')
       mapId(r.id)
   }
 
   return rows.map((r) => {
     const base = { userId, syncId: 0, deleted: false as const }
     return match(r)
-      .with({ entity: 'tag' }, row => ({
-        ...base,
-        entity: 'tag' as const,
-        id: mapId(row.id),
-        data: { ...row.data },
-      }))
       .with({ entity: 'perspective' }, (row) => {
         const { filter, ...rest } = row.data
         return {
@@ -73,7 +68,7 @@ export function remapRowIds(rows: EntityRow[], userId: string): EntityRow[] {
           id: mapId(row.id),
           data: {
             ...rest,
-            filter: filter == null ? null : remapFilterNode(filter, idMap),
+            filter: filter == null ? null : remapFilterNode(filter as FilterNode, idMap),
           },
         }
       })
@@ -85,7 +80,8 @@ export function remapRowIds(rows: EntityRow[], userId: string): EntityRow[] {
       }))
       .with({ entity: 'task_tag' }, (row) => {
         const taskId = mapId(row.data.taskId)
-        const tagId = mapId(row.data.tagId)
+        // tagId：外部 catalog，保留原值
+        const tagId = row.data.tagId
         return {
           ...base,
           entity: 'task_tag' as const,
@@ -107,9 +103,8 @@ export function remapRowIds(rows: EntityRow[], userId: string): EntityRow[] {
             parentId: mapOpt(d.parentId),
             repeatRuleId: mapOpt(d.repeatRuleId),
             repeatedFromTaskId: mapOpt(d.repeatedFromTaskId),
-            // mountDirId / projectId：dirs 树不在行集，保留原值
+            // mountDirId：dirs 树不在行集，保留原值
             mountDirId: d.mountDirId,
-            projectId: d.projectId,
             repeatRule,
           },
         }
@@ -118,12 +113,11 @@ export function remapRowIds(rows: EntityRow[], userId: string): EntityRow[] {
   })
 }
 
-/** 导入拓扑序：tags → perspectives → tasks(父先子) → task_tag → attachments */
+/** 导入拓扑序：perspectives → tasks(父先子) → task_tag → attachments */
 export function orderImportRows(rows: EntityRow[]): EntityRow[] {
   const byEntity = <E extends SyncEntity>(e: E): EntityRowOf<E>[] =>
     rows.filter((r): r is EntityRowOf<E> => r.entity === e)
 
-  const tags = byEntity('tag')
   const perspectives = byEntity('perspective')
   const taskTags = byEntity('task_tag')
   const attachments = byEntity('attachment')
@@ -147,7 +141,7 @@ export function orderImportRows(rows: EntityRow[]): EntityRow[] {
   for (const t of tasks)
     visit(t)
 
-  return [...tags, ...perspectives, ...orderedTasks, ...taskTags, ...attachments]
+  return [...perspectives, ...orderedTasks, ...taskTags, ...attachments]
 }
 
 // ---------- filter EntityRef remap（结构遍历，避免 data→view 硬依赖类型） ----------

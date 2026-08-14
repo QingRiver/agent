@@ -73,13 +73,13 @@ describe('projectService e2e (dirs 在线 API)', () => {
       .toThrow(ProjectDirError)
   })
 
-  it('move 跨 project → 子树 dir projectId 级联 + 挂载 task projectId 更新', async () => {
+  it('move 跨 project → 子树 dir projectId 级联；挂载 task 仅保留 mountDirId', async () => {
     // project A / dirA1（挂一个 task）/ project B
     const a = await ProjectService.createProject(USER_ID, { name: 'A' })
     const a1 = await ProjectService.createDir(USER_ID, { parentId: a.id, name: 'a1' })
     const b = await ProjectService.createProject(USER_ID, { name: 'B' })
 
-    // 插一个挂载到 a1 的 task（projectId 当前 = A）
+    // 插一个挂载到 a1 的 task（无 projectId 列；归属靠 mountDirId）
     const taskId = `task-${a1.id}`
     await db.insert(gtdTasks).values({
       id: taskId,
@@ -87,7 +87,6 @@ describe('projectService e2e (dirs 在线 API)', () => {
       name: '挂 a1 的任务',
       status: 'active',
       mountDirId: a1.id,
-      projectId: a.id,
       parentId: null,
       sortOrder: 0,
       flagged: false,
@@ -105,10 +104,9 @@ describe('projectService e2e (dirs 在线 API)', () => {
     expect(moved?.projectId).toBe(b.id) // 级联到新 project 根
     expect(moved?.vdir).toBe('B/a1')
 
-    // task projectId 被级联更新为 B
+    // task 无 projectId；mountDirId 不变（权威）
     const [task] = await db.select().from(gtdTasks).where(eq(gtdTasks.id, taskId)).limit(1)
-    expect(task?.projectId).toBe(b.id)
-    expect(task?.mountDirId).toBe(a1.id) // mountDirId 不变（权威）
+    expect(task?.mountDirId).toBe(a1.id)
   })
 
   it('delete 非空（有子 dir）→ 拒绝；清空后软删', async () => {

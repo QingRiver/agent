@@ -22,7 +22,8 @@ export const EXPLICIT_STATUS_TEXT = {
   [EXPLICIT_STATUS.ACTIVE]: '活跃',
   [EXPLICIT_STATUS.COMPLETED]: '已完成',
   [EXPLICIT_STATUS.HOLD]: '搁置',
-  [EXPLICIT_STATUS.DELETED]: '已删除',
+  /** 产品语义 = 回收站（trashed）；wire 值仍为 deleted */
+  [EXPLICIT_STATUS.DELETED]: '回收站',
 } as const
 
 // ===== 计算状态（派生，不持久化，实时计算） =====
@@ -149,6 +150,12 @@ export const BUILTIN_PERSPECTIVE_ID = {
   TAGS: 'tags',
   FLAGGED: 'flagged',
   COMPLETED: 'completed',
+  /** 已搁置（status=hold） */
+  HOLD: 'hold',
+  /** 回收站（status=deleted ≡ trashed） */
+  TRASH: 'trash',
+  /** 全部（无 DSL 过滤；含完成/搁置需 View Options 切到 all） */
+  ALL: 'all',
 } as const
 
 export type BuiltinPerspectiveId = (typeof BUILTIN_PERSPECTIVE_ID)[keyof typeof BUILTIN_PERSPECTIVE_ID]
@@ -160,6 +167,9 @@ export const BUILTIN_PERSPECTIVE_NAME: Record<BuiltinPerspectiveId, string> = {
   [BUILTIN_PERSPECTIVE_ID.TAGS]: '标签',
   [BUILTIN_PERSPECTIVE_ID.FLAGGED]: '旗标',
   [BUILTIN_PERSPECTIVE_ID.COMPLETED]: '已完成',
+  [BUILTIN_PERSPECTIVE_ID.HOLD]: '已搁置',
+  [BUILTIN_PERSPECTIVE_ID.TRASH]: '回收站',
+  [BUILTIN_PERSPECTIVE_ID.ALL]: '全部',
 }
 
 /** 内置透视 id 列表（校验 reserved id 等） */

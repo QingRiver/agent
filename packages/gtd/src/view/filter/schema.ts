@@ -4,10 +4,7 @@ import { FILTER_FIELD } from '../../data/types'
 /** re-export：filter 模块作为统一导入面 */
 export { FILTER_FIELD }
 
-/**
- * 本地 FilterFieldSchema（与 ../schema 等价，z.enum(FILTER_FIELD)）。
- * 不从 ../schema 导入，以避免 schema.ts ↔ filter/schema.ts 循环依赖。
- */
+/** 字段枚举真相在 data/types FILTER_FIELD；此处仅作 zod 约束。 */
 const FilterFieldSchema = z.enum(FILTER_FIELD)
 
 /**
@@ -62,13 +59,13 @@ export const LEAF_OP = {
 } as const
 
 export const LEAF_OP_TEXT = {
-  [LEAF_OP.IS]: '是',
-  [LEAF_OP.IS_NOT]: '不是',
-  [LEAF_OP.SOME]: '包含',
+  [LEAF_OP.IS]: '等于',
+  [LEAF_OP.IS_NOT]: '不等于',
+  [LEAF_OP.SOME]: '属于',
   [LEAF_OP.EMPTY]: '为空',
   [LEAF_OP.BEFORE]: '早于',
   [LEAF_OP.AFTER]: '晚于',
-  [LEAF_OP.WITHIN]: '区间',
+  [LEAF_OP.WITHIN]: '在区间',
   [LEAF_OP.EXIST]: '已设置',
 } as const
 

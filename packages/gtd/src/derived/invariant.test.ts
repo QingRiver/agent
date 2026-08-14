@@ -21,10 +21,28 @@ describe('validateInvariants', () => {
     expect(validateInvariants(new RowStore([a, b])).some(v => v.code === 'cycle')).toBe(true)
   })
 
-  it('broken_reference: tagId 悬空', () => {
+  it('task_tag 不因 RowStore 无 tag 目录行而报悬空（目录已退出 sync）', () => {
     const t = makeTaskRow('t1')
-    const tt = makeTaskTagRow('t1', 'missing')
-    expect(validateInvariants(new RowStore([t, tt])).some(v => v.code === 'broken_reference')).toBe(true)
+    const tt = makeTaskTagRow('t1', 'external-tag')
+    expect(validateInvariants(new RowStore([t, tt]))).toEqual([])
+  })
+
+  it('broken_reference: attachment taskId 悬空', () => {
+    const a = {
+      entity: 'attachment' as const,
+      id: 'a1',
+      userId: 'u1',
+      syncId: 1,
+      deleted: false,
+      data: {
+        taskId: 'missing-task',
+        kind: 'file' as const,
+        url: 'https://x',
+        filename: 'f',
+        createdAt: new Date().toISOString(),
+      },
+    }
+    expect(validateInvariants(new RowStore([a])).some(v => v.code === 'broken_reference')).toBe(true)
   })
 
   it('duplicate_order: 不同 mountDirId 同 order 不冲突', () => {

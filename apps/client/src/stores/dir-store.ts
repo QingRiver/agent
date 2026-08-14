@@ -1,6 +1,7 @@
 import type { PerspectiveEntityRef } from '@agent/gtd'
 import type { DirRow, DirTree } from '@agent/project'
 import type { DirDto } from '@apis/dir-api'
+import { orderBetween, reindexSiblings, shouldReindex } from '@agent/gtd'
 import { buildDirTree, subtreeDirIds, walkToProjectRoot } from '@agent/project'
 import { DirApi } from '@apis/dir-api'
 import { atom, getDefaultStore } from 'jotai'
@@ -14,7 +15,7 @@ import { atom, getDefaultStore } from 'jotai'
  *
  * 派生：dirsById（id→DirDto）、dirTree（buildDirTree）、projectRefs（透视校验
  * 上下文用）、mountDirIdsOf(projectDirId)（task 聚合用 subtreeDirIds）。
- * projectOf(task) = walkToProjectRoot(mountDirId, dirsById) 供 RowStore 投影槽注入。
+ * projectOf(mountDirId) = walkToProjectRoot，供 renderPerspective CatalogProjection 注入。
  */
 export class DirStore {
   static readonly dirsAtom = atom<DirDto[]>([])
@@ -97,9 +98,46 @@ export class DirStore {
     await DirStore.refresh()
   }
 
-  // ---------------- 派生查询（供 gtd-store 注入/聚合） ----------------
+  /**
+   * 同级 fractional 重排：按 parentId 过滤兄弟 → orderBetween → reorderBatch。
+   * project 根（parentId=null）与 dir 子节点统一走此。
+   */
+  static async reorderSibling(
+    id: string,
+    target: { beforeId: string | null, afterId: string | null },
+    parentId: string | null,
+  ): Promise<void> {
+    const dirs = getDefaultStore().get(DirStore.dirsAtom)
+    const siblings = dirs
+      .filter(d => d.id !== id && d.parentId === parentId)
+      .map(d => ({ id: d.id, order: d.sortOrder }))
+    const before = target.beforeId ? siblings.find(item => item.id === target.beforeId) : null
+    const after = target.afterId ? siblings.find(item => item.id === target.afterId) : null
+    if (target.beforeId && !before)
+      throw new Error(`找不到前一个同级项 ${target.beforeId}`)
+    if (target.afterId && !after)
+      throw new Error(`找不到后一个同级项 ${target.afterId}`)
+    let order: number
+    let reindexed = new Map<string, number>()
+    if (before && after && shouldReindex(before.order, after.order)) {
+      reindexed = reindexSiblings(siblings)
+      order = orderBetween(reindexed.get(before.id)!, reindexed.get(after.id)!)
+    }
+    else {
+      order = orderBetween(before?.order ?? null, after?.order ?? null)
+    }
+    const updates: { id: string, sortOrder: number }[] = [{ id, sortOrder: order }]
+    for (const sib of siblings) {
+      const next = reindexed.get(sib.id)
+      if (next != null)
+        updates.push({ id: sib.id, sortOrder: next })
+    }
+    await DirStore.reorderBatch(updates)
+  }
 
-  /** task 的派生 projectId = walkToProjectRoot(mountDirId)；null=Inbox/无挂载 */
+  // ---------------- 派生查询（供 CatalogProjection / 聚合） ----------------
+
+  /** task 所属 project 根 = walkToProjectRoot(mountDirId)；null=Inbox/无挂载 */
   static projectOf(dirsById: Map<string, DirDto>, mountDirId: string | null | undefined): string | null {
     return walkToProjectRoot(mountDirId ?? null, dirsById as unknown as Map<string, DirRow>)
   }

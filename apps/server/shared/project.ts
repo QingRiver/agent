@@ -4,8 +4,8 @@ import { z } from 'zod'
  * dirs / projects 在线 API 的 wire 契约（zod）。
  *
  * 统一 dirs 树（project=根 / dir=子节点）。project/folder 退出 GTD sync，
- * 改走在线 Dir API（POST，/:id/<action>）。task 经 mount_dir_id 挂载到 dirs 节点，
- * project_id 由 server 派生（walkToProjectRoot），非 LWW。
+ * 改走在线 Dir API（POST，/:id/<action>）。task 经 mount_dir_id 挂载到 dirs 节点；
+ * 所属项目在客户端经 walkToProjectRoot(mountDirId) 派生（gtd_tasks 无 project_id 列）。
  *
  * 端点见 routes/project.ts：POST /projects、/dirs、/dirs/list、/projects/list、
  * /dirs/:id/{rename,move,acl,delete}。

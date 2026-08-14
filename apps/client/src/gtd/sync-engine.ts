@@ -30,7 +30,11 @@ export class SyncEngine {
   private timer: ReturnType<typeof setTimeout> | null = null
   private _status: SyncStatus = 'idle'
   private onStatusChange?: (status: SyncStatus) => void
-  private onRejected?: (rejected: PushResponse['rejected']) => void
+  private onRejected?: (
+    rejected: PushResponse['rejected'],
+    outboxSnapshot: Array<GtdMutation | GtdCommand>,
+  ) => void
+
   private onSynced?: (changes: EntityRow[]) => void
   private api: SyncApi
   private daemons = false
@@ -44,8 +48,13 @@ export class SyncEngine {
     this.onStatusChange = cb
   }
 
-  /** 设置 rejected 回调（toast 提示） */
-  setRejectedListener(cb: (rejected: PushResponse['rejected']) => void): void {
+  /** 设置 rejected 回调；rebase 前调用并附带 outbox 快照（供 REMOTE_PURGED fork） */
+  setRejectedListener(
+    cb: (
+      rejected: PushResponse['rejected'],
+      outboxSnapshot: Array<GtdMutation | GtdCommand>,
+    ) => void,
+  ): void {
     this.onRejected = cb
   }
 
@@ -100,11 +109,12 @@ export class SyncEngine {
         : null
 
       if (pushRes) {
+        // rejected 须在 rebase 前回调，以便 soft 路径（REMOTE_PURGED fork）仍能读 outbox
+        if (pushRes.rejected?.length) {
+          this.onRejected?.(pushRes.rejected, outbox)
+        }
         // IDB 事务 rebase（ack/nack + changes + lastSyncId）
         await rebaseTransaction(pushRes)
-        if (pushRes.rejected?.length) {
-          this.onRejected?.(pushRes.rejected)
-        }
         if (pushRes.changes.length > 0) {
           this.onSynced?.(pushRes.changes)
         }
@@ -126,10 +136,71 @@ export class SyncEngine {
     }
     finally {
       this.syncing = false
-      // dirty：SYNCING 期间有新编辑 → 再跑一轮
+      // dirty：SYNCING 期间有新编辑 → 同调用栈再跑一轮（await，避免 fire-and-forget 丢结果）
       if (this.dirty) {
         this.dirty = false
-        this.scheduleSync(0)
+        await this.sync()
+      }
+    }
+  }
+
+  /**
+   * REST 等外部写改了 sync 行（如 TagsService 软删 task_tag）后调用：
+   * 先消化 outbox（若有），再强制 pull，保证远端 sync_id 增量进 IDB。
+   * 取消 pending debounce，避免与本轮竞态。
+   */
+  async syncRemoteBindings(): Promise<void> {
+    if (this.timer) {
+      clearTimeout(this.timer)
+      this.timer = null
+    }
+    // 若已有 sync 在飞：标 dirty 并等到其（含续跑）结束
+    if (this.syncing) {
+      this.dirty = true
+      while (this.syncing)
+        await new Promise<void>(r => setTimeout(r, 0))
+    }
+    else {
+      await this.sync()
+    }
+    // 上一轮若只 push，REST 侧 tombstone 不会出现在 push.changes → 再强制 pull
+    await this.pullOnly()
+  }
+
+  /** 忽略 outbox 硬规则，只 pull 增量（供 syncRemoteBindings） */
+  private async pullOnly(): Promise<void> {
+    if (this.syncing) {
+      this.dirty = true
+      while (this.syncing)
+        await new Promise<void>(r => setTimeout(r, 0))
+    }
+    if (!navigator.onLine) {
+      this.setStatus('offline')
+      return
+    }
+    this.syncing = true
+    this.setStatus('syncing')
+    try {
+      const lastSyncId = await loadLastSyncId()
+      const pullRes = await this.api.pull({ lastSyncId })
+      await rebaseTransaction({
+        applied: [],
+        rejected: [],
+        changes: pullRes.changes,
+        serverSyncId: pullRes.serverSyncId,
+      })
+      if (pullRes.changes.length > 0)
+        this.onSynced?.(pullRes.changes)
+      this.setStatus('idle')
+    }
+    catch {
+      this.setStatus('error')
+    }
+    finally {
+      this.syncing = false
+      if (this.dirty) {
+        this.dirty = false
+        await this.sync()
       }
     }
   }

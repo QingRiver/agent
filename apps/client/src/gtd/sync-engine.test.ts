@@ -80,8 +80,7 @@ describe('syncEngine', () => {
     expect(api.pull).toHaveBeenCalledOnce()
     resolvePush()
     await first
-    // dirty 触发 scheduleSync(0) → 再跑一轮（debounce 0，仍需微任务）
-    await new Promise(r => setTimeout(r, 5))
+    // dirty 在 finally 里 await sync() 续跑，无需额外 debounce
     expect(api.pull).toHaveBeenCalledTimes(2)
   })
 
@@ -96,7 +95,10 @@ describe('syncEngine', () => {
     const rejected = vi.fn()
     engine.setRejectedListener(rejected)
     await engine.sync()
-    expect(rejected).toHaveBeenCalledWith([{ id: 'm1', reason: 'boom' }])
+    expect(rejected).toHaveBeenCalledWith(
+      [{ id: 'm1', reason: 'boom' }],
+      expect.any(Array),
+    )
   })
 
   it('onSynced：changes 非空时回调刷内存；空时不触发', async () => {
@@ -158,6 +160,20 @@ describe('syncEngine', () => {
     finally {
       vi.useRealTimers()
     }
+  })
+
+  it('syncRemoteBindings：先消化 outbox，再强制 pull（REST 侧 task_tag 增量）', async () => {
+    const { loadOutbox } = await import('./row-store')
+    vi.mocked(loadOutbox).mockResolvedValueOnce([
+      { id: 'm1', entity: 'task', entityId: 't1', op: 'upsert', patch: { name: 'x' }, clientTs: '2026-07-20T00:00:00Z' },
+    ]).mockResolvedValue([])
+    const api = mkApi()
+    api.push.mockResolvedValue(mkPushRes())
+    api.pull.mockResolvedValue(mkPullRes())
+    const engine = new SyncEngine(api)
+    await engine.syncRemoteBindings()
+    expect(api.push).toHaveBeenCalledOnce()
+    expect(api.pull).toHaveBeenCalledOnce()
   })
 
   it('offline → 状态 offline 且不发起请求', async () => {

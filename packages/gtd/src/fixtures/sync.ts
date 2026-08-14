@@ -5,7 +5,6 @@
 import type { Task } from '../data/schema'
 import type {
   CompleteCommand,
-  DeleteTagCommand,
   DropCommand,
   EntityRow,
   GtdCommand,
@@ -46,9 +45,6 @@ export function makeCommand(
   cmd: { id?: string, clientTs?: string, type?: 'complete', taskId: string, clientGenerated?: { nextTaskId: string } },
 ): CompleteCommand
 export function makeCommand(cmd: { id?: string, clientTs?: string, type: 'drop', taskId: string }): DropCommand
-export function makeCommand(
-  cmd: { id?: string, clientTs?: string, type: 'delete_tag', payload: { tagId: string } },
-): DeleteTagCommand
 export function makeCommand(cmd: Partial<GtdCommand> & { id?: string, clientTs?: string }): GtdCommand
 export function makeCommand(cmd: Partial<GtdCommand>): GtdCommand {
   const { id = 'c1', clientTs = SYNC_NOW, type = 'complete', ...rest } = cmd

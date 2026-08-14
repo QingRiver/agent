@@ -5,7 +5,7 @@ import { KbStore } from '@stores/kb-store'
 import { TagsStore } from '@stores/tags-store'
 import { useAtomValue } from 'jotai'
 import { Check, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const PRESET_COLORS = ['#f87171', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#f472b6', '#fb923c', '#94a3b8']
 
@@ -38,6 +38,13 @@ export function TagManager({ open, onClose }: TagManagerProps) {
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(() => new Set())
   const [confirmDestructive, setConfirmDestructive] = useState(false)
 
+  // 目录 SSOT = TagsStore；打开管理弹窗时 refresh，避免只进过 GTD 时 atom 仍空
+  useEffect(() => {
+    if (!open)
+      return
+    void TagsStore.refreshTags()
+  }, [open])
+
   if (!open)
     return null
 
@@ -65,8 +72,9 @@ export function TagManager({ open, onClose }: TagManagerProps) {
 
   async function afterDeleteRefresh(hadTasks: boolean) {
     void KbStore.refresh()
+    // REST 已软删 gtd_task_tags；pull + 刷 rowsAtom（不依赖 /gtd 是否挂了 GtdSync）
     if (hadTasks)
-      void GtdStore.load().catch(() => {})
+      await GtdStore.refreshBindingsFromServer()
   }
 
   async function onCreate() {
@@ -79,8 +87,6 @@ export function TagManager({ open, onClose }: TagManagerProps) {
       await TagsStore.create(name, newColor)
       setNewName('')
       setNewColor(undefined)
-      // REST 建标会推进 gtd sync clock；拉一把让侧栏 rowStore.liveTags 跟上
-      void GtdStore.flushSave().catch(() => {})
     }
     catch (e) {
       setError(e instanceof Error ? e.message : String(e))

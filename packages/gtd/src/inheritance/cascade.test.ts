@@ -18,6 +18,7 @@ import {
   planDropCascade,
   planReopenCascade,
   planRestoreCascade,
+  planRestoreFromTrashCascade,
 } from './cascade'
 
 /** 把 step 列表投影为 [taskId, targetStatus] 对，便于断言 */
@@ -62,7 +63,9 @@ describe('状态联动（四句口诀）[SP-LINK-STATE]', () => {
     const p = makeTaskRow('p', { status: EXPLICIT_STATUS.ACTIVE })
     const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.ACTIVE })
     const tree = buildTaskTree([p, c])
-    expect(pairs(planDropCascade('c', tree))).toEqual([['c', EXPLICIT_STATUS.HOLD]])
+    expect(planDropCascade('c', tree)).toEqual([
+      { taskId: 'c', targetStatus: EXPLICIT_STATUS.HOLD, tsField: 'heldAt' },
+    ])
   })
 
   // SP-LINK-STATE-3: 重开/恢复 → 上下都不联动（仅自身）
@@ -123,5 +126,13 @@ describe('状态联动（四句口诀）[SP-LINK-STATE]', () => {
     const pD = makeTaskRow('p3', { status: EXPLICIT_STATUS.DELETED })
     const cD = makeTaskRow('c3', { parentId: 'p3', status: EXPLICIT_STATUS.DELETED })
     expect(planDeleteCascade('p3', buildTaskTree([pD, cD]))).toEqual([])
+  })
+
+  it('移出回收站仅自身 DELETED→ACTIVE', () => {
+    const p = makeTaskRow('p', { status: EXPLICIT_STATUS.DELETED })
+    const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.DELETED })
+    expect(planRestoreFromTrashCascade('p', buildTaskTree([p, c]))).toEqual([
+      { taskId: 'p', targetStatus: EXPLICIT_STATUS.ACTIVE, tsField: 'droppedAt' },
+    ])
   })
 })

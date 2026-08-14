@@ -1,7 +1,6 @@
 import type { ApplyResult } from '../command/state-machine'
 import type {
   DeleteMutation,
-  DeleteTagCommand,
   EntityRow,
   EntityRowOf,
   GtdCommand,
@@ -23,15 +22,15 @@ import type {
  */
 import { tryit } from 'radash'
 import { match } from 'ts-pattern'
-import { completeTask, deleteTask, dropTask, reopenTask, restoreTask } from '../command/state-machine'
+import { completeTask, deleteTask, dropTask, reopenTask, restoreFromTrash, restoreTask } from '../command/state-machine'
 import { EXPLICIT_STATUS } from '../data/types'
 import { normalizeDeferDue } from '../time/normalize'
+import { remotePurgedReason } from './reject-codes'
 
 // re-export wire 契约（sync.ts 是 sync 模块入口）
 export type {
   CompleteCommand,
   DeleteMutation,
-  DeleteTagCommand,
   DropCommand,
   EntityDataOf,
   EntityRow,
@@ -144,36 +143,31 @@ function applyCommand(
   rows: EntityRow[],
   nextSyncId: () => number,
 ): ApplyResult {
+  // purge 后 envelope.deleted + status=DELETED：命令不可作用旧 id（提示 REMOTE_PURGED）
+  const purged = findPurgedTask(rows, cmd.taskId)
+  if (purged) {
+    throw new Error(remotePurgedReason(purged.data.name))
+  }
   return match(cmd)
     .with({ type: 'complete' }, c => completeTask(c, rows, nextSyncId))
     .with({ type: 'drop' }, c => dropTask(c, rows, nextSyncId))
     .with({ type: 'reopen' }, c => reopenTask(c, rows, nextSyncId))
     .with({ type: 'restore' }, c => restoreTask(c, rows, nextSyncId))
     .with({ type: 'delete' }, c => deleteTask(c, rows, nextSyncId))
-    .with({ type: 'delete_tag' }, c => applyDeleteTag(c, rows, nextSyncId))
+    .with({ type: 'restore_from_trash' }, c => restoreFromTrash(c, rows, nextSyncId))
     .exhaustive()
 }
 
-/** delete_tag：软删 tag + 软删所有该 tagId 的 task_tag 关联行（各推进 syncId）。 */
-function applyDeleteTag(
-  cmd: DeleteTagCommand,
+/** 已 purge：envelope.deleted 且领域 status=DELETED（回收站 tombstone 的不可复活形态） */
+function findPurgedTask(
   rows: EntityRow[],
-  nextSyncId: () => number,
-): ApplyResult {
-  const { tagId } = cmd.payload
-  const tag = findLive(rows, 'tag', tagId)
-  if (!tag) {
-    throw new Error(`tag ${tagId} not found`)
-  }
-  tag.deleted = true
-  tag.syncId = nextSyncId()
-  for (const r of rows) {
-    if (r.entity === 'task_tag' && r.data.tagId === tagId && !r.deleted) {
-      r.deleted = true
-      r.syncId = nextSyncId()
-    }
-  }
-  return 'applied'
+  taskId: string,
+): EntityRowOf<'task'> | undefined {
+  const row = rows.find((r): r is EntityRowOf<'task'> =>
+    r.entity === 'task' && r.id === taskId)
+  if (row?.deleted && row.data.status === EXPLICIT_STATUS.DELETED)
+    return row
+  return undefined
 }
 
 // ---------------- mutations ----------------
@@ -223,7 +217,11 @@ function applyMutationUpsert(
     return match(mut)
       .with({ entity: 'task' }, () => {
         const taskRow = row as EntityRowOf<'task'>
-        // SP-STATE-7 终态锁：domain 终态(DELETED) 的 task 不被 upsert 复活/改写
+        // 已 purge（envelope.deleted + status=DELETED）：拒绝 LWW 写活，抛 REMOTE_PURGED
+        if (taskRow.deleted && taskRow.data.status === EXPLICIT_STATUS.DELETED) {
+          throw new Error(remotePurgedReason(taskRow.data.name))
+        }
+        // 回收站 live 行（status=DELETED, envelope 未删）：终态锁 noop；复活只走 restore_from_trash
         if (taskRow.data.status === EXPLICIT_STATUS.DELETED)
           return 'noop' as const
         const before = {
@@ -239,6 +237,7 @@ function applyMutationUpsert(
           taskRow.data.deferDate = norm.deferDate
           taskRow.data.dueDate = norm.dueDate
         }
+        // envelope 软删（status≠DELETED）可被 upsert 复活
         taskRow.deleted = false
         taskRow.syncId = nextSyncId()
         return 'applied' as const
@@ -281,10 +280,10 @@ function applyMutationUpsert(
 }
 
 /**
- * 普通字段 upsert 的引用完整性校验（parentId/taskId/tagId 存在且未软删）；违规 throw。
- * projectId 不校验——它是 server 派生冗余缓存（非 LWW，patch 不含）。
+ * 普通字段 upsert 的引用完整性校验（parentId/taskId 存在且未软删）；违规 throw。
  * mountDirId 不在纯函数层校验——指向 dirs 表（@agent/gtd 不依赖 @agent/project），
  * 引用存活由 server 落库层 stamp 校验修正（死引用→置 null→Inbox）。
+ * tagId 不在纯函数层校验——标签目录在外部 catalog（REST /tags）。
  * ts-pattern 按 entity 模式匹配收窄 patch 类型，字段直接 string，无需 cast。
  */
 function assertMutationPatch(mut: UpsertMutation, rows: EntityRow[]): void {
@@ -297,12 +296,9 @@ function assertMutationPatch(mut: UpsertMutation, rows: EntityRow[]): void {
       }
     })
     .with({ entity: 'task_tag' }, (m) => {
-      const { taskId, tagId } = m.patch
+      const { taskId } = m.patch
       if (!findLive(rows, 'task', taskId)) {
         throw new Error(`task ${taskId} not found`)
-      }
-      if (!findLive(rows, 'tag', tagId)) {
-        throw new Error(`tag ${tagId} not found`)
       }
     })
     .otherwise(() => {

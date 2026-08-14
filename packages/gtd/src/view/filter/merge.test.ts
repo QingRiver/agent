@@ -21,15 +21,15 @@ describe('mergeFilter', () => {
     })
   })
 
-  it('已是 and 则摊平一层', () => {
+  it('已是 and → 外包二元 and（不 n-ary 摊平）', () => {
     const left = { op: LOGIC_OP.AND, children: [flagged, tagT1] }
     expect(mergeFilter(left, projectP1)).toEqual({
       op: LOGIC_OP.AND,
-      children: [flagged, tagT1, projectP1],
+      children: [left, projectP1],
     })
     expect(mergeFilter(projectP1, left)).toEqual({
       op: LOGIC_OP.AND,
-      children: [projectP1, flagged, tagT1],
+      children: [projectP1, left],
     })
   })
 })

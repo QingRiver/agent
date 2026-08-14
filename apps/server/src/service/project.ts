@@ -13,7 +13,7 @@ import {
   renameDir,
   subtreeDirIds,
 } from '@agent/project'
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '../db/drizzle'
 import { dirs, gtdTasks, kbDocuments } from '../db/schema'
 
@@ -23,7 +23,7 @@ import { dirs, gtdTasks, kbDocuments } from '../db/schema'
  * 结构靠 parent_id 链；层级查询走「按 projectId 拉全树 + buildDirTree 内存组装」。
  * project_id 是 walkToProjectRoot 派生冗余缓存（server 维护，非 LWW）：
  * - create/move 后落库重算受影响行的 projectId
- * - 跨 project move 级联子树 dirs + 挂载 task 的 project_id
+ * - 跨 project move 级联子树 dirs 的 projectId（gtd_tasks 仅认 mountDirId）
  *
  * 错误：结构违规 → ProjectDirError（→409）；不可见/已删 → notFound（→404）。
  * ACL v1 骨架：单用户期 owner 恒过，grants 空。
@@ -222,8 +222,9 @@ export class ProjectService {
 
   /**
    * 移动 dir 到新父。
-   * 跨 project move：级联子树 dirs + 挂载 task 的 projectId（movedProjectId）。
+   * 跨 project move：级联子树 dirs 的 projectId（movedProjectId）。
    * 同 project move：仅改 parentId + 重算子树 vdir，不动 projectId。
+   * gtd_tasks 仅认 mountDirId（无 projectId 列），不级联刷 task。
    */
   static async move(userId: string, id: string, input: { newParentId: string, sortOrder?: number }): Promise<DirDto> {
     const crossProject = await db.transaction(async (tx) => {
@@ -270,16 +271,9 @@ export class ProjectService {
         }
       }
 
-      // 跨 project：级联子树挂载 task 的 project_id（mount_dir_id ∈ subtreeDirIds）
       if (!newProjectId)
         return null
-      const subtreeIds = [...subtreeDirIds(tree, id)]
-      if (subtreeIds.length > 0) {
-        await tx.update(gtdTasks)
-          .set({ projectId: newProjectId, updatedAt: new Date() })
-          .where(and(eq(gtdTasks.userId, userId), inArray(gtdTasks.mountDirId, subtreeIds)))
-      }
-      return { subtreeIds, newProjectId }
+      return { subtreeIds: [...subtreeDirIds(tree, id)], newProjectId }
     })
     // 跨 project：级联子树挂载 KB 文档的 projectId（PG）+ Qdrant setPayload（不重 embed）。
     // 经 KbService 委托，保持 project 域不直接触 Qdrant。tx 外执行（Qdrant 非 PG 事务边界）。

@@ -7,7 +7,7 @@
  * rebaseTransaction：push/pull 响应的 ack/nack + changes merge + lastSyncId 推进。
  */
 import type { EntityRow, GtdCommand, GtdMutation, PushResponse } from '@agent/gtd'
-import { applyPush, isMutation, RowStore } from '@agent/gtd'
+import { applyPush, isMutation } from '@agent/gtd'
 
 const DB_NAME = 'gtd-sync'
 const DB_VERSION = 1
@@ -40,7 +40,7 @@ function openDB(): Promise<IDBDatabase> {
   })
 }
 
-/** 读全部行（含软删） */
+/** 读全部行（含软删）。 */
 export async function loadRows(): Promise<EntityRow[]> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
@@ -163,31 +163,6 @@ export async function rebaseTransaction(res: PushResponse): Promise<void> {
   })
 }
 
-/** 持久化 rows（批量 put） */
-export async function persistRows(rows: EntityRow[]): Promise<void> {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(ROWS_STORE, 'readwrite')
-    const store = tx.objectStore(ROWS_STORE)
-    for (const row of rows) {
-      store.put(row, rowKey(row))
-    }
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
-
-/** 写 outbox（单条） */
-export async function appendOutbox(item: GtdMutation | GtdCommand): Promise<void> {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(OUTBOX_STORE, 'readwrite')
-    tx.objectStore(OUTBOX_STORE).add(item)
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
-
 /** 清空该用户全部本地数据（登出/换用户） */
 export async function clearAll(): Promise<void> {
   const db = await openDB()
@@ -201,7 +176,43 @@ export async function clearAll(): Promise<void> {
   })
 }
 
-/** 从本地行构造 RowStore（供 UI 派生/渲染） */
-export function toRowStore(rows: EntityRow[]): RowStore {
-  return new RowStore(rows)
+/** 按 id 列表从 outbox 删除（清冲突缓存） */
+export async function removeOutboxIds(ids: string[]): Promise<void> {
+  if (ids.length === 0)
+    return
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OUTBOX_STORE, 'readwrite')
+    const store = tx.objectStore(OUTBOX_STORE)
+    for (const id of ids)
+      store.delete(id)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+/** 只写 rows（不入 outbox）；供 purge REST 后 merge */
+export async function persistRows(rows: EntityRow[]): Promise<void> {
+  if (rows.length === 0)
+    return
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ROWS_STORE, 'readwrite')
+    const store = tx.objectStore(ROWS_STORE)
+    for (const row of rows)
+      store.put(row, rowKey(row))
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+/** 更新 lastSyncId */
+export async function persistLastSyncId(serverSyncId: number): Promise<void> {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(META_STORE, 'readwrite')
+    tx.objectStore(META_STORE).put(serverSyncId, 'lastSyncId')
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
 }

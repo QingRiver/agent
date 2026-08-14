@@ -90,18 +90,14 @@ export class TagsService {
     const id = randomUUID()
     const ts = new Date()
     try {
-      await db.transaction(async (tx) => {
-        const [syncId] = await allocateSyncIds(userId, 1, tx)
-        await tx.insert(tags).values({
-          id,
-          userId,
-          name: args.name,
-          color: args.color ?? null,
-          syncId,
-          deleted: false,
-          createdAt: ts,
-          updatedAt: ts,
-        })
+      await db.insert(tags).values({
+        id,
+        userId,
+        name: args.name,
+        color: args.color ?? null,
+        deleted: false,
+        createdAt: ts,
+        updatedAt: ts,
       })
     }
     catch (err) {
@@ -295,10 +291,9 @@ export class TagsService {
   }
 
   private static async softDeleteTag(userId: string, tagId: string, tx: Tx): Promise<void> {
-    const [syncId] = await allocateSyncIds(userId, 1, tx)
     await tx
       .update(tags)
-      .set({ deleted: true, syncId, updatedAt: new Date() })
+      .set({ deleted: true, updatedAt: new Date() })
       .where(and(eq(tags.id, tagId), eq(tags.userId, userId)))
   }
 

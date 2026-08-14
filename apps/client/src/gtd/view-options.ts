@@ -8,6 +8,7 @@
  */
 import type { AvailabilityFilter, EntityFocus } from '@agent/gtd'
 import {
+  AVAILABILITY_FILTER,
   BUILTIN_PERSPECTIVE_ID,
   DEFAULT_AVAILABILITY_FILTER,
   FILTER_FIELD,
@@ -52,11 +53,13 @@ export function viewOptionsScope(selection: GtdSelection): string {
   return selection.perspectiveId
 }
 
-/** 读 overlay 或默认 REMAINING */
+/** 读 overlay 或默认 REMAINING；回收站强制 ALL（否则 remaining 滤掉 deleted） */
 export function resolveAvailabilityFilter(
-  _scope: string,
+  scope: string,
   overlay: Partial<PerspectiveViewOptions> | undefined,
 ): AvailabilityFilter {
+  if (scope === BUILTIN_PERSPECTIVE_ID.TRASH)
+    return overlay?.availabilityFilter ?? AVAILABILITY_FILTER.ALL
   return overlay?.availabilityFilter ?? DEFAULT_AVAILABILITY_FILTER
 }
 

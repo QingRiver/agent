@@ -9,21 +9,18 @@ import { tags } from './tags'
 // 1:1 复刻 OmniFocus（去 project facet：type 下沉 task groupType、status 改批量 command、review/defaults/flagged/note 删）。
 // 日期列 timestamptz（defer/due 业务核心）；sort_order float8 + fractional indexing。
 // 自引用 FK（parent_id）在迁移中 DEFERRABLE INITIALLY DEFERRED。sync_id 每用户单调（mode:'number' <2^53）。
-// task 归属：mount_dir_id 权威（FK 软引用 dirs，落库时 server 校验存活）；project_id = walkToProjectRoot(mount_dir_id)
-// 派生的冗余缓存（server 维护、非 LWW，纯缓存列无 FK）。
+// task 归属：mount_dir_id 权威（FK 软引用 dirs，落库时 server 校验存活）。
 
 /**
  * 任务（核心，高频查询）。parent_id 自引用（action group）。
- * 归属权威 = `mount_dir_id`（挂载到 dirs 节点；null=Inbox）；`project_id` = walkToProjectRoot(mount_dir_id)
- * 派生冗余缓存（server 落库 stamp 填充，非 LWW，无 FK）。子任务默认继承父 mount_dir_id（应用层 + invariant）。
+ * 归属权威 = `mount_dir_id`（挂载到 dirs 节点；null=Inbox）。
+ * 子任务默认继承父 mount_dir_id（应用层 + invariant）。
  * Inbox 语义 CHECK：无 mount 必无 parent；有 parent 必有 mount。
  * repeat_rule 1:1 内联 jsonb（非独立表，少 join；规则随 task 走，不独立成表）。
  */
 export const gtdTasks = pgTable('gtd_tasks', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(),
-  /** 冗余缓存 = walkToProjectRoot(mount_dir_id)；server 维护、非 LWW；纯缓存列无 FK */
-  projectId: text('project_id'),
   /** 权威挂载列 → dirs.id；null=Inbox。无 FK（dir 存活由 server stamp 校验修正，避免跨事务 FK 死锁） */
   mountDirId: text('mount_dir_id'),
   parentId: text('parent_id').references((): AnyPgColumn => gtdTasks.id, { onDelete: 'cascade' }),
@@ -37,6 +34,9 @@ export const gtdTasks = pgTable('gtd_tasks', {
   plannedMode: text('planned_mode').notNull().default('none'),
   plannedDate: timestamp('planned_date', { withTimezone: true, mode: 'date' }),
   completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
+  /** 搁置时间；仅 status=hold */
+  heldAt: timestamp('held_at', { withTimezone: true, mode: 'date' }),
+  /** 进回收站时间；仅 status=deleted（trashed） */
   droppedAt: timestamp('dropped_at', { withTimezone: true, mode: 'date' }),
   flagged: boolean('flagged').notNull().default(false),
   estimateMinutes: integer('estimate_minutes'),
@@ -47,7 +47,7 @@ export const gtdTasks = pgTable('gtd_tasks', {
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }),
 }, table => [
-  index('idx_gtd_tasks_user_proj_parent_sort').on(table.userId, table.projectId, table.parentId, table.sortOrder),
+  index('idx_gtd_tasks_user_mount_parent_sort').on(table.userId, table.mountDirId, table.parentId, table.sortOrder),
   index('idx_gtd_tasks_user_mount').on(table.userId, table.mountDirId),
   index('idx_gtd_tasks_user_status').on(table.userId, table.status),
   index('idx_gtd_tasks_user_parent').on(table.userId, table.parentId),

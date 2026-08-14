@@ -1,4 +1,5 @@
 import { DirSync } from '@components/gtd/DirSync'
+import { TagSync } from '@components/gtd/TagSync'
 import { KbEditor } from '@components/kb/KbEditor'
 import { KbRecallPanel } from '@components/kb/KbRecallPanel'
 import { KbSidebar } from '@components/kb/KbSidebar'
@@ -76,6 +77,7 @@ function KbPage() {
     <>
       <KbSync />
       <DirSync />
+      <TagSync />
       <KbLayout
         sidebar={(
           <KbSidebar

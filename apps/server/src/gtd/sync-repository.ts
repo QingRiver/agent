@@ -3,23 +3,18 @@ import type { DirRow } from '@agent/project'
 import type {
   AttachmentRow,
   PerspectiveRow,
-  TagRow,
   TaskRow,
 } from '../db/schema'
 import { applyPush } from '@agent/gtd'
-import { walkToProjectRoot } from '@agent/project'
 /**
  * GTD sync Postgres 落库。
  *
  * EntityRow 是 Client/wire/PG 同构真相。push 单事务：FOR UPDATE clock → 装配 SyncState
- * → applyPush 纯函数 → **task project_id stamp（server 派生）** → 写变更行（upsert）
+ * → applyPush 纯函数 → **死 mountDirId 修正** → 写变更行（upsert）
  * + clock + 幂等 → 返回 response。
  *
- * project_id 两层模型：applyPush 纯函数完全不维护 projectId（patch 不含、move 已删）；
- * 本落库层在 applyPush 后对每个 syncId > oldClock 的 task 行做 stamp——
- * `walkToProjectRoot(mountDirId, dirsById)` + 死引用修正（mountDirId→已删 dir→null）。
- * stamp 必须在 response.changes 构造之前，client 收到的 projectId 永远是 server 权威值。
  * pull 纯读 sync_id > lastSyncId。日常路径为行级增量，无全量文档写。
+ * 标签目录已退出 sync（REST /tags）；task_tag 仍走 sync，落库前校验 tag 在 DB 存活。
  */
 import { and, eq, gt, inArray } from 'drizzle-orm'
 import { db } from '../db/drizzle'
@@ -61,7 +56,6 @@ function rowToTaskEntity(row: TaskRow): EntityRow {
     data: {
       name: row.name,
       note: row.note,
-      projectId: row.projectId,
       mountDirId: row.mountDirId,
       parentId: row.parentId,
       order: row.sortOrder,
@@ -72,6 +66,7 @@ function rowToTaskEntity(row: TaskRow): EntityRow {
       plannedMode: row.plannedMode ?? 'none',
       plannedDate: toISO(row.plannedDate),
       completedAt: toISO(row.completedAt),
+      heldAt: toISO(row.heldAt),
       droppedAt: toISO(row.droppedAt),
       flagged: row.flagged,
       estimateMinutes: row.estimateMinutes,
@@ -80,22 +75,6 @@ function rowToTaskEntity(row: TaskRow): EntityRow {
       repeatedFromTaskId: row.repeatedFromTaskId,
       createdAt: row.createdAt.toISOString(),
       updatedAt: (row.updatedAt ?? row.createdAt).toISOString(),
-    },
-  } as unknown as EntityRow
-}
-
-function rowToTagEntity(row: TagRow): EntityRow {
-  return {
-    entity: 'tag',
-    id: row.id,
-    userId: row.userId,
-    syncId: row.syncId ?? 0,
-    deleted: row.deleted,
-    data: {
-      name: row.name,
-      color: row.color,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: toISO(row.updatedAt),
     },
   } as unknown as EntityRow
 }
@@ -160,7 +139,6 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
           userId: row.userId,
           name: d.name,
           note: d.note,
-          projectId: d.projectId ?? null,
           mountDirId: d.mountDirId ?? null,
           parentId: d.parentId,
           sortOrder: d.order,
@@ -171,6 +149,7 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
           plannedMode: d.plannedMode ?? 'none',
           plannedDate: toDate(d.plannedDate),
           completedAt: toDate(d.completedAt),
+          heldAt: toDate(d.heldAt),
           droppedAt: toDate(d.droppedAt),
           flagged: d.flagged,
           estimateMinutes: d.estimateMinutes,
@@ -186,7 +165,6 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
           set: {
             name: d.name,
             note: d.note,
-            projectId: d.projectId ?? null,
             mountDirId: d.mountDirId ?? null,
             parentId: d.parentId,
             sortOrder: d.order,
@@ -197,6 +175,7 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
             plannedMode: d.plannedMode ?? 'none',
             plannedDate: toDate(d.plannedDate),
             completedAt: toDate(d.completedAt),
+            heldAt: toDate(d.heldAt),
             droppedAt: toDate(d.droppedAt),
             flagged: d.flagged,
             estimateMinutes: d.estimateMinutes,
@@ -222,31 +201,6 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
         .onConflictDoUpdate({
           target: [gtdTaskTags.taskId, gtdTaskTags.tagId],
           set: { userId: row.userId, syncId: row.syncId, deleted: row.deleted },
-        })
-      break
-    }
-    case 'tag': {
-      const d = row.data
-      await tx.insert(tags)
-        .values({
-          id: row.id,
-          userId: row.userId,
-          name: d.name,
-          color: d.color,
-          syncId: row.syncId,
-          deleted: row.deleted,
-          createdAt: toDate(d.createdAt),
-          updatedAt: toDate(d.updatedAt),
-        })
-        .onConflictDoUpdate({
-          target: tags.id,
-          set: {
-            name: d.name,
-            color: d.color,
-            syncId: row.syncId,
-            deleted: row.deleted,
-            updatedAt: toDate(d.updatedAt),
-          },
         })
       break
     }
@@ -315,10 +269,9 @@ async function upsertEntityRow(row: EntityRow, tx: Tx): Promise<void> {
 
 // ---------------- pull ----------------
 
-/** 拉取增量：各表 sync_id > lastSyncId（含软删）→ EntityRow[]。 */
+/** 拉取增量：各表 sync_id > lastSyncId（含软删）→ EntityRow[]。标签目录已退出 sync，不下发 tag 行。 */
 export async function pullFromPg(userId: string, lastSyncId: number): Promise<PullResponse> {
-  const [tagRows, perspectives, tasks, taskTags, attachments, clockRow] = await Promise.all([
-    db.select().from(tags).where(and(eq(tags.userId, userId), gt(tags.syncId, lastSyncId))),
+  const [perspectives, tasks, taskTags, attachments, clockRow] = await Promise.all([
     db.select().from(gtdPerspectives).where(and(eq(gtdPerspectives.userId, userId), gt(gtdPerspectives.syncId, lastSyncId))),
     db.select().from(gtdTasks).where(and(eq(gtdTasks.userId, userId), gt(gtdTasks.syncId, lastSyncId))),
     db.select().from(gtdTaskTags).where(and(eq(gtdTaskTags.userId, userId), gt(gtdTaskTags.syncId, lastSyncId))),
@@ -327,7 +280,6 @@ export async function pullFromPg(userId: string, lastSyncId: number): Promise<Pu
   ])
 
   const changes: EntityRow[] = [
-    ...tagRows.map(rowToTagEntity),
     ...perspectives.map(rowToPerspectiveEntity),
     ...tasks.map(rowToTaskEntity),
     ...attachments.map(rowToAttachmentEntity),
@@ -351,52 +303,56 @@ export async function applyPushToPg(userId: string, req: PushRequest): Promise<P
     const clockRow = await tx.select().from(gtdSyncClocks).where(eq(gtdSyncClocks.userId, userId)).for('update')
     const oldClock = clockRow[0]?.clock ?? 0
 
+    // 1.5 task_tag upsert：校验 tag 在 DB 存活（目录走 REST，不在 sync 行集）
+    const earlyRejected: { id: string, reason: string }[] = []
+    const mutations: typeof req.mutations = []
+    for (const m of req.mutations) {
+      if (m.entity === 'task_tag' && m.op === 'upsert') {
+        const tagId = m.patch.tagId
+        const live = await tx.select({ id: tags.id }).from(tags).where(and(
+          eq(tags.id, tagId),
+          eq(tags.userId, userId),
+          eq(tags.deleted, false),
+        )).limit(1)
+        if (!live[0]) {
+          earlyRejected.push({ id: m.id, reason: `tag ${tagId} not found` })
+          continue
+        }
+      }
+      mutations.push(m)
+    }
+    const filteredReq: PushRequest = { ...req, mutations }
+
     // 2. 装配 SyncState（含 req 的幂等 ids）
     const reqIds = [...req.mutations.map(m => m.id), ...req.commands.map(c => c.id)]
     const state = await loadSyncStateInTx(tx, userId, reqIds)
 
     // 3. applyPush 纯函数（内部 tryit 已捕获违规入 rejected，不抛）
-    const result = applyPush(state, req)
+    const result = applyPush(state, filteredReq)
     const response = result.response
+    response.rejected = [...earlyRejected, ...response.rejected]
     const newClock = result.state.clock
     // 变更行 = newState 中 syncId > oldClock（本次分配的）
     const changedRows = result.state.rows.filter(r => r.syncId > oldClock)
 
-    // 3.5. task project_id stamp（server 派生，非 LWW）。
-    //   applyPush 纯函数不维护 projectId（patch 不含、move 已删）；此处对每个变更 task 行
-    //   用 walkToProjectRoot(mountDirId, dirsById) 重算，并修正死引用（mountDirId→已删 dir）。
-    //   必须「先 stamp 再 upsert」且「response.changes 构造之前」——changedRows 与
-    //   result.state.rows 是同一引用，原地改 data 即同步生效，client 收到 server 权威值。
+    // 3.5. 死 mountDirId 修正（顶层 task 降级 Inbox）。
+    //   mountDirId 指向已删/不存在 dir 时：parentId=null → 清 mountDirId；
+    //   child 受 CHECK ck_gtd_tasks_inbox 须保留 mountDirId。
     const changedTasks = changedRows.filter(
       (r): r is EntityRowOf<'task'> => r.entity === 'task',
     )
     if (changedTasks.length > 0) {
       const dirRows = await tx.select().from(dirs).where(and(eq(dirs.userId, userId), eq(dirs.deleted, false)))
-      // walkToProjectRoot 只读 id/parentId/kind；构造最小 DirRow 视图（cast 满足类型）
       const dirsById = new Map<string, Pick<DirRow, 'id' | 'parentId' | 'kind'>>()
       for (const d of dirRows) {
         dirsById.set(d.id, { id: d.id, parentId: d.parentId, kind: d.kind as DirRow['kind'] })
       }
       for (const row of changedTasks) {
         const mount = row.data.mountDirId ?? null
-        if (mount == null) {
-          row.data.projectId = null
+        if (mount == null)
           continue
-        }
-        const dir = dirsById.get(mount)
-        if (!dir) {
-          // 死引用：mountDirId 指向已删/不存在 dir。顶层 task 降级 Inbox（清 mountDirId）；
-          // child task 受 CHECK ck_gtd_tasks_inbox 约束须保留 mountDirId，仅 projectId 置空。
-          if (row.data.parentId == null) {
-            row.data.mountDirId = null
-          }
-          row.data.projectId = null
-        }
-        else {
-          row.data.projectId = walkToProjectRoot(
-            mount,
-            dirsById as Map<string, DirRow>,
-          )
+        if (!dirsById.has(mount) && row.data.parentId == null) {
+          row.data.mountDirId = null
         }
       }
     }
@@ -424,7 +380,7 @@ export async function applyPushToPg(userId: string, req: PushRequest): Promise<P
         .onConflictDoNothing()
     }
 
-    // 7. response.changes = newState 中 syncId > req.lastSyncId（含本次变更 + 之前未拉取的）
+    // 7. response.changes = newState 中 syncId > req.lastSyncId
     response.changes = result.state.rows.filter(r => r.syncId > req.lastSyncId)
 
     response.serverSyncId = newClock
@@ -435,9 +391,9 @@ export async function applyPushToPg(userId: string, req: PushRequest): Promise<P
 /**
  * 事务内装配 SyncState（loadSyncState 的 tx 版本，读同一事务快照）。
  *  事务绑定单一 pg 连接，禁止 Promise.all 并发 select（触发 pg 并发查询警告且可能错位结果），逐条 await。
+ * 标签目录已退出 sync：不装入 tag 行（task_tag 引用由落库前 DB 校验）。
  */
 async function loadSyncStateInTx(tx: Tx, userId: string, reqIds: string[]): Promise<SyncState> {
-  const tagsRows = await tx.select().from(tags).where(eq(tags.userId, userId))
   const perspectives = await tx.select().from(gtdPerspectives).where(eq(gtdPerspectives.userId, userId))
   const tasks = await tx.select().from(gtdTasks).where(eq(gtdTasks.userId, userId))
   const taskTags = await tx.select().from(gtdTaskTags).where(eq(gtdTaskTags.userId, userId))
@@ -445,7 +401,6 @@ async function loadSyncStateInTx(tx: Tx, userId: string, reqIds: string[]): Prom
   const clockRow = await tx.select().from(gtdSyncClocks).where(eq(gtdSyncClocks.userId, userId))
 
   const rows: EntityRow[] = [
-    ...tagsRows.map(rowToTagEntity),
     ...perspectives.map(rowToPerspectiveEntity),
     ...tasks.map(rowToTaskEntity),
     ...attachments.map(rowToAttachmentEntity),
@@ -468,4 +423,101 @@ async function loadSyncStateInTx(tx: Tx, userId: string, reqIds: string[]): Prom
     rows,
     processedIds,
   }
+}
+
+/**
+ * 在线 purge 回收站任务：status=deleted 且未 envelope 删 → 标 deleted=true（不可复活 tombstone）。
+ * 级联软删 task_tag / attachment；推进 clock。旁路 sync outbox。
+ */
+export async function purgeTrashFromPg(
+  userId: string,
+  taskIds: string[],
+): Promise<{
+  purged: { id: string, name: string }[]
+  skipped: { id: string, reason: string }[]
+  changes: EntityRow[]
+  serverSyncId: number
+}> {
+  return db.transaction(async (tx) => {
+    await tx.insert(gtdSyncClocks).values({ userId, clock: 0 }).onConflictDoNothing()
+    const clockRow = await tx.select().from(gtdSyncClocks).where(eq(gtdSyncClocks.userId, userId)).for('update')
+    let clock = clockRow[0]?.clock ?? 0
+
+    const taskRows = await tx.select().from(gtdTasks).where(and(
+      eq(gtdTasks.userId, userId),
+      inArray(gtdTasks.id, taskIds),
+    ))
+    const byId = new Map(taskRows.map(r => [r.id, r]))
+
+    const purged: { id: string, name: string }[] = []
+    const skipped: { id: string, reason: string }[] = []
+    const changes: EntityRow[] = []
+
+    for (const id of taskIds) {
+      const row = byId.get(id)
+      if (!row) {
+        skipped.push({ id, reason: 'not_found' })
+        continue
+      }
+      if (row.deleted) {
+        skipped.push({ id, reason: 'already_purged' })
+        continue
+      }
+      if (row.status !== 'deleted') {
+        skipped.push({ id, reason: 'not_in_trash' })
+        continue
+      }
+
+      clock += 1
+      const [updated] = await tx.update(gtdTasks)
+        .set({ deleted: true, syncId: clock, updatedAt: new Date() })
+        .where(and(eq(gtdTasks.id, id), eq(gtdTasks.userId, userId)))
+        .returning()
+      if (!updated) {
+        skipped.push({ id, reason: 'update_failed' })
+        continue
+      }
+      purged.push({ id, name: updated.name })
+      changes.push(rowToTaskEntity(updated))
+
+      const tags = await tx.select().from(gtdTaskTags).where(and(
+        eq(gtdTaskTags.userId, userId),
+        eq(gtdTaskTags.taskId, id),
+        eq(gtdTaskTags.deleted, false),
+      ))
+      for (const t of tags) {
+        clock += 1
+        const [tt] = await tx.update(gtdTaskTags)
+          .set({ deleted: true, syncId: clock })
+          .where(and(eq(gtdTaskTags.taskId, t.taskId), eq(gtdTaskTags.tagId, t.tagId)))
+          .returning()
+        if (tt)
+          changes.push(rowToTaskTagEntity(tt))
+      }
+
+      const atts = await tx.select().from(gtdAttachments).where(and(
+        eq(gtdAttachments.userId, userId),
+        eq(gtdAttachments.taskId, id),
+        eq(gtdAttachments.deleted, false),
+      ))
+      for (const a of atts) {
+        clock += 1
+        const [att] = await tx.update(gtdAttachments)
+          .set({ deleted: true, syncId: clock })
+          .where(eq(gtdAttachments.id, a.id))
+          .returning()
+        if (att)
+          changes.push(rowToAttachmentEntity(att))
+      }
+    }
+
+    const oldClock = clockRow[0]?.clock ?? 0
+    if (clock !== oldClock) {
+      await tx.update(gtdSyncClocks)
+        .set({ clock, updatedAt: new Date() })
+        .where(eq(gtdSyncClocks.userId, userId))
+    }
+
+    return { purged, skipped, changes, serverSyncId: clock }
+  })
 }

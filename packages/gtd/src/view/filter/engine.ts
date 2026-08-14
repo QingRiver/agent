@@ -1,6 +1,7 @@
 import type { RowStore } from '../../data/rows'
 import type { EntityRowOf } from '../../data/sync-schema'
 import type { TaskTree } from '../../structure/tree'
+import type { CatalogProjection } from '../catalog'
 import type { FilterNode, LeafOp } from './schema'
 import { match, P } from 'ts-pattern'
 import { FILTER_FIELD } from '../../data/types'
@@ -9,11 +10,11 @@ import { isEmptyValueArrayOrScalar } from './helpers'
 import { isDateField, isNumericField, LEAF_OP, LOGIC_OP } from './schema'
 
 /**
- * DSL 求值引擎。吃 RowStore（行级）。
+ * DSL 求值引擎。吃 RowStore（行级）+ 可选目录投影。
  */
 
-/** 引擎求值上下文：rowStore + 可选树（Due / Defer 读时继承）。TAG 只看物理 task_tag。 */
-export interface FilterEvalContext {
+/** 引擎求值上下文：rowStore + 可选树（Due / Defer 读时继承）+ 目录投影。TAG 只看物理 task_tag。 */
+export interface FilterEvalContext extends CatalogProjection {
   rowStore: RowStore
   tree?: TaskTree
 }
@@ -55,7 +56,7 @@ export function evalNode(task: EntityRowOf<'task'>, node: FilterNode, ctx: Filte
 }
 
 function evalLeaf(task: EntityRowOf<'task'>, node: FilterNode & { op: LeafOp }, ctx: FilterEvalContext): boolean {
-  const v = rawValue(task, node.field, ctx.rowStore, ctx.tree)
+  const v = rawValue(task, node.field, ctx)
   const target = node.value
   return match(node.op)
     .with(LEAF_OP.IS, () => evaluateIs(v, target))
@@ -134,24 +135,23 @@ function compareFieldValue(
 
 /**
  * 取 task 在某 field 上的求值（过滤/排序共用）。
- * PROJECT：注入 projectOf 优先，回退 task.data.projectId（server 派生缓存）。
+ * PROJECT：仅 ctx.projectOf（目录投影）；缺省 null。
  * TAG：物理 `task_tag`（入组时写复制，无读时 coalesce）。
  * DUE_DATE / DEFER_DATE：有 `tree` 时走 effectiveDue / effectiveDefer（与 sort/group/forecast 对齐）。
  */
 export function rawValue(
   task: EntityRowOf<'task'>,
   field: string,
-  rowStore: RowStore,
-  tree?: TaskTree,
+  ctx: FilterEvalContext,
 ): unknown {
   switch (field) {
     case FILTER_FIELD.STATUS: return task.data.status
-    case FILTER_FIELD.PROJECT: return rowStore.projectOf?.(task) ?? task.data.projectId
-    case FILTER_FIELD.TAG: return rowStore.tagIdsOf(task.id)
+    case FILTER_FIELD.PROJECT: return ctx.projectOf?.(task) ?? null
+    case FILTER_FIELD.TAG: return ctx.rowStore.tagIdsOf(task.id)
     case FILTER_FIELD.DEFER_DATE:
-      return tree != null ? effectiveDefer(task, tree) : task.data.deferDate
+      return ctx.tree != null ? effectiveDefer(task, ctx.tree) : task.data.deferDate
     case FILTER_FIELD.DUE_DATE:
-      return tree != null ? effectiveDue(task, tree) : task.data.dueDate
+      return ctx.tree != null ? effectiveDue(task, ctx.tree) : task.data.dueDate
     case FILTER_FIELD.FLAGGED: return task.data.flagged
     case FILTER_FIELD.ESTIMATE: return task.data.estimateMinutes
     default: return null

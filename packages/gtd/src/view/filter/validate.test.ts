@@ -165,28 +165,48 @@ describe('validateFilterNode - 深度上限', () => {
 })
 
 describe('validateFilterNode - 节点数上限', () => {
-  it(`节点数 ${FILTER_LIMITS.MAX_NODES} 通过`, () => {
-    const children = Array.from({ length: FILTER_LIMITS.MAX_NODES - 1 }, () => leaf(FILTER_FIELD.STATUS, LEAF_OP.IS, 'active'))
-    const node: FilterNode = { op: LOGIC_OP.AND, children }
-    expect(validate(node).ok).toBe(true)
+  /** 平衡二元 and：k 叶 + (k-1) and = 2k-1 节点；深度 ≈ 1+⌈log2 k⌉ */
+  function balancedAnd(k: number): FilterNode {
+    const leaves = Array.from({ length: k }, () => leaf(FILTER_FIELD.STATUS, LEAF_OP.IS, 'active'))
+    const build = (xs: FilterNode[]): FilterNode => {
+      if (xs.length === 1)
+        return xs[0]!
+      const mid = Math.floor(xs.length / 2)
+      return { op: LOGIC_OP.AND, children: [build(xs.slice(0, mid)), build(xs.slice(mid))] }
+    }
+    return build(leaves)
+  }
+
+  it('16 叶平衡树（31 节点、深度 5）通过', () => {
+    expect(validate(balancedAnd(16)).ok).toBe(true)
   })
 
-  it(`节点数 ${FILTER_LIMITS.MAX_NODES + 1} 被拒`, () => {
-    const children = Array.from({ length: FILTER_LIMITS.MAX_NODES }, () => leaf(FILTER_FIELD.STATUS, LEAF_OP.IS, 'active'))
-    const node: FilterNode = { op: LOGIC_OP.AND, children }
-    const r = validate(node)
+  it('17 叶平衡树（33 节点）被拒', () => {
+    // 二元+深度≤5 时满树最多 31 节点；再增叶会先触深度或节点上限
+    const r = validate(balancedAnd(17))
     expect(r.ok).toBe(false)
-    if (!r.ok)
-      expect(r.errors[0]!.code).toBe(FILTER_ERROR_CODE.NODE_LIMIT)
+    if (!r.ok) {
+      expect([FILTER_ERROR_CODE.NODE_LIMIT, FILTER_ERROR_CODE.DEPTH_LIMIT])
+        .toContain(r.errors[0]!.code)
+    }
   })
 })
 
 describe('validateFilterNode - 结构错误', () => {
-  it('and 空子节点被拒', () => {
-    const r = validate({ op: LOGIC_OP.AND, children: [] })
-    expect(r.ok).toBe(false)
-    if (!r.ok)
-      expect(r.errors[0]!.code).toBe(FILTER_ERROR_CODE.INVALID_SHAPE)
+  it('and 非恰好 2 子节点被拒', () => {
+    expect(validate({ op: LOGIC_OP.AND, children: [] }).ok).toBe(false)
+    expect(validate({ op: LOGIC_OP.AND, children: [leaf(FILTER_FIELD.STATUS, LEAF_OP.IS, 'active')] }).ok).toBe(false)
+    const three = validate({
+      op: LOGIC_OP.AND,
+      children: [
+        leaf(FILTER_FIELD.STATUS, LEAF_OP.IS, 'active'),
+        leaf(FILTER_FIELD.FLAGGED, LEAF_OP.IS, true),
+        leaf(FILTER_FIELD.STATUS, LEAF_OP.IS, 'hold'),
+      ],
+    })
+    expect(three.ok).toBe(false)
+    if (!three.ok)
+      expect(three.errors[0]!.code).toBe(FILTER_ERROR_CODE.INVALID_SHAPE)
   })
 
   it('非法 op 形态被拒', () => {

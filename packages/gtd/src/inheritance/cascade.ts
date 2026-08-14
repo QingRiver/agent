@@ -22,7 +22,7 @@ export interface CascadeStep {
   taskId: string
   targetStatus: typeof EXPLICIT_STATUS[keyof typeof EXPLICIT_STATUS]
   /** 关联时间戳字段；ACTIVE→清空，非 ACTIVE→盖戳 now */
-  tsField: 'completedAt' | 'droppedAt'
+  tsField: 'completedAt' | 'heldAt' | 'droppedAt'
 }
 
 /** 完成父 → 自身 + 所有 ACTIVE 后代 → COMPLETED（向下；跳过非 ACTIVE 终态，幂等）。 */
@@ -43,10 +43,10 @@ export function planDropCascade(taskId: string, tree: TaskTree): CascadeStep[] {
   const steps: CascadeStep[] = []
   const self = tree.byId.get(taskId)?.task
   if (self?.data.status === EXPLICIT_STATUS.ACTIVE)
-    steps.push({ taskId, targetStatus: EXPLICIT_STATUS.HOLD, tsField: 'droppedAt' })
+    steps.push({ taskId, targetStatus: EXPLICIT_STATUS.HOLD, tsField: 'heldAt' })
   for (const desc of subtree(tree, taskId)) {
     if (desc.data.status === EXPLICIT_STATUS.ACTIVE)
-      steps.push({ taskId: desc.id, targetStatus: EXPLICIT_STATUS.HOLD, tsField: 'droppedAt' })
+      steps.push({ taskId: desc.id, targetStatus: EXPLICIT_STATUS.HOLD, tsField: 'heldAt' })
   }
   return steps
 }
@@ -59,15 +59,23 @@ export function planReopenCascade(taskId: string, tree: TaskTree): CascadeStep[]
   return [{ taskId, targetStatus: EXPLICIT_STATUS.ACTIVE, tsField: 'completedAt' }]
 }
 
-/** 恢复 → 仅自身 HOLD → ACTIVE / 清 droppedAt（不向上、不向下）。 */
+/** 恢复搁置 → 仅自身 HOLD → ACTIVE / 清 heldAt（不向上、不向下）。 */
 export function planRestoreCascade(taskId: string, tree: TaskTree): CascadeStep[] {
   const self = tree.byId.get(taskId)?.task
   if (self?.data.status !== EXPLICIT_STATUS.HOLD)
     return []
+  return [{ taskId, targetStatus: EXPLICIT_STATUS.ACTIVE, tsField: 'heldAt' }]
+}
+
+/** 移出回收站 → 仅自身 DELETED → ACTIVE / 清 droppedAt（不向上、不向下）。 */
+export function planRestoreFromTrashCascade(taskId: string, tree: TaskTree): CascadeStep[] {
+  const self = tree.byId.get(taskId)?.task
+  if (self?.data.status !== EXPLICIT_STATUS.DELETED)
+    return []
   return [{ taskId, targetStatus: EXPLICIT_STATUS.ACTIVE, tsField: 'droppedAt' }]
 }
 
-/** 删除父 → 自身 + 所有后代 → DELETED / 盖 droppedAt（向下软删；跳过已 DELETED，幂等）。 */
+/** 进回收站 → 自身 + 所有后代 → DELETED / 盖 droppedAt（向下；跳过已 DELETED，幂等）。 */
 export function planDeleteCascade(taskId: string, tree: TaskTree): CascadeStep[] {
   const steps: CascadeStep[] = []
   const self = tree.byId.get(taskId)?.task

@@ -22,7 +22,7 @@ describe('可用性轴 [SP-AVAIL]', () => {
   // SP-AVAIL-TERMINAL: 终态 → blocked
   it('completed/hold/deleted → BLOCKED [SP-AVAIL-TERMINAL]', () => {
     const completed = makeTaskRow('t1', { status: EXPLICIT_STATUS.COMPLETED, completedAt: NOW.toISOString() })
-    const hold = makeTaskRow('t2', { status: EXPLICIT_STATUS.HOLD, droppedAt: NOW.toISOString() })
+    const hold = makeTaskRow('t2', { status: EXPLICIT_STATUS.HOLD, heldAt: NOW.toISOString() })
     const deleted = makeTaskRow('t3', { status: EXPLICIT_STATUS.DELETED })
     expect(computeStatus(completed, NOW, buildTaskTree([completed]), DUE_SOON_MS)).toBe(COMPUTED_STATUS.BLOCKED)
     expect(computeStatus(hold, NOW, buildTaskTree([hold]), DUE_SOON_MS)).toBe(COMPUTED_STATUS.BLOCKED)

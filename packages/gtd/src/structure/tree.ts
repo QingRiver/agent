@@ -40,11 +40,6 @@ export function buildTaskTree(tasks: EntityRowOf<'task'>[]): TaskTree {
   return { roots, byId }
 }
 
-/** 扁平 tag 列表，按 name 排序 */
-export function sortTags(tags: EntityRowOf<'tag'>[]): EntityRowOf<'tag'>[] {
-  return [...tags].sort((a, b) => a.data.name.localeCompare(b.data.name))
-}
-
 /** 返回 taskId 在树中的深度（根为 0） */
 export function taskDepth(tree: TaskTree, taskId: string): number {
   let depth = 0
@@ -100,11 +95,4 @@ export function nearestAncestor(
     node = node.parent
   }
   return null
-}
-
-/** 返回某 project 下的顶层 action（parentId 为 null 且归属该 project），按 order 排序 */
-export function rootTasksOfProject(tasks: EntityRowOf<'task'>[], projectId: string): EntityRowOf<'task'>[] {
-  return tasks
-    .filter(t => t.data.projectId === projectId && t.data.parentId === null)
-    .sort((a, b) => byOrder(a.data, b.data))
 }

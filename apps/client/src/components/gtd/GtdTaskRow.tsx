@@ -71,7 +71,7 @@ export function GtdTaskRow({
   } = useSortable({ id: taskId, disabled: !sortable })
 
   const task = rowStore.findLive('task', taskId)
-  if (!task || task.data.status === EXPLICIT_STATUS.DELETED)
+  if (!task)
     return null
 
   const done = task.data.status === EXPLICIT_STATUS.COMPLETED

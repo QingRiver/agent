@@ -1,9 +1,9 @@
-import type { PerspectiveInput } from '@agent/gtd'
+import type { Perspective, PerspectiveInput } from '@agent/gtd'
 import type { DirTreeNode } from '@agent/project'
 import type { GtdSelection } from '@stores/gtd-store'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { BUILTIN_PERSPECTIVE_ID, BUILTIN_PERSPECTIVE_NAME, FILTER_FIELD, sortTags } from '@agent/gtd'
+import { BUILTIN_PERSPECTIVE_ID, BUILTIN_PERSPECTIVE_NAME, FILTER_FIELD } from '@agent/gtd'
 import { GtdPerspectiveEditor } from '@components/gtd/GtdPerspectiveEditor'
 import { TagManager } from '@components/tags/TagManager'
 import { Button } from '@components/ui/button'
@@ -27,6 +27,7 @@ import { useGtd } from '@hooks/useGtd'
 import { downloadFile } from '@lib/downloadFile'
 import { cn } from '@lib/utils'
 import { DirStore } from '@stores/dir-store'
+import { TagsStore } from '@stores/tags-store'
 import { useAtomValue } from 'jotai'
 import {
   CalendarDays,
@@ -37,6 +38,7 @@ import {
   Settings2,
   Sparkles,
   Tag,
+  Trash2,
   Upload,
 } from 'lucide-react'
 import { useRef, useState } from 'react'
@@ -157,12 +159,9 @@ export function GtdSidebar() {
     rowStore,
     selection,
     setSelection,
-    addProject,
-    addTag,
     addPerspective,
     patchPerspective,
     removePerspective,
-    reorderProject,
     syncStatus,
     error,
     exportDocument,
@@ -181,7 +180,8 @@ export function GtdSidebar() {
   const dirs = useAtomValue(DirStore.dirsAtom)
   const dirsById = useAtomValue(DirStore.dirsByIdAtom)
   const dirTree = useAtomValue(DirStore.dirTreeAtom)
-  const flatTags = sortTags(rowStore.liveTags())
+  const tags = useAtomValue(TagsStore.tagsAtom)
+  const flatTags = [...tags].sort((a, b) => a.name.localeCompare(b.name))
   const userPerspectives = rowStore.livePerspectives().map(p => ({ id: p.id, name: p.data.name }))
 
   const syncLabel = syncStatus === 'syncing'
@@ -196,7 +196,13 @@ export function GtdSidebar() {
     if (!perspectiveEditorId || perspectiveEditorId === 'new')
       return undefined
     const r = rowStore.livePerspectives().find(p => p.id === perspectiveEditorId)
-    return r ? { id: r.id, ...r.data } : undefined
+    if (!r)
+      return undefined
+    return {
+      id: r.id,
+      ...r.data,
+      filter: r.data.filter as Perspective['filter'],
+    }
   }
   const editingPerspective = resolveEditingPerspective()
 
@@ -229,7 +235,7 @@ export function GtdSidebar() {
           afterId: moved[index + 1]?.id ?? null,
         }
         if (kind === 'project')
-          reorderProject(id, target)
+          void DirStore.reorderSibling(id, target, null)
       }}
     >
       <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-card">
@@ -297,6 +303,12 @@ export function GtdSidebar() {
               label={BUILTIN_PERSPECTIVE_NAME[BUILTIN_PERSPECTIVE_ID.FORECAST]}
               onClick={() => setSelection(selectPerspective(BUILTIN_PERSPECTIVE_ID.FORECAST))}
             />
+            <NavItem
+              active={selection.focus == null && selection.perspectiveId === BUILTIN_PERSPECTIVE_ID.TRASH}
+              icon={Trash2}
+              label={BUILTIN_PERSPECTIVE_NAME[BUILTIN_PERSPECTIVE_ID.TRASH]}
+              onClick={() => setSelection(selectPerspective(BUILTIN_PERSPECTIVE_ID.TRASH))}
+            />
             {userPerspectives.map(perspective => (
               <div key={perspective.id} className="group flex items-center gap-1">
                 <div className="min-w-0 flex-1">
@@ -342,7 +354,7 @@ export function GtdSidebar() {
                 onChange={e => setProjectName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && projectName.trim()) {
-                    void addProject(projectName)
+                    void DirStore.createProject(projectName.trim())
                     setProjectName('')
                   }
                 }}
@@ -357,7 +369,7 @@ export function GtdSidebar() {
                 onClick={() => {
                   if (!projectName.trim())
                     return
-                  void addProject(projectName)
+                  void DirStore.createProject(projectName.trim())
                   setProjectName('')
                 }}
               >
@@ -385,7 +397,7 @@ export function GtdSidebar() {
                 key={tag.id}
                 active={selection.focus?.field === FILTER_FIELD.TAG && selection.focus.id === tag.id}
                 icon={Tag}
-                label={tag.data.name}
+                label={tag.name}
                 onClick={() => setSelection(selectTagFocus(tag.id))}
               />
             ))}
@@ -395,8 +407,7 @@ export function GtdSidebar() {
                 onChange={e => setTagName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && tagName.trim()) {
-                    addTag(tagName)
-                    setTagName('')
+                    void TagsStore.create(tagName.trim()).then(() => setTagName(''))
                   }
                 }}
                 placeholder="新标签"
@@ -410,8 +421,7 @@ export function GtdSidebar() {
                 onClick={() => {
                   if (!tagName.trim())
                     return
-                  addTag(tagName)
-                  setTagName('')
+                  void TagsStore.create(tagName.trim()).then(() => setTagName(''))
                 }}
               >
                 <Plus className="size-3.5" />
@@ -429,7 +439,6 @@ export function GtdSidebar() {
       <TagManager open={tagManagerOpen} onClose={() => setTagManagerOpen(false)} />
       {perspectiveEditorId && (
         <GtdPerspectiveEditor
-          store={rowStore}
           perspective={editingPerspective}
           error={error}
           onClose={() => setPerspectiveEditorId(null)}

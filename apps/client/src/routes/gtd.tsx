@@ -4,6 +4,7 @@ import { GtdSidebar } from '@components/gtd/GtdSidebar'
 import { GtdSync } from '@components/gtd/GtdSync'
 import { GtdSyncLock } from '@components/gtd/GtdSyncLock'
 import { GtdTaskList } from '@components/gtd/GtdTaskList'
+import { TagSync } from '@components/gtd/TagSync'
 import { GtdLayout } from '@layouts/GtdLayout'
 import { createFileRoute } from '@tanstack/react-router'
 
@@ -16,6 +17,7 @@ function GtdPage() {
     <>
       <GtdSync />
       <DirSync />
+      <TagSync />
       <GtdLayout
         sidebar={<GtdSidebar />}
         inspector={<GtdInspector />}

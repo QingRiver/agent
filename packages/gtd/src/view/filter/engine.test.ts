@@ -1,4 +1,4 @@
-import type { EntityRow } from '../../data/sync-schema'
+import type { EntityRow, EntityRowOf } from '../../data/sync-schema'
 import type { FilterEvalContext } from './engine'
 import type { FilterNode } from './schema'
 import { describe, expect, it } from 'vitest'
@@ -9,8 +9,10 @@ import { buildTaskTree } from '../../structure/tree'
 import { evalNode, matchFilter } from './engine'
 import { FILTER_FIELD, LEAF_OP, LOGIC_OP } from './schema'
 
-function ctx(rows: EntityRow[] = []): FilterEvalContext {
-  return { rowStore: new RowStore(rows) }
+function ctx(rows: EntityRow[] = [], projectOf?: (t: EntityRowOf<'task'>) => string | null): FilterEvalContext {
+  return projectOf
+    ? { rowStore: new RowStore(rows), projectOf }
+    : { rowStore: new RowStore(rows) }
 }
 
 function leaf(field: string, op: string, value?: unknown): FilterNode {
@@ -45,20 +47,20 @@ describe('evalNode - 叶子: flagged', () => {
 
 describe('evalNode - 叶子: project/tag (some/empty)', () => {
   it('project some 命中', () => {
-    const t = makeTaskRow('t1', { projectId: 'p1' })
-    expect(evalNode(t, leaf(FILTER_FIELD.PROJECT, LEAF_OP.SOME, ['p1', 'p2']), ctx())).toBe(true)
+    const t = makeTaskRow('t1', { mountDirId: 'p1' })
+    expect(evalNode(t, leaf(FILTER_FIELD.PROJECT, LEAF_OP.SOME, ['p1', 'p2']), ctx([t], () => 'p1'))).toBe(true)
   })
   it('project some 不命中', () => {
-    const t = makeTaskRow('t1', { projectId: 'p9' })
-    expect(evalNode(t, leaf(FILTER_FIELD.PROJECT, LEAF_OP.SOME, ['p1', 'p2']), ctx())).toBe(false)
+    const t = makeTaskRow('t1', { mountDirId: 'p9' })
+    expect(evalNode(t, leaf(FILTER_FIELD.PROJECT, LEAF_OP.SOME, ['p1', 'p2']), ctx([t], () => 'p9'))).toBe(false)
   })
   it('project empty 命中（无项目）', () => {
-    const t = makeTaskRow('t1', { projectId: null })
-    expect(evalNode(t, leaf(FILTER_FIELD.PROJECT, LEAF_OP.EMPTY), ctx())).toBe(true)
+    const t = makeTaskRow('t1', { mountDirId: null })
+    expect(evalNode(t, leaf(FILTER_FIELD.PROJECT, LEAF_OP.EMPTY), ctx([t], () => null))).toBe(true)
   })
   it('project empty 不命中（有项目）', () => {
-    const t = makeTaskRow('t1', { projectId: 'p1' })
-    expect(evalNode(t, leaf(FILTER_FIELD.PROJECT, LEAF_OP.EMPTY), ctx())).toBe(false)
+    const t = makeTaskRow('t1', { mountDirId: 'p1' })
+    expect(evalNode(t, leaf(FILTER_FIELD.PROJECT, LEAF_OP.EMPTY), ctx([t], () => 'p1'))).toBe(false)
   })
   it('tag some 交集命中', () => {
     const t = makeTaskRow('t1')
@@ -237,11 +239,11 @@ describe('evalNode - 嵌套混合', () => {
     // 左支命中
     expect(evalNode(makeTaskRow('t1', { flagged: true, dueDate: base }), node, ctx())).toBe(true)
     // 右支命中（project=pX 且无 gY 标签）
-    expect(evalNode(makeTaskRow('t2', { projectId: 'pX' }), node, ctx())).toBe(true)
+    expect(evalNode(makeTaskRow('t2', { mountDirId: 'pX' }), node, ctx([], () => 'pX'))).toBe(true)
     // 右支 NOT 不成立（有 gY）
-    expect(evalNode(makeTaskRow('t3', { projectId: 'pX' }), node, ctx([makeTaskRow('t3'), makeTaskTagRow('t3', 'gY')]))).toBe(false)
+    expect(evalNode(makeTaskRow('t3', { mountDirId: 'pX' }), node, ctx([makeTaskRow('t3'), makeTaskTagRow('t3', 'gY')], () => 'pX'))).toBe(false)
     // 两支都不命中
-    expect(evalNode(makeTaskRow('t4', { flagged: false, projectId: 'pZ' }), node, ctx())).toBe(false)
+    expect(evalNode(makeTaskRow('t4', { flagged: false, mountDirId: 'pZ' }), node, ctx([], () => 'pZ'))).toBe(false)
   })
 })
 

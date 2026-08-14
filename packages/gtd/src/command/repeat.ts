@@ -110,6 +110,7 @@ export function cloneNextInstance(
     id: nextTaskId, // 覆盖 data.id：task.data 含旧 id，新实例要用新 id
     status: EXPLICIT_STATUS.ACTIVE,
     completedAt: null,
+    heldAt: null,
     droppedAt: null,
     deferDate: next.deferDate,
     dueDate: next.dueDate,

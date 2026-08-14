@@ -488,10 +488,10 @@ function resolveNode(
 ): { ok: true, value: FilterNode } | { ok: false, errors: PerspectiveInputError[] } {
   return match(node)
     .with({ op: P.union(LOGIC_OP.AND, LOGIC_OP.OR) }, (n) => {
-      if (n.children.length === 0) {
+      if (n.children.length !== 2) {
         return {
           ok: false as const,
-          errors: [err(`${path}.children`, FILTER_ERROR_CODE.INVALID_SHAPE, `${n.op} 至少需要 1 个子节点`)],
+          errors: [err(`${path}.children`, FILTER_ERROR_CODE.INVALID_SHAPE, `${n.op} 需要恰好 2 个子节点（二元树）`)],
         }
       }
       const children: FilterNode[] = []

@@ -47,7 +47,6 @@ CREATE TABLE "gtd_task_tags" (
 CREATE TABLE "gtd_tasks" (
 	"id" text PRIMARY KEY NOT NULL,
 	"user_id" text NOT NULL,
-	"project_id" text,
 	"mount_dir_id" text,
 	"parent_id" text,
 	"name" text NOT NULL,
@@ -60,6 +59,8 @@ CREATE TABLE "gtd_tasks" (
 	"planned_mode" text DEFAULT 'none' NOT NULL,
 	"planned_date" timestamp with time zone,
 	"completed_at" timestamp with time zone,
+	-- held_at = 搁置；dropped_at = 进回收站（互不共用）
+	"held_at" timestamp with time zone,
 	"dropped_at" timestamp with time zone,
 	"flagged" boolean DEFAULT false NOT NULL,
 	"estimate_minutes" integer,
@@ -81,7 +82,7 @@ CREATE UNIQUE INDEX "uniq_gtd_perspectives_user_name" ON "gtd_perspectives" USIN
 CREATE INDEX "idx_gtd_perspectives_user_syncid" ON "gtd_perspectives" USING btree ("user_id","sync_id");--> statement-breakpoint
 CREATE INDEX "idx_gtd_task_tags_tag" ON "gtd_task_tags" USING btree ("tag_id");--> statement-breakpoint
 CREATE INDEX "idx_gtd_task_tags_user_syncid" ON "gtd_task_tags" USING btree ("user_id","sync_id");--> statement-breakpoint
-CREATE INDEX "idx_gtd_tasks_user_proj_parent_sort" ON "gtd_tasks" USING btree ("user_id","project_id","parent_id","sort_order");--> statement-breakpoint
+CREATE INDEX "idx_gtd_tasks_user_mount_parent_sort" ON "gtd_tasks" USING btree ("user_id","mount_dir_id","parent_id","sort_order");--> statement-breakpoint
 CREATE INDEX "idx_gtd_tasks_user_mount" ON "gtd_tasks" USING btree ("user_id","mount_dir_id");--> statement-breakpoint
 CREATE INDEX "idx_gtd_tasks_user_status" ON "gtd_tasks" USING btree ("user_id","status");--> statement-breakpoint
 CREATE INDEX "idx_gtd_tasks_user_parent" ON "gtd_tasks" USING btree ("user_id","parent_id");--> statement-breakpoint

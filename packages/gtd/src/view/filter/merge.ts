@@ -9,15 +9,13 @@ export type EntityFocusKind = (typeof ENTITY_FOCUS_FIELDS)[number]
 
 export interface EntityFocus { field: EntityFocusKind, id: string }
 
-/** AND 合并两棵过滤树；任一侧 null → 另一侧；双侧 and 则摊平一层 */
+/** AND 合并两棵过滤树；任一侧 null → 另一侧；结果恒为二元 `{and,[a,b]}` */
 export function mergeFilter(a: FilterNode | null, b: FilterNode | null): FilterNode | null {
   if (a == null)
     return b
   if (b == null)
     return a
-  const left = a.op === LOGIC_OP.AND ? a.children : [a]
-  const right = b.op === LOGIC_OP.AND ? b.children : [b]
-  return { op: LOGIC_OP.AND, children: [...left, ...right] }
+  return { op: LOGIC_OP.AND, children: [a, b] }
 }
 
 /** 从实体焦点构造 some 叶：field 即 FILTER_FIELD.PROJECT | TAG */
