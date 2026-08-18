@@ -26,6 +26,9 @@ export const EXPLICIT_STATUS_TEXT = {
   [EXPLICIT_STATUS.DELETED]: '回收站',
 } as const
 
+/** 显式状态值类型（active/completed/hold/deleted）。 */
+export type ExplicitStatusValue = (typeof EXPLICIT_STATUS)[keyof typeof EXPLICIT_STATUS]
+
 // ===== 计算状态（派生，不持久化，实时计算） =====
 export const COMPUTED_STATUS = {
   /** 阻塞 */

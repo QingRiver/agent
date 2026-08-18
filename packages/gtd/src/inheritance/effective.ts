@@ -16,8 +16,9 @@
  * SoT：wiki/GTD_New.md §时间联动。
  */
 import type { EntityRowOf } from '../data/sync-schema'
+import type { ExplicitStatusValue } from '../data/types'
 import type { TaskTree } from '../structure/tree'
-import { PLANNED_MODE } from '../data/types'
+import { EXPLICIT_STATUS, PLANNED_MODE } from '../data/types'
 import { ancestors } from '../structure/tree'
 
 /** ISO 时间戳或 null（null 语义随调用方而定：+∞ 或 −∞）。 */
@@ -111,4 +112,37 @@ export function effectivePlannedDate(task: EntityRowOf<'task'>, tree: TaskTree):
       return null
   }
   return null
+}
+
+/**
+ * 有效状态（wiki/GTD.md「有效状态」mermaid；逐层继承）：
+ * - 自己或任一祖先被删 → 已删（删除优先级最高，不受完成/搁置影响）。
+ * - 否则从最上层往下看本任务这条链：第一个完成的或搁置的祖先是什么状态，本任务的有效状态就是什么
+ *   （更靠根的终态覆盖中间的终态；祖先都活跃时，本任务才用自身状态）。
+ * - 都没有就活跃。
+ *
+ * 逐层而非优先级：祖父完成 + 父搁置 + 子活跃 → 父和子都有效完成（祖父的完成优先于父的搁置），
+ * 不会出现"父完成却子搁置"。删除不被完成/搁置覆盖（删除最优先）。
+ *
+ * 本函数只读，不改自身状态戳；父完成/搁置/删除时子的有效状态跟随父——父重开/继续/移出回收站后，
+ * 子按自身状态重新生效。SoT：wiki/GTD.md「有效状态」。
+ */
+export function effectiveStatus(task: EntityRowOf<'task'>, tree: TaskTree): ExplicitStatusValue {
+  // 自己或任一祖先被删 → 已删（删除优先级最高，不受完成/搁置影响）。
+  if (task.data.status === EXPLICIT_STATUS.DELETED)
+    return EXPLICIT_STATUS.DELETED
+  for (const anc of ancestors(tree, task.id)) {
+    if (anc.data.status === EXPLICIT_STATUS.DELETED)
+      return EXPLICIT_STATUS.DELETED
+  }
+  // 从最上层往下看：第一个完成或搁置的祖先决定本任务的有效状态。
+  // ancestors 返回父→根，reverse 得根→父，追加本任务，即从根往本任务扫。
+  const path = [...ancestors(tree, task.id)].reverse()
+  path.push(task)
+  for (const node of path) {
+    if (node.data.status === EXPLICIT_STATUS.HOLD || node.data.status === EXPLICIT_STATUS.COMPLETED)
+      return node.data.status
+  }
+  // 路径全 active → active（== task.data.status，task 必 active，否则上面命中）。
+  return EXPLICIT_STATUS.ACTIVE
 }

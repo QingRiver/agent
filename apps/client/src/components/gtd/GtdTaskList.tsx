@@ -2,6 +2,7 @@ import type { EntityRowOf, RenderGroup, RenderItem } from '@agent/gtd'
 import {
   BUILTIN_PERSPECTIVE_ID,
   DEFAULT_AVAILABILITY_FILTER,
+  effectiveStatus,
   EXPLICIT_STATUS,
   FILTER_FIELD,
   fullyVisibleSiblingReorderIds,
@@ -123,6 +124,7 @@ function RenderNodes({
 export function GtdTaskList() {
   const {
     rowStore,
+    tree: taskTree,
     selection,
     forecastStrip,
     forecastSignals,
@@ -223,7 +225,8 @@ export function GtdTaskList() {
       ? fullyVisibleSiblingReorderIds(shownTaskIds, liveTasks)
       : new Set<string>()
   const canManualReorder = reorderableIds.size > 0
-  const activeCount = liveTasks.filter(t => t.data.status === EXPLICIT_STATUS.ACTIVE).length
+  // effective 维度计数：删父/搁置父的子有效态被压，不计入未完成（第 4 点）
+  const activeCount = liveTasks.filter(t => effectiveStatus(t, taskTree) === EXPLICIT_STATUS.ACTIVE).length
 
   const inboxLike = focus == null && isInboxFilter(perspective.filter)
   const canQuickAdd = inboxLike || focus?.field === FILTER_FIELD.PROJECT

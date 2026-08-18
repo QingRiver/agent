@@ -12,7 +12,7 @@ import {
   gtdTaskTags,
   tags,
 } from '../db/schema'
-import { applyPushToPg, pullFromPg } from './sync-repository'
+import { applyPushToPg, pullFromPg, purgeTrashFromPg } from './sync-repository'
 
 const USER_ID = `sync-e2e-${Date.now().toString(36)}`
 const NOW = '2026-07-17T09:00:00.000Z'
@@ -69,30 +69,6 @@ async function insertDir(row: {
   })
 }
 
-/** 构造 task upsert patch（mountDirId 权威挂载） */
-function taskPatch(overrides: Partial<Record<string, unknown>> & { name: string }): Record<string, unknown> {
-  return {
-    status: 'active',
-    flagged: false,
-    parentId: null,
-    order: 0,
-    groupType: null,
-    deferDate: null,
-    dueDate: null,
-    completedAt: null,
-    heldAt: null,
-    droppedAt: null,
-    estimateMinutes: null,
-    repeatRuleId: null,
-    repeatRule: undefined,
-    repeatedFromTaskId: null,
-    createdAt: NOW,
-    updatedAt: NOW,
-    note: null,
-    ...overrides,
-  }
-}
-
 describe('sync-repository e2e (push/pull 落库)', () => {
   beforeAll(async () => {
     await migrateAppSchema()
@@ -104,38 +80,21 @@ describe('sync-repository e2e (push/pull 落库)', () => {
     await cleanup()
   })
 
-  it('push task upsert → pull 返回该行', async () => {
+  it('push create_task → pull 返回该行', async () => {
     const res = await applyPushToPg(USER_ID, {
-      mutations: [
+      mutations: [],
+      commands: [
         {
           id: 'm1',
-          entity: 'task',
-          entityId: 't1',
-          op: 'upsert',
-          patch: {
-            name: '买菜',
-            status: 'active',
-            flagged: false,
-            parentId: null,
-            order: 0,
-            groupType: null,
-            deferDate: null,
-            dueDate: null,
-            completedAt: null,
-            heldAt: null,
-            droppedAt: null,
-            estimateMinutes: null,
-            repeatRuleId: null,
-            repeatRule: undefined,
-            repeatedFromTaskId: null,
-            createdAt: NOW,
-            updatedAt: NOW,
-            note: null,
-          },
+          type: 'create_task',
+          taskId: 't1',
+          name: '买菜',
+          parentId: null,
+          order: 0,
+          mountDirId: null,
           clientTs: NOW,
         },
       ],
-      commands: [],
       lastSyncId: 0,
     })
 
@@ -150,27 +109,16 @@ describe('sync-repository e2e (push/pull 落库)', () => {
   })
 
   it('push complete+repeat → 新实例克隆 + 旧任务 completed', async () => {
-    // 先建一个带 repeat 的 task
+    // 先建一个带 repeat 的 task（create_task 建行 + upsert 补 repeat/flagged 内容）
     await applyPushToPg(USER_ID, {
       mutations: [
         {
-          id: 'm-setup',
+          id: 'm-setup-content',
           entity: 'task',
           entityId: 't-rep',
           op: 'upsert',
           patch: {
-            name: '每周复盘',
-            status: 'active',
             flagged: true,
-            parentId: null,
-            order: 0,
-            groupType: null,
-            deferDate: null,
-            dueDate: null,
-            completedAt: null,
-            heldAt: null,
-            droppedAt: null,
-            estimateMinutes: null,
             repeatRuleId: 'r1',
             repeatRule: {
               id: 'r1',
@@ -182,15 +130,23 @@ describe('sync-repository e2e (push/pull 落库)', () => {
               maxOccurrences: null,
               completedOccurrences: 0,
             },
-            repeatedFromTaskId: null,
-            createdAt: NOW,
             updatedAt: NOW,
-            note: null,
           },
           clientTs: NOW,
         },
       ],
-      commands: [],
+      commands: [
+        {
+          id: 'm-setup',
+          type: 'create_task',
+          taskId: 't-rep',
+          name: '每周复盘',
+          parentId: null,
+          order: 0,
+          mountDirId: null,
+          clientTs: NOW,
+        },
+      ],
       lastSyncId: 0,
     })
 
@@ -242,7 +198,7 @@ describe('sync-repository e2e (push/pull 落库)', () => {
           entity: 'task',
           entityId: 't1',
           op: 'upsert',
-          patch: taskPatch({ name: '任务1', mountDirId: null }),
+          patch: { name: '任务1', mountDirId: null, updatedAt: NOW },
           clientTs: NOW,
         },
       ],
@@ -276,36 +232,19 @@ describe('sync-repository e2e (push/pull 落库)', () => {
 
   it('push 幂等重发 → 不重复分配 syncId', async () => {
     const r1 = await applyPushToPg(USER_ID, {
-      mutations: [
+      mutations: [],
+      commands: [
         {
           id: 'm-idem',
-          entity: 'task',
-          entityId: 't-idem',
-          op: 'upsert',
-          patch: {
-            name: '幂等测试',
-            status: 'active',
-            flagged: false,
-            parentId: null,
-            order: 0,
-            groupType: null,
-            deferDate: null,
-            dueDate: null,
-            completedAt: null,
-            heldAt: null,
-            droppedAt: null,
-            estimateMinutes: null,
-            repeatRuleId: null,
-            repeatRule: undefined,
-            repeatedFromTaskId: null,
-            createdAt: NOW,
-            updatedAt: NOW,
-            note: null,
-          },
+          type: 'create_task',
+          taskId: 't-idem',
+          name: '幂等测试',
+          parentId: null,
+          order: 0,
+          mountDirId: null,
           clientTs: NOW,
         },
       ],
-      commands: [],
       lastSyncId: 0,
     })
 
@@ -340,15 +279,17 @@ describe('sync-repository e2e (push/pull 落库)', () => {
 
     // entityId 用 UID 前缀做全局唯一（gtd_tasks.id 是全局 PK，跨 run 复用 'c1' 会撞车 hijack 旧用户行）
     const mkPush = (id: string, name: string) => applyPushToPg(UID, {
-      mutations: [{
+      mutations: [],
+      commands: [{
         id,
-        entity: 'task',
-        entityId: id,
-        op: 'upsert',
-        patch: { name, status: 'active', flagged: false, parentId: null, order: 0, groupType: null, deferDate: null, dueDate: null, completedAt: null, heldAt: null, droppedAt: null, estimateMinutes: null, repeatRuleId: null, repeatedFromTaskId: null, createdAt: NOW, updatedAt: NOW, note: null },
+        type: 'create_task',
+        taskId: id,
+        name,
+        parentId: null,
+        order: 0,
+        mountDirId: null,
         clientTs: NOW,
       }],
-      commands: [],
       lastSyncId: 0,
     })
 
@@ -381,28 +322,32 @@ describe('sync-repository e2e (push/pull 落库)', () => {
 
     // task 挂到 project 根
     await applyPushToPg(USER_ID, {
-      mutations: [{
+      mutations: [],
+      commands: [{
         id: 'm-mount-root',
-        entity: 'task',
-        entityId: 't-mount-root',
-        op: 'upsert',
-        patch: taskPatch({ name: '挂到根', mountDirId: 'dp1' }),
+        type: 'create_task',
+        taskId: 't-mount-root',
+        name: '挂到根',
+        parentId: null,
+        order: 0,
+        mountDirId: 'dp1',
         clientTs: NOW,
       }],
-      commands: [],
       lastSyncId: 0,
     })
     // task 挂到子 dir
     await applyPushToPg(USER_ID, {
-      mutations: [{
+      mutations: [],
+      commands: [{
         id: 'm-mount-sub',
-        entity: 'task',
-        entityId: 't-mount-sub',
-        op: 'upsert',
-        patch: taskPatch({ name: '挂到子目录', mountDirId: 'dd1' }),
+        type: 'create_task',
+        taskId: 't-mount-sub',
+        name: '挂到子目录',
+        parentId: null,
+        order: 0,
+        mountDirId: 'dd1',
         clientTs: NOW,
       }],
-      commands: [],
       lastSyncId: 0,
     })
 
@@ -419,15 +364,17 @@ describe('sync-repository e2e (push/pull 落库)', () => {
   it(`死 mountDirId（指向不存在 dir）+ 顶层 task → server 修正为 null（Inbox）`, async () => {
     // mountDirId 指向不存在的 dir；parentId=null（顶层）→ stamp 应置 mountDirId=null
     await applyPushToPg(USER_ID, {
-      mutations: [{
+      mutations: [],
+      commands: [{
         id: 'm-dead-mount',
-        entity: 'task',
-        entityId: 't-dead-mount',
-        op: 'upsert',
-        patch: taskPatch({ name: '死挂载', mountDirId: 'nonexistent-dir' }),
+        type: 'create_task',
+        taskId: 't-dead-mount',
+        name: '死挂载',
+        parentId: null,
+        order: 0,
+        mountDirId: 'nonexistent-dir',
         clientTs: NOW,
       }],
-      commands: [],
       lastSyncId: 0,
     })
 
@@ -436,5 +383,71 @@ describe('sync-repository e2e (push/pull 落库)', () => {
       { data: { mountDirId: string | null } } | undefined
 
     expect(task?.data.mountDirId).toBeNull()
+  })
+
+  it('永久删除 deleted 父 → 连带 tombstone 有效 deleted 子（物理 active/completed），兄弟不波及 [SP-PURGE-SRV-1]', async () => {
+    await insertDir({ id: 'dp-purge1', parentId: null, kind: 'project', name: 'P1', projectId: 'dp-purge1', vdir: 'P1', sortOrder: 0 })
+    await applyPushToPg(USER_ID, {
+      mutations: [],
+      commands: [
+        { id: 'pg1-s1', type: 'create_task', taskId: 'p1', name: '父', parentId: null, order: 0, mountDirId: 'dp-purge1', clientTs: NOW },
+        { id: 'pg1-s2', type: 'create_task', taskId: 'c1', name: '子', parentId: 'p1', order: 0, mountDirId: 'dp-purge1', clientTs: NOW },
+        { id: 'pg1-s3', type: 'create_task', taskId: 'gc1', name: '孙', parentId: 'c1', order: 0, mountDirId: 'dp-purge1', clientTs: NOW },
+        { id: 'pg1-s4', type: 'create_task', taskId: 's1', name: '兄弟', parentId: null, order: 1, mountDirId: 'dp-purge1', clientTs: NOW },
+        { id: 'pg1-s5', type: 'complete', taskId: 'gc1', clientTs: NOW },
+        { id: 'pg1-s6', type: 'delete', taskId: 'p1', clientTs: NOW },
+      ],
+      lastSyncId: 0,
+    })
+    // p1 status=deleted；c1 物理 active、gc1 物理 completed，但有效 deleted（被 p1 覆盖）
+    const res = await purgeTrashFromPg(USER_ID, ['p1'])
+    expect(res.purged.map(p => p.id).sort()).toEqual(['c1', 'gc1', 'p1'])
+    expect(res.skipped).toEqual([])
+    expect(res.changes.filter(c => c.entity === 'task').map(c => c.id).sort()).toEqual(['c1', 'gc1', 'p1'])
+    const rows = await db.select({ id: gtdTasks.id, deleted: gtdTasks.deleted, status: gtdTasks.status })
+      .from(gtdTasks)
+      .where(eq(gtdTasks.userId, USER_ID))
+    const byId = new Map(rows.map(r => [r.id, r]))
+    expect(byId.get('p1')?.deleted).toBe(true)
+    expect(byId.get('p1')?.status).toBe('deleted')
+    expect(byId.get('c1')?.deleted).toBe(true)
+    expect(byId.get('c1')?.status).toBe('deleted')
+    expect(byId.get('gc1')?.deleted).toBe(true)
+    expect(byId.get('gc1')?.status).toBe('deleted')
+    expect(byId.get('s1')?.deleted).toBe(false)
+  })
+
+  it('永久删除 [父, 物理 active 子] → 子经父 cascade 进 toPurge，finalSkipped 不含子 [SP-PURGE-SRV-2]', async () => {
+    await insertDir({ id: 'dp-purge2', parentId: null, kind: 'project', name: 'P2', projectId: 'dp-purge2', vdir: 'P2', sortOrder: 0 })
+    await applyPushToPg(USER_ID, {
+      mutations: [],
+      commands: [
+        { id: 'pg2-s1', type: 'create_task', taskId: 'p2', name: '父', parentId: null, order: 0, mountDirId: 'dp-purge2', clientTs: NOW },
+        { id: 'pg2-s2', type: 'create_task', taskId: 'c2', name: '子', parentId: 'p2', order: 0, mountDirId: 'dp-purge2', clientTs: NOW },
+        { id: 'pg2-s3', type: 'delete', taskId: 'p2', clientTs: NOW },
+      ],
+      lastSyncId: 0,
+    })
+    // c2 物理 active（被 p2 deleted 覆盖有效 deleted）→ 作为根传入会被 skip 'not_in_trash'，但经 p2 cascade 进 toPurge → finalSkipped 过滤掉
+    const res = await purgeTrashFromPg(USER_ID, ['p2', 'c2'])
+    expect(res.purged.map(p => p.id).sort()).toEqual(['c2', 'p2'])
+    expect(res.skipped).toEqual([])
+  })
+
+  it('重复永久删除已删根 → already_purged 幂等 [SP-PURGE-SRV-3]', async () => {
+    await insertDir({ id: 'dp-purge3', parentId: null, kind: 'project', name: 'P3', projectId: 'dp-purge3', vdir: 'P3', sortOrder: 0 })
+    await applyPushToPg(USER_ID, {
+      mutations: [],
+      commands: [
+        { id: 'pg3-s1', type: 'create_task', taskId: 'p3', name: '父', parentId: null, order: 0, mountDirId: 'dp-purge3', clientTs: NOW },
+        { id: 'pg3-s2', type: 'create_task', taskId: 'c3', name: '子', parentId: 'p3', order: 0, mountDirId: 'dp-purge3', clientTs: NOW },
+        { id: 'pg3-s3', type: 'delete', taskId: 'p3', clientTs: NOW },
+      ],
+      lastSyncId: 0,
+    })
+    await purgeTrashFromPg(USER_ID, ['p3'])
+    const res = await purgeTrashFromPg(USER_ID, ['p3'])
+    expect(res.purged).toEqual([])
+    expect(res.skipped).toEqual([{ id: 'p3', reason: 'already_purged' }])
   })
 })

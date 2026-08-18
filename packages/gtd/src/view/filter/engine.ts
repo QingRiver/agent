@@ -5,7 +5,7 @@ import type { CatalogProjection } from '../catalog'
 import type { FilterNode, LeafOp } from './schema'
 import { match, P } from 'ts-pattern'
 import { FILTER_FIELD } from '../../data/types'
-import { effectiveDefer, effectiveDue } from '../../inheritance/effective'
+import { effectiveDefer, effectiveDue, effectiveStatus } from '../../inheritance/effective'
 import { isEmptyValueArrayOrScalar } from './helpers'
 import { isDateField, isNumericField, LEAF_OP, LOGIC_OP } from './schema'
 
@@ -138,6 +138,7 @@ function compareFieldValue(
  * PROJECT：仅 ctx.projectOf（目录投影）；缺省 null。
  * TAG：物理 `task_tag`（入组时写复制，无读时 coalesce）。
  * DUE_DATE / DEFER_DATE：有 `tree` 时走 effectiveDue / effectiveDefer（与 sort/group/forecast 对齐）。
+ * STATUS：有 `tree` 时走 effectiveStatus（有效状态跟随父——删父/搁置父的子有效态跟随，进对应透视）；缺省物理态。
  */
 export function rawValue(
   task: EntityRowOf<'task'>,
@@ -145,7 +146,7 @@ export function rawValue(
   ctx: FilterEvalContext,
 ): unknown {
   switch (field) {
-    case FILTER_FIELD.STATUS: return task.data.status
+    case FILTER_FIELD.STATUS: return ctx.tree != null ? effectiveStatus(task, ctx.tree) : task.data.status
     case FILTER_FIELD.PROJECT: return ctx.projectOf?.(task) ?? null
     case FILTER_FIELD.TAG: return ctx.rowStore.tagIdsOf(task.id)
     case FILTER_FIELD.DEFER_DATE:

@@ -34,7 +34,7 @@ import {
 } from '../data/types'
 import { computeStatus } from '../derived/availability'
 import { defaultForecastOptions, renderForecast } from '../derived/forecast'
-import { effectiveDefer, effectiveDue } from '../inheritance/effective'
+import { effectiveDefer, effectiveDue, effectiveStatus } from '../inheritance/effective'
 import { buildTaskTree } from '../structure/tree'
 import { formatZonedYmdHm } from '../time/calendar'
 import { computeCollapsibleSet, effectiveVisibleChildren, visibleDepth } from './collapse'
@@ -136,19 +136,20 @@ export function renderPerspective(
 
 // ─── 1. 可用性 base filter ──────────────────────────────────────────────────
 
-/** 计算状态匹配可用性过滤谓词 */
+/** 计算状态匹配可用性过滤谓词（status 走有效状态——删父/搁置父的子有效跟随，不再留在 Remaining） */
 export function matchesAvailability(
   task: EntityRowOf<'task'>,
   filter: AvailabilityFilter,
   computed: ComputedStatus,
+  tree: TaskTree,
 ): boolean {
   switch (filter) {
     case AVAILABILITY_FILTER.ALL:
       return true
     case AVAILABILITY_FILTER.REMAINING:
-      return task.data.status === EXPLICIT_STATUS.ACTIVE
+      return effectiveStatus(task, tree) === EXPLICIT_STATUS.ACTIVE
     case AVAILABILITY_FILTER.AVAILABLE:
-      return task.data.status === EXPLICIT_STATUS.ACTIVE && computed !== COMPUTED_STATUS.BLOCKED
+      return effectiveStatus(task, tree) === EXPLICIT_STATUS.ACTIVE && computed !== COMPUTED_STATUS.BLOCKED
     default:
       return false
   }
@@ -172,7 +173,7 @@ export function applyBaseFilter(
 ): EntityRowOf<'task'>[] {
   return tasks.filter((t) => {
     const computed = taskComputed(t, ctx)
-    return matchesAvailability(t, filter, computed)
+    return matchesAvailability(t, filter, computed, ctx.tree)
   })
 }
 
@@ -364,7 +365,7 @@ function groupValues(
     case GROUP_KEY.DEFER_DATE: return [effectiveDefer(task, ctx.tree) ?? '']
     case GROUP_KEY.DUE_DATE: return [effectiveDue(task, ctx.tree) ?? '']
     case GROUP_KEY.FLAGGED: return [String(task.data.flagged)]
-    case GROUP_KEY.STATUS: return [task.data.status]
+    case GROUP_KEY.STATUS: return [effectiveStatus(task, ctx.tree)]
     case GROUP_KEY.NONE: return ['']
     default: return ['']
   }

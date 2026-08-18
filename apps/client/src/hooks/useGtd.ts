@@ -3,6 +3,7 @@ import { useAtomValue } from 'jotai'
 
 export function useGtd() {
   const rowStore = useAtomValue(GtdStore.rowStoreAtom)
+  const tree = useAtomValue(GtdStore.treeAtom)
   const selection = useAtomValue(GtdStore.selectionAtom)
   const forecastStrip = useAtomValue(GtdStore.forecastStripAtom)
   const forecastSignals = useAtomValue(GtdStore.forecastSignalsAtom)
@@ -15,6 +16,7 @@ export function useGtd() {
 
   return {
     rowStore,
+    tree,
     selection,
     forecastStrip,
     forecastSignals,

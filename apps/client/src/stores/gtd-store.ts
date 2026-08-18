@@ -15,11 +15,13 @@ import type {
 import type { SyncStatus } from '../gtd/sync-engine'
 import type { GtdSelection, PerspectiveViewOptions } from '../gtd/view-options'
 import {
+  buildTaskTree,
   BUILTIN_PERSPECTIVE_ID,
   BUILTIN_PERSPECTIVE_IDS,
   builtinPerspectives,
   DEFAULT_FORECAST_SIGNALS,
   DEFAULT_FORECAST_STRIP,
+  effectiveStatus,
   entityFocusFilter,
   EXPLICIT_STATUS,
   FORECAST_STRIP_ORDER,
@@ -377,6 +379,8 @@ export class GtdStore {
   static readonly userIdAtom = atom<string | undefined>(undefined)
   static readonly rowsAtom = atom<EntityRow[]>([])
   static readonly rowStoreAtom = atom(get => new RowStore(get(GtdStore.rowsAtom)))
+  /** 派生 TaskTree（live tasks 建树）；供 UI 读 effectiveStatus（洪水继承：删父/搁置父的子有效态被压） */
+  static readonly treeAtom = atom(get => buildTaskTree(get(GtdStore.rowStoreAtom).liveTasks()))
 
   static readonly selectionAtom = atom<GtdSelection>(readSelection())
   static readonly forecastStripAtom = atom<ForecastStripKey[]>(readForecastStrip())
@@ -598,32 +602,9 @@ export class GtdStore {
     if (!trimmed)
       return
     GtdStore.applyLocal((store) => {
-      const now = nowIso()
       const id = newId()
-      const data = {
-        name: trimmed,
-        note: null,
-        mountDirId: null,
-        parentId: null,
-        order: nextOrder(store.liveTasks().filter(t => t.data.mountDirId == null && t.data.parentId == null).map(tShape)),
-        status: EXPLICIT_STATUS.ACTIVE,
-        groupType: null,
-        deferDate: null,
-        dueDate: null,
-        plannedMode: PLANNED_MODE.NONE,
-        plannedDate: null,
-        completedAt: null,
-        heldAt: null,
-        droppedAt: null,
-        flagged: false,
-        estimateMinutes: null,
-        repeatRuleId: null,
-        repeatedFromTaskId: null,
-        createdAt: now,
-        updatedAt: now,
-        repeatRule: null,
-      }
-      return [upsertMut('task', id, data)]
+      const order = nextOrder(store.liveTasks().filter(t => t.data.mountDirId == null && t.data.parentId == null).map(tShape))
+      return [cmd({ type: 'create_task', taskId: id, name: trimmed, parentId: null, order, mountDirId: null })]
     })
   }
 
@@ -632,33 +613,9 @@ export class GtdStore {
     if (!trimmed)
       return
     GtdStore.applyLocal((store) => {
-      const now = nowIso()
       const id = newId()
       const siblings = store.liveTasks().filter(t => t.data.mountDirId === mountDirId && t.data.parentId == null).map(tShape)
-      const data = {
-        name: trimmed,
-        note: null,
-        mountDirId,
-        parentId: null,
-        order: nextOrder(siblings),
-        status: EXPLICIT_STATUS.ACTIVE,
-        groupType: null,
-        deferDate: null,
-        dueDate: null,
-        plannedMode: PLANNED_MODE.NONE,
-        plannedDate: null,
-        completedAt: null,
-        heldAt: null,
-        droppedAt: null,
-        flagged: false,
-        estimateMinutes: null,
-        repeatRuleId: null,
-        repeatedFromTaskId: null,
-        createdAt: now,
-        updatedAt: now,
-        repeatRule: null,
-      }
-      return [upsertMut('task', id, data)]
+      return [cmd({ type: 'create_task', taskId: id, name: trimmed, parentId: null, order: nextOrder(siblings), mountDirId })]
     })
   }
 
@@ -672,34 +629,14 @@ export class GtdStore {
         throw new Error('父任务不存在')
       if (!parent.data.mountDirId)
         throw new Error('Inbox 任务需先移入项目，才能添加子任务')
+      const tree = buildTaskTree(store.liveTasks())
+      if (effectiveStatus(parent, tree) !== EXPLICIT_STATUS.ACTIVE)
+        throw new Error('父任务非活跃状态，不允许添加子任务')
       const now = nowIso()
       const id = newId()
       const children = store.liveTasks().filter(t => t.data.parentId === parentId).map(tShape)
-      const data = {
-        name: trimmed,
-        note: null,
-        mountDirId: parent.data.mountDirId,
-        parentId,
-        order: nextOrder(children),
-        status: EXPLICIT_STATUS.ACTIVE,
-        groupType: null,
-        deferDate: null,
-        dueDate: null,
-        plannedMode: PLANNED_MODE.NONE,
-        plannedDate: null,
-        completedAt: null,
-        heldAt: null,
-        droppedAt: null,
-        flagged: false,
-        estimateMinutes: null,
-        repeatRuleId: null,
-        repeatedFromTaskId: null,
-        createdAt: now,
-        updatedAt: now,
-        repeatRule: null,
-      }
       const items: Array<GtdMutation | GtdCommand> = [
-        upsertMut('task', id, data),
+        cmd({ type: 'create_task', taskId: id, name: trimmed, parentId, order: nextOrder(children), mountDirId: parent.data.mountDirId }),
         ...copyTagMutsFromParent(store, id, parentId, []),
       ]
       if (!parent.data.groupType)
@@ -715,6 +652,9 @@ export class GtdStore {
         throw new Error('任务不存在')
       if (!task.data.mountDirId)
         throw new Error('Inbox 任务不能缩进')
+      const tree = buildTaskTree(store.liveTasks())
+      if (effectiveStatus(task, tree) !== EXPLICIT_STATUS.ACTIVE)
+        throw new Error('任务非活跃状态，不允许缩进')
       const siblings = sortedByOrder(store.liveTasks().filter(t =>
         t.data.mountDirId === task.data.mountDirId && t.data.parentId === task.data.parentId,
       ).map(tShape))
@@ -724,9 +664,10 @@ export class GtdStore {
         throw new Error('当前任务前面没有可作为父级的任务')
       const now = nowIso()
       const children = store.liveTasks().filter(t => t.data.parentId === parent.id && t.id !== taskId).map(tShape)
-      // task 移动走 upsert patch（move command 已删）；mountDirId 不变（同 project 内缩进）
-      const items: GtdMutation[] = [
-        upsertMut('task', taskId, { parentId: parent.id, order: nextOrder(children), updatedAt: now }),
+      // parentId/order 走 move_task 命令（自带拉回）；mountDirId 不变（同 project 内缩进）；updatedAt 走 upsert
+      const items: Array<GtdMutation | GtdCommand> = [
+        cmd({ type: 'move_task', taskId, parentId: parent.id, order: nextOrder(children) }),
+        upsertMut('task', taskId, { updatedAt: now }),
         ...copyTagMutsFromParent(store, taskId, parent.id),
       ]
       if (!parent.groupType)
@@ -744,6 +685,9 @@ export class GtdStore {
       const parent = parentId ? store.findLive('task', parentId) : null
       if (!task || !parent)
         throw new Error('当前任务已经是项目顶层任务')
+      const tree = buildTaskTree(store.liveTasks())
+      if (effectiveStatus(task, tree) !== EXPLICIT_STATUS.ACTIVE)
+        throw new Error('任务非活跃状态，不允许移出')
       const parentSiblings = sortedByOrder(store.liveTasks().filter(t =>
         t.data.mountDirId === parent.data.mountDirId && t.data.parentId === parent.data.parentId && t.id !== taskId,
       ).map(tShape))
@@ -751,8 +695,9 @@ export class GtdStore {
       const after = parentIndex >= 0 ? parentSiblings[parentIndex + 1] ?? null : null
       const remainingChildren = store.liveTasks().filter(t => t.data.parentId === parent.id && t.id !== taskId)
       const now = nowIso()
-      const items: GtdMutation[] = [
-        upsertMut('task', taskId, { parentId: parent.data.parentId, order: orderBetween(parent.data.order, after?.order ?? null), updatedAt: now }),
+      const items: Array<GtdMutation | GtdCommand> = [
+        cmd({ type: 'move_task', taskId, parentId: parent.data.parentId, order: orderBetween(parent.data.order, after?.order ?? null) }),
+        upsertMut('task', taskId, { updatedAt: now }),
       ]
       if (remainingChildren.length === 0)
         items.push(upsertMut('task', parent.id, { groupType: null, updatedAt: now }))
@@ -785,7 +730,7 @@ export class GtdStore {
       const result = targetOrder(siblings, target.beforeId, target.afterId)
       const now = nowIso()
       const items: GtdMutation[] = [
-        upsertMut('task', taskId, { parentId: task.data.parentId, order: result.order, updatedAt: now }),
+        upsertMut('task', taskId, { order: result.order, updatedAt: now }),
       ]
       for (const sib of siblings) {
         const order = result.reindexed.get(sib.id)
@@ -829,6 +774,11 @@ export class GtdStore {
     })
   }
 
+  /**
+   * 恢复搁置：HOLD → ACTIVE。只发自身 command（物理保真模型下 restore 仅作用于物理 HOLD 项）。
+   * 被祖先 hold 压制的子（物理仍 ACTIVE）按钮已置灰——单 restore 自身是 noop（阻断在父），
+   * 须从压制祖先操作让洪水退去；故 UI 不对该子暴露此操作（GtdInspector/GtdTaskRow 置灰）。
+   */
   static restoreTask(taskId: string): void {
     GtdStore.applyLocal((store) => {
       const task = store.findLive('task', taskId)
@@ -848,7 +798,11 @@ export class GtdStore {
     })
   }
 
-  /** 移出回收站：DELETED → ACTIVE（仅自身） */
+  /**
+   * 移出回收站：DELETED → ACTIVE。只发自身 command（物理保真模型下 restore_from_trash 仅作用于物理 DELETED 项）。
+   * 被祖先 deleted 压制的子（物理仍 ACTIVE）按钮已置灰——单 restore_from_trash 自身是 noop（阻断在父），
+   * 须从压制祖先操作让洪水退去；故 UI 不对该子暴露此操作（GtdInspector/GtdTaskRow 置灰）。
+   */
   static restoreFromTrash(taskId: string): void {
     GtdStore.applyLocal((store) => {
       const task = store.findLive('task', taskId)
@@ -936,19 +890,32 @@ export class GtdStore {
         continue
       const newId = crypto.randomUUID()
       const tagIds = store.tagIdsOf(oldId)
+      // patch 剥离后 task upsert 不可建行（缺 status/parentId）；fork 走 create_task 建行 + upsert 补内容。
+      // 不走 delete 进回收站：delete 是命令（commands 阶段先执行），内容 upsert 是 mutation（后执行），
+      // 同一 push 内 delete 会先于 content upsert → upsert 命中 DELETED 行 noop → 内容丢失。
+      // 故 fork 以 ACTIVE 形态落盘（保内容优先于隐藏进回收站）；用户可再手动删除。
+      // parent 已随 purge 消失则降级为顶层（避免 create_task 引用校验拒绝 fork）。
+      const forkParent = old.data.parentId != null && store.findLive('task', old.data.parentId)
+        ? old.data.parentId
+        : null
+      const {
+        status: _s,
+        parentId: _p,
+        name: _n,
+        order: _o,
+        mountDirId: _m,
+        completedAt: _c,
+        heldAt: _h,
+        droppedAt: _d,
+        repeatedFromTaskId: _r,
+        createdAt: _ca,
+        updatedAt: _ua,
+        ...content
+      } = old.data
       GtdStore.applyLocal(() => {
         const items: Array<GtdMutation | GtdCommand> = [
-          upsertMut('task', newId, {
-            ...old.data,
-            id: newId,
-            status: EXPLICIT_STATUS.DELETED,
-            droppedAt: ts,
-            heldAt: null,
-            completedAt: null,
-            updatedAt: ts,
-            createdAt: ts,
-            repeatedFromTaskId: null,
-          }),
+          cmd({ type: 'create_task', taskId: newId, name: old.data.name, parentId: forkParent, order: old.data.order, mountDirId: old.data.mountDirId }),
+          upsertMut('task', newId, { ...content, updatedAt: ts }),
         ]
         for (const tagId of tagIds) {
           items.push(upsertMut('task_tag', `${newId}|${tagId}`, { taskId: newId, tagId }))
@@ -1011,13 +978,11 @@ export class GtdStore {
         : targetOrder(siblings, sortedByOrder(siblings).at(-1)?.id ?? null, null)
       const now = nowIso()
       const parentChanged = nextParent !== task.data.parentId
-      const items: GtdMutation[] = [
-        upsertMut('task', taskId, {
-          mountDirId: nextMount,
-          parentId: nextParent,
-          order: placed.order,
-          updatedAt: now,
-        }),
+      // parentId/order 走 move_task 命令（自带拉回 + 防环；patch 已剥离 parentId）；
+      // mountDirId 走 upsert（无约束 LWW，命令不含 mountDirId）。
+      const items: Array<GtdMutation | GtdCommand> = [
+        cmd({ type: 'move_task', taskId, parentId: nextParent, order: placed.order }),
+        upsertMut('task', taskId, { mountDirId: nextMount, updatedAt: now }),
       ]
       // 换父且自身无标 → 复制新父标签（OF Inherited Tags Assignment）
       if (parentChanged)

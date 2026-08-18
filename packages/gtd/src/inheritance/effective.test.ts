@@ -5,7 +5,7 @@
  * SP-INV-REPEAT-REOPEN（L5 reopenTask throw）归 command/state.test.ts SP-STATE-3，此处不重复。
  */
 import { describe, expect, it } from 'vitest'
-import { COMPUTED_STATUS, PLANNED_MODE } from '../data/types'
+import { COMPUTED_STATUS, EXPLICIT_STATUS, PLANNED_MODE } from '../data/types'
 import { computeStatus } from '../derived/availability'
 import { DUE_SOON_MS, makeTaskRow, NOW } from '../fixtures'
 import { buildTaskTree } from '../structure/tree'
@@ -14,6 +14,7 @@ import {
   effectiveDue,
   effectivePlannedDate,
   effectivePlannedMode,
+  effectiveStatus,
 } from './effective'
 
 const D = (day: number) => `2026-07-${String(day).padStart(2, '0')}T00:00:00.000Z`
@@ -50,7 +51,7 @@ describe('计划日 coalesce 继承 [SP-INH-PLAN]', () => {
     expect(c.data.plannedDate).toBeNull()
   })
 
-  // SP-INH-PLAN-ROLLING: 子 rolling 阻断父日期；父 rolling 无日期可继
+  // SP-INH-PLAN-ROLLING: 子 rolling 不继承父日期；父 rolling 无日期可继
   it('子 rolling → mode=rolling、date=null，不继承父 on 日期 [SP-INH-PLAN-ROLLING]', () => {
     const p = makeTaskRow('p', { plannedMode: PLANNED_MODE.ON, plannedDate: D(20) })
     const c = makeTaskRow('c', { parentId: 'p', plannedMode: PLANNED_MODE.ROLLING })
@@ -201,5 +202,111 @@ describe('defer 地板（max）[SP-INH-DEFER]', () => {
     p.data.deferDate = null
     expect(effectiveDefer(c, buildTaskTree([p, c]))).toBe(D(5))
     expect(c.data.deferDate).toBe(D(5))
+  })
+})
+
+/**
+ * 有效状态继承行为规约（SP-INH-STATUS）。
+ * 对应 wiki/GTD.md「有效状态」mermaid：deleted 最优先 + hold/completed 从根向下路径首个决定（完成时子的有效状态跟随父）。
+ */
+describe('有效状态继承 [SP-INH-STATUS]', () => {
+  // SP-INH-STATUS-1: 自身物理无祖先覆盖 → effective = 自身物理
+  it('自身 active 无覆盖 → active [SP-INH-STATUS-1]', () => {
+    const t = makeTaskRow('t', { status: EXPLICIT_STATUS.ACTIVE })
+    expect(effectiveStatus(t, buildTaskTree([t]))).toBe(EXPLICIT_STATUS.ACTIVE)
+  })
+  it('自身完成无覆盖 → 完成（无覆盖时用自身状态） [SP-INH-STATUS-1]', () => {
+    const t = makeTaskRow('t', { status: EXPLICIT_STATUS.COMPLETED })
+    expect(effectiveStatus(t, buildTaskTree([t]))).toBe(EXPLICIT_STATUS.COMPLETED)
+  })
+  it('自身 hold 无覆盖 → hold [SP-INH-STATUS-1]', () => {
+    const t = makeTaskRow('t', { status: EXPLICIT_STATUS.HOLD })
+    expect(effectiveStatus(t, buildTaskTree([t]))).toBe(EXPLICIT_STATUS.HOLD)
+  })
+  it('自身 deleted → deleted [SP-INH-STATUS-1]', () => {
+    const t = makeTaskRow('t', { status: EXPLICIT_STATUS.DELETED })
+    expect(effectiveStatus(t, buildTaskTree([t]))).toBe(EXPLICIT_STATUS.DELETED)
+  })
+
+  // SP-INH-STATUS-2: 祖先 deleted 时子有效跟随 deleted，优先于自身 hold/completed/active
+  it('祖先 deleted 盖自身 hold → deleted（回收站优先于搁置） [SP-INH-STATUS-2]', () => {
+    const p = makeTaskRow('p', { status: EXPLICIT_STATUS.DELETED })
+    const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.HOLD })
+    expect(effectiveStatus(c, buildTaskTree([p, c]))).toBe(EXPLICIT_STATUS.DELETED)
+  })
+  it('祖先 deleted 盖自身 completed → deleted [SP-INH-STATUS-2]', () => {
+    const p = makeTaskRow('p', { status: EXPLICIT_STATUS.DELETED })
+    const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.COMPLETED })
+    expect(effectiveStatus(c, buildTaskTree([p, c]))).toBe(EXPLICIT_STATUS.DELETED)
+  })
+
+  // SP-INH-STATUS-3: 祖先 hold 时子有效跟随 hold，优先于自身 completed/active
+  it('祖先搁置优先于自身完成 → 有效搁置（搁置的祖先挡住子的完成） [SP-INH-STATUS-3]', () => {
+    const p = makeTaskRow('p', { status: EXPLICIT_STATUS.HOLD })
+    const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.COMPLETED })
+    expect(effectiveStatus(c, buildTaskTree([p, c]))).toBe(EXPLICIT_STATUS.HOLD)
+    // 自身状态保真：子的物理 completed 不被改写
+    expect(c.data.status).toBe(EXPLICIT_STATUS.COMPLETED)
+  })
+  it('祖先 hold 盖自身 active → hold [SP-INH-STATUS-3]', () => {
+    const p = makeTaskRow('p', { status: EXPLICIT_STATUS.HOLD })
+    const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.ACTIVE })
+    expect(effectiveStatus(c, buildTaskTree([p, c]))).toBe(EXPLICIT_STATUS.HOLD)
+  })
+
+  // SP-INH-STATUS-4: 完成向下传递——COMPLETED 祖先使子有效变 completed（自身状态保真）
+  it('父完成+子活跃 → 子有效完成（子的有效状态跟随父的完成） [SP-INH-STATUS-4]', () => {
+    const p = makeTaskRow('p', { status: EXPLICIT_STATUS.COMPLETED })
+    const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.ACTIVE })
+    expect(effectiveStatus(c, buildTaskTree([p, c]))).toBe(EXPLICIT_STATUS.COMPLETED)
+    // 自身状态保真：子的物理 active 不被改写
+    expect(c.data.status).toBe(EXPLICIT_STATUS.ACTIVE)
+  })
+  it('多代完成：祖父完成+孙活跃 → 孙有效完成（子的有效状态跟随父的完成） [SP-INH-STATUS-4]', () => {
+    const gp = makeTaskRow('gp', { status: EXPLICIT_STATUS.COMPLETED })
+    const p = makeTaskRow('p', { parentId: 'gp', status: EXPLICIT_STATUS.COMPLETED })
+    const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.ACTIVE })
+    expect(effectiveStatus(c, buildTaskTree([gp, p, c]))).toBe(EXPLICIT_STATUS.COMPLETED)
+  })
+  it('祖父完成+父搁置+子活跃 → 父和子都有效完成（祖父的完成优先于父的搁置） [SP-INH-STATUS-4]', () => {
+    const gp = makeTaskRow('gp', { status: EXPLICIT_STATUS.COMPLETED })
+    const p = makeTaskRow('p', { parentId: 'gp', status: EXPLICIT_STATUS.HOLD })
+    const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.ACTIVE })
+    const tree = buildTaskTree([gp, p, c])
+    // 根 gp completed 最靠根决定子有效状态：P 自身 hold、C active 在 effective 层均变 completed
+    expect(effectiveStatus(p, tree)).toBe(EXPLICIT_STATUS.COMPLETED)
+    expect(effectiveStatus(c, tree)).toBe(EXPLICIT_STATUS.COMPLETED)
+    // 自身状态保真：P hold / C active 不被改写
+    expect(p.data.status).toBe(EXPLICIT_STATUS.HOLD)
+    expect(c.data.status).toBe(EXPLICIT_STATUS.ACTIVE)
+  })
+  it('祖父搁置+父完成+子活跃 → 父和子都有效搁置（祖父的搁置优先于父的完成） [SP-INH-STATUS-4]', () => {
+    const gp = makeTaskRow('gp', { status: EXPLICIT_STATUS.HOLD })
+    const p = makeTaskRow('p', { parentId: 'gp', status: EXPLICIT_STATUS.COMPLETED })
+    const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.ACTIVE })
+    const tree = buildTaskTree([gp, p, c])
+    expect(effectiveStatus(p, tree)).toBe(EXPLICIT_STATUS.HOLD)
+    expect(effectiveStatus(c, tree)).toBe(EXPLICIT_STATUS.HOLD)
+    expect(p.data.status).toBe(EXPLICIT_STATUS.COMPLETED)
+    expect(c.data.status).toBe(EXPLICIT_STATUS.ACTIVE)
+  })
+
+  // SP-INH-STATUS-5: 回收站优先于搁置（祖先链 deleted + hold）
+  it('祖先删除+中间搁置 → 有效删除（删除优先于搁置） [SP-INH-STATUS-5]', () => {
+    const gp = makeTaskRow('gp', { status: EXPLICIT_STATUS.DELETED })
+    const p = makeTaskRow('p', { parentId: 'gp', status: EXPLICIT_STATUS.HOLD })
+    const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.ACTIVE })
+    expect(effectiveStatus(c, buildTaskTree([gp, p, c]))).toBe(EXPLICIT_STATUS.DELETED)
+  })
+
+  // SP-INH-STATUS-6: 三层继承（OF 直接子判定依据）父→子1(hold)→子2(active)
+  it('父活跃→子1搁置→子2活跃 → 子2有效搁置（子2有效状态跟随子1搁置） [SP-INH-STATUS-6]', () => {
+    const p = makeTaskRow('p', { status: EXPLICIT_STATUS.ACTIVE })
+    const c1 = makeTaskRow('c1', { parentId: 'p', status: EXPLICIT_STATUS.HOLD })
+    const c2 = makeTaskRow('c2', { parentId: 'c1', status: EXPLICIT_STATUS.ACTIVE })
+    const tree = buildTaskTree([p, c1, c2])
+    expect(effectiveStatus(c2, tree)).toBe(EXPLICIT_STATUS.HOLD)
+    // C2 物理活跃保留（待 C1 继续时还原）
+    expect(c2.data.status).toBe(EXPLICIT_STATUS.ACTIVE)
   })
 })

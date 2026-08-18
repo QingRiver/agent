@@ -5,7 +5,12 @@ import type {
   PerspectiveRow,
   TaskRow,
 } from '../db/schema'
-import { applyPush } from '@agent/gtd'
+import {
+  applyPush,
+  buildTaskTree,
+  liveTasksOf,
+  planPurgeCascade,
+} from '@agent/gtd'
 /**
  * GTD sync Postgres 落库。
  *
@@ -426,8 +431,17 @@ async function loadSyncStateInTx(tx: Tx, userId: string, reqIds: string[]): Prom
 }
 
 /**
- * 在线 purge 回收站任务：status=deleted 且未 envelope 删 → 标 deleted=true（不可复活 tombstone）。
- * 级联软删 task_tag / attachment；推进 clock。旁路 sync outbox。
+ * 在线 purge 回收站任务：对传入的回收站根（status=deleted）按 planPurgeCascade 展开整棵有效删除
+ * 子树（含物理 active/hold/completed 但被 deleted 祖先覆盖的后代），一律 tombstone（deleted=true
+ * + status=deleted，不可复活）。级联软删 task_tag / attachment；推进 clock。旁路 sync outbox。
+ *
+ * 三阶段（消除逐 id 交替 plan/tombstone 的重复处理）：
+ * 1. 分类输入：not_found / already_purged / not_in_trash(根必须 status=deleted) skip；validRoots 收集
+ * 2. 全规划：查全表 live task 建树 → 对每个 validRoot 调 planPurgeCascade 取并集入 toPurge
+ * 3. 全 tombstone：toPurge 逐个 set deleted+status=deleted + 级联 task_tag/attachment
+ *
+ * finalSkipped 过滤：被父 cascade 连带删的物理 active 子若作为根传入会被 skip 'not_in_trash'，
+ * 但经父 cascade 进 toPurge → 必须从 skipped 过滤掉（否则 client 看到 skip 但实际已删）。
  */
 export async function purgeTrashFromPg(
   userId: string,
@@ -443,16 +457,14 @@ export async function purgeTrashFromPg(
     const clockRow = await tx.select().from(gtdSyncClocks).where(eq(gtdSyncClocks.userId, userId)).for('update')
     let clock = clockRow[0]?.clock ?? 0
 
-    const taskRows = await tx.select().from(gtdTasks).where(and(
+    // 阶段 1：分类输入（根必须 status=deleted）
+    const inputRows = await tx.select().from(gtdTasks).where(and(
       eq(gtdTasks.userId, userId),
       inArray(gtdTasks.id, taskIds),
     ))
-    const byId = new Map(taskRows.map(r => [r.id, r]))
-
-    const purged: { id: string, name: string }[] = []
+    const byId = new Map(inputRows.map(r => [r.id, r]))
+    const validRoots: string[] = []
     const skipped: { id: string, reason: string }[] = []
-    const changes: EntityRow[] = []
-
     for (const id of taskIds) {
       const row = byId.get(id)
       if (!row) {
@@ -467,16 +479,35 @@ export async function purgeTrashFromPg(
         skipped.push({ id, reason: 'not_in_trash' })
         continue
       }
+      validRoots.push(id)
+    }
 
+    // 阶段 2：全表 live task 建树 → 对 validRoots 展开 planPurgeCascade 取并集
+    const liveRows = await tx.select().from(gtdTasks).where(and(
+      eq(gtdTasks.userId, userId),
+      eq(gtdTasks.deleted, false),
+    ))
+    const tree = buildTaskTree(liveTasksOf(liveRows.map(rowToTaskEntity)))
+    const toPurge = new Set<string>()
+    for (const rootId of validRoots) {
+      for (const pid of planPurgeCascade(rootId, tree))
+        toPurge.add(pid)
+    }
+    // 被父 cascade 连带删的输入 id 不算 skipped（如物理 active 子作为根传入被 skip 'not_in_trash'，
+    // 但经父 cascade 进 toPurge 已删）
+    const finalSkipped = skipped.filter(s => !toPurge.has(s.id))
+
+    // 阶段 3：tombstone toPurge + 级联 task_tag/attachment
+    const purged: { id: string, name: string }[] = []
+    const changes: EntityRow[] = []
+    for (const id of toPurge) {
       clock += 1
       const [updated] = await tx.update(gtdTasks)
-        .set({ deleted: true, syncId: clock, updatedAt: new Date() })
+        .set({ deleted: true, status: 'deleted', syncId: clock, updatedAt: new Date() })
         .where(and(eq(gtdTasks.id, id), eq(gtdTasks.userId, userId)))
         .returning()
-      if (!updated) {
-        skipped.push({ id, reason: 'update_failed' })
+      if (!updated)
         continue
-      }
       purged.push({ id, name: updated.name })
       changes.push(rowToTaskEntity(updated))
 
@@ -518,6 +549,6 @@ export async function purgeTrashFromPg(
         .where(eq(gtdSyncClocks.userId, userId))
     }
 
-    return { purged, skipped, changes, serverSyncId: clock }
+    return { purged, skipped: finalSkipped, changes, serverSyncId: clock }
   })
 }

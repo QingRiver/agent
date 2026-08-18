@@ -54,20 +54,20 @@ const AVAIL_FILTER = AVAILABILITY_FILTER.AVAILABLE
 describe('matchesAvailability', () => {
   it('all 含终态', () => {
     const t = makeTaskRow('x', { status: EXPLICIT_STATUS.COMPLETED })
-    expect(matchesAvailability(t, AVAILABILITY_FILTER.ALL, COMPUTED_STATUS.BLOCKED)).toBe(true)
+    expect(matchesAvailability(t, AVAILABILITY_FILTER.ALL, COMPUTED_STATUS.BLOCKED, buildTaskTree([t]))).toBe(true)
   })
 
   it('remaining 仅 active', () => {
     const active = makeTaskRow('a')
     const hold = makeTaskRow('h', { status: EXPLICIT_STATUS.HOLD })
-    expect(matchesAvailability(active, AVAILABILITY_FILTER.REMAINING, COMPUTED_STATUS.AVAILABLE)).toBe(true)
-    expect(matchesAvailability(hold, AVAILABILITY_FILTER.REMAINING, COMPUTED_STATUS.BLOCKED)).toBe(false)
+    expect(matchesAvailability(active, AVAILABILITY_FILTER.REMAINING, COMPUTED_STATUS.AVAILABLE, buildTaskTree([active]))).toBe(true)
+    expect(matchesAvailability(hold, AVAILABILITY_FILTER.REMAINING, COMPUTED_STATUS.BLOCKED, buildTaskTree([hold]))).toBe(false)
   })
 
   it('available 需 actionable', () => {
     const t = makeTaskRow('a')
-    expect(matchesAvailability(t, AVAILABILITY_FILTER.AVAILABLE, COMPUTED_STATUS.AVAILABLE)).toBe(true)
-    expect(matchesAvailability(t, AVAILABILITY_FILTER.AVAILABLE, COMPUTED_STATUS.BLOCKED)).toBe(false)
+    expect(matchesAvailability(t, AVAILABILITY_FILTER.AVAILABLE, COMPUTED_STATUS.AVAILABLE, buildTaskTree([t]))).toBe(true)
+    expect(matchesAvailability(t, AVAILABILITY_FILTER.AVAILABLE, COMPUTED_STATUS.BLOCKED, buildTaskTree([t]))).toBe(false)
   })
 })
 
@@ -395,6 +395,55 @@ describe('inbox 透视', () => {
     })
     const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null)
     expect(ids).toEqual(['inbox-parent', 'inbox-child'])
+  })
+
+  // 第 4 点：读侧切 effectiveStatus——删父/搁置父的子靠有效状态跟随父进对应透视，不再留在 Remaining
+  const collectIds = (groups: Array<{ children: unknown[] }>): string[] =>
+    groups.flatMap(g => g.children).flatMap(c => 'taskId' in (c as object) ? [(c as { taskId: string }).taskId] : [])
+
+  it('删父后子靠有效状态跟随父进 Trash 透视（物理仍活跃）', () => {
+    const parent = makeTaskRow('trash-parent', { status: EXPLICIT_STATUS.DELETED })
+    const child = makeTaskRow('trash-child', { parentId: 'trash-parent' }) // 物理 ACTIVE
+    const trash = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.TRASH)!
+    const store = new RowStore([parent, child])
+    const groups = renderPerspective(store, trash, NOW, DUE_SOON_MS, 'UTC', {
+      availabilityFilter: AVAILABILITY_FILTER.ALL,
+    })
+    expect(collectIds(groups).sort()).toEqual(['trash-child', 'trash-parent'])
+  })
+
+  it('搁置父后子靠有效状态跟随父进 Hold 透视（物理仍活跃）', () => {
+    const parent = makeTaskRow('hold-parent', { status: EXPLICIT_STATUS.HOLD })
+    const child = makeTaskRow('hold-child', { parentId: 'hold-parent' }) // 物理 ACTIVE
+    const hold = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.HOLD)!
+    const store = new RowStore([parent, child])
+    const groups = renderPerspective(store, hold, NOW, DUE_SOON_MS, 'UTC', {
+      availabilityFilter: AVAILABILITY_FILTER.ALL,
+    })
+    expect(collectIds(groups).sort()).toEqual(['hold-child', 'hold-parent'])
+  })
+
+  it('删父后子不留在 Remaining（effective deleted ≠ active）', () => {
+    const parent = makeTaskRow('rem-parent', { status: EXPLICIT_STATUS.DELETED })
+    const child = makeTaskRow('rem-child', { parentId: 'rem-parent' }) // 物理 ACTIVE 但有效 deleted
+    const p = makePerspective({ filter: null, sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })] })
+    const store = new RowStore([parent, child])
+    const groups = renderPerspective(store, p, NOW, DUE_SOON_MS, 'UTC', {
+      availabilityFilter: AVAILABILITY_FILTER.REMAINING,
+    })
+    // parent 物理 deleted 不进 remaining；child 有效 deleted 也不进
+    expect(collectIds(groups)).toEqual([])
+  })
+
+  it('完成父后子靠有效状态跟随父进 Completed 透视（物理仍活跃）', () => {
+    const parent = makeTaskRow('done-parent', { status: EXPLICIT_STATUS.COMPLETED })
+    const child = makeTaskRow('done-child', { parentId: 'done-parent' }) // 物理 ACTIVE
+    const completed = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.COMPLETED)!
+    const store = new RowStore([parent, child])
+    const groups = renderPerspective(store, completed, NOW, DUE_SOON_MS, 'UTC', {
+      availabilityFilter: AVAILABILITY_FILTER.ALL,
+    })
+    expect(collectIds(groups).sort()).toEqual(['done-child', 'done-parent'])
   })
 })
 

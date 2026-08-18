@@ -135,17 +135,21 @@ describe('applyPush: patch 列合并', () => {
     expect(field<string>(findRow(next.rows, 'task', 't1'), 'name')).toBe('B 名')
   })
 
-  it('upsert 不存在 id → 新增行', () => {
+  it('create_task 命令建行（upsert 不可建 task 行：patch 已剥离 status/parentId）', () => {
     const state = makeState([])
-    const { state: next } = push(state, [
-      makeMutation({
-        id: 'm1',
-        entityId: 't1',
-        patch: { name: '新任务', status: 'active', flagged: false, mountDirId: null },
-      }),
+    const { state: next } = push(state, [], [
+      makeCommand({ id: 'c1', type: 'create_task', taskId: 't1', name: '新任务', parentId: null, order: 0, mountDirId: null }),
     ])
     expect(findRow(next.rows, 'task', 't1')).toBeDefined()
     expect(field<string>(findRow(next.rows, 'task', 't1'), 'name')).toBe('新任务')
+  })
+
+  it('task upsert 不存在 id → rejected（建行走 create_task 命令，upsert 缺必填字段）', () => {
+    const state = makeState([])
+    const { response } = push(state, [
+      makeMutation({ id: 'm1', entityId: 't1', patch: { name: '新任务' } }),
+    ])
+    expect(response.rejected.map(r => r.id)).toContain('m1')
   })
 
   it('delete op 软删行（deleted=true，非物理删）', () => {
@@ -409,6 +413,25 @@ describe('applyPush: command complete', () => {
     // 旧任务仍 complete
     expect(field<string>(findRow(next.rows, 'task', 't1'), 'status')).toBe('completed')
   })
+
+  it('complete+repeat: 新实例 active 挂 completed 父下 → 拉回父 active（缺口二防御）', () => {
+    // 模拟脏数据/并发遗留违法态：p completed ∧ t1 active 直接子（物理不变量被破坏）。
+    // complete(t1) 克隆 nextId active 挂 p 下 → planUpwardActivation 拉回 p 修复。
+    // 合法态下 completed 父 ∧ active 子本身违法，此处测防御性拉回。
+    const nextId = 't1-next'
+    const state = makeState([
+      makeTaskRow('p', { status: 'completed', completedAt: SYNC_NOW }, { syncId: 1 }),
+      makeTaskRow('t1', { parentId: 'p', status: 'active', repeatRuleId: 'r1', repeatRule: makeRepeatRule({ id: 'r1', cycle: 'daily', interval: 1, anchor: 'completion' }) }, { syncId: 2 }),
+    ])
+    const { state: next } = push(state, [], [
+      makeCommand({ id: 'c1', taskId: 't1', clientGenerated: { nextTaskId: nextId }, clientTs: '2026-07-17T09:00:00Z' }),
+    ])
+    expect(field<string>(findRow(next.rows, 'task', nextId), 'status')).toBe('active')
+    expect(field<string>(findRow(next.rows, 'task', 't1'), 'status')).toBe('completed')
+    // 新 active 实例挂 completed 父下 → 拉回父 active（清 completedAt）
+    expect(field<string>(findRow(next.rows, 'task', 'p'), 'status')).toBe('active')
+    expect(field(findRow(next.rows, 'task', 'p'), 'completedAt')).toBeNull()
+  })
 })
 
 // ============================================================
@@ -416,10 +439,10 @@ describe('applyPush: command complete', () => {
 // ============================================================
 
 describe('applyPush: rejected', () => {
-  it('mutation 引用不存在实体 → 该条 rejected，其余继续', () => {
+  it('mutation 违规（task upsert 建行拒绝）→ 该条 rejected，其余继续', () => {
     const state = makeState([makeTaskRow('t1', { flagged: false }, { syncId: 1 })])
     const { response, state: next } = push(state, [
-      makeMutation({ id: 'm1', entity: 'task', entityId: 't2', patch: { parentId: 'nope' } }),
+      makeMutation({ id: 'm1', entity: 'task', entityId: 't2', patch: { name: 'x' } }),
       makeMutation({ id: 'm2', entityId: 't1', patch: { flagged: true } }),
     ])
     expect(response.rejected.map(r => r.id)).toContain('m1')
@@ -457,7 +480,7 @@ describe('applyPush: rejected', () => {
   it('mutation 违规不分配 syncId（被拒条目不占版本号）', () => {
     const state = makeState([makeTaskRow('t1', { flagged: false }, { syncId: 1 })])
     const { state: next } = push(state, [
-      makeMutation({ id: 'm1', entity: 'task', entityId: 't2', patch: { parentId: 'nope' } }),
+      makeMutation({ id: 'm1', entity: 'task', entityId: 't2', patch: { name: 'x' } }),
     ])
     expect(next.clock).toBe(state.clock)
   })

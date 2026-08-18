@@ -9,7 +9,7 @@
  * （统一 dirs 树）：folder/project entity 退出 sync（归属改 dirs 表 + 在线 API）；
  * task 加 mountDirId（权威挂载，LWW）；标签目录已退出 sync（REST /tags + 外部 catalog）；
  * task↔标签绑定仍走 task_tag。projectId 已从行/库移除（目录投影经 CatalogProjection 注入）。
- * task 移动走 upsert patch（删 move command）；删 delete_folder/delete_project
+ * task 移动走 moveTask command（parentId 变更自带拉回）；删 delete_folder/delete_project
  * command（删 dir 走在线 API）。
  */
 import { z } from 'zod'
@@ -103,10 +103,13 @@ const MutationBase = {
 }
 
 /**
- * task upsert patch：mountDirId 在 patch 范围内（权威挂载，LWW）；parentId/order 等亦 LWW。
+ * task upsert patch：无约束字段 LWW（title/note/order/dates/mountDirId/flagged 等）。
+ * **status / parentId 不在 patch 范围**（2026-08-14 剥离）——状态语义操作走命令通道
+ * （complete/drop/reopen/restore/delete/restore_from_trash/create_task/move_task），自带拉回。
+ * 故 task upsert 不可建行（缺 status/parentId 必填字段），建行走 create_task 命令。
  * tagIds / attachmentIds 不在此处，由 task_tag / attachment 行表达。
  */
-export const TaskUpsertPatchSchema = TaskRowDataSchema.partial()
+export const TaskUpsertPatchSchema = TaskRowDataSchema.partial().omit({ status: true, parentId: true })
 export const TaskUpsertMutationSchema = z.object({
   ...MutationBase,
   entity: z.literal('task'),
@@ -199,6 +202,31 @@ export const RestoreFromTrashCommandSchema = z.object({
   type: z.literal('restore_from_trash'),
   taskId: id,
 })
+/**
+ * 新建任务（命令通道）：带必需字段建行（status 默认 ACTIVE）+ 拉回已完成祖先。
+ * 其余无约束字段（note/dates/flagged 等）后续 upsert patch 补。
+ * taskId = 客户端提议的新 id；parentId/order/mountDirId 为位置必需字段。
+ */
+export const CreateTaskCommandSchema = z.object({
+  ...CommandBase,
+  type: z.literal('create_task'),
+  taskId: id,
+  name: z.string().min(1),
+  parentId: id.nullable(),
+  order: TaskRowDataSchema.shape.order,
+  mountDirId: id.nullable(),
+})
+/**
+ * 移动任务（命令通道）：改 parentId + order + 拉回已完成祖先（与 createTask 共用 planUpwardActivation）。
+ * parentId 变更带动状态联动（活跃子挂已完成父 → 拉回），故走命令而非 LWW patch。
+ */
+export const MoveTaskCommandSchema = z.object({
+  ...CommandBase,
+  type: z.literal('move_task'),
+  taskId: id,
+  parentId: id.nullable(),
+  order: TaskRowDataSchema.shape.order,
+})
 
 export const GtdCommandSchema = z.discriminatedUnion('type', [
   CompleteCommandSchema,
@@ -207,6 +235,8 @@ export const GtdCommandSchema = z.discriminatedUnion('type', [
   RestoreCommandSchema,
   DeleteTaskCommandSchema,
   RestoreFromTrashCommandSchema,
+  CreateTaskCommandSchema,
+  MoveTaskCommandSchema,
 ])
 
 // ---------------- push / pull ----------------
@@ -252,6 +282,8 @@ export type ReopenCommand = z.infer<typeof ReopenCommandSchema>
 export type RestoreCommand = z.infer<typeof RestoreCommandSchema>
 export type DeleteTaskCommand = z.infer<typeof DeleteTaskCommandSchema>
 export type RestoreFromTrashCommand = z.infer<typeof RestoreFromTrashCommandSchema>
+export type CreateTaskCommand = z.infer<typeof CreateTaskCommandSchema>
+export type MoveTaskCommand = z.infer<typeof MoveTaskCommandSchema>
 
 export type PushRequest = z.infer<typeof PushRequestSchema>
 export type PullRequest = z.infer<typeof PullRequestSchema>

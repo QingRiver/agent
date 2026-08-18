@@ -22,8 +22,9 @@ import type {
  */
 import { tryit } from 'radash'
 import { match } from 'ts-pattern'
-import { completeTask, deleteTask, dropTask, reopenTask, restoreFromTrash, restoreTask } from '../command/state-machine'
+import { completeTask, createTask, deleteTask, dropTask, moveTask, reopenTask, restoreFromTrash, restoreTask } from '../command/state-machine'
 import { EXPLICIT_STATUS } from '../data/types'
+import { reconcile } from '../derived/reconcile'
 import { normalizeDeferDue } from '../time/normalize'
 import { remotePurgedReason } from './reject-codes'
 
@@ -96,7 +97,7 @@ export function applyPush(state: SyncState, req: PushRequest): ApplyPushResult {
   }
 
   // 1. commands（高风险权威命令，先于 mutations）
-  const tryCmd = tryit((cmd: GtdCommand) => applyCommand(cmd, rows, nextSyncId))
+  const tryCmd = tryit((cmd: GtdCommand) => applyCommand(cmd, rows, userId, nextSyncId))
   for (const cmd of req.commands) {
     if (processedIds.has(cmd.id)) {
       applied.push(cmd.id) // 幂等重放：已处理过，确认 ack 让客户端清 outbox
@@ -129,6 +130,15 @@ export function applyPush(state: SyncState, req: PushRequest): ApplyPushResult {
     }
   }
 
+  // 3. 防御兜底 reconcile：修复历史脏数据 / 命令 bug / 并发遗留的 `completed_with_active_child` 违法态
+  //    （与命令通道同构：planUpwardActivation 翻物理 COMPLETED 祖先→ACTIVE）。
+  //    正常路径命令通道已保证无违法态，此处 no-op（不分配 syncId、不改行）。
+  //    repair 时间戳取本批最后一条 clientTs（repair 关联本次 push）；空批跳过。
+  const repairTs = req.commands.at(-1)?.clientTs ?? req.mutations.at(-1)?.clientTs
+  if (repairTs) {
+    reconcile(rows, repairTs, nextSyncId)
+  }
+
   const changes = rows.filter(r => r.syncId > req.lastSyncId)
   return {
     response: { applied, rejected, changes, serverSyncId: clock },
@@ -141,9 +151,12 @@ export function applyPush(state: SyncState, req: PushRequest): ApplyPushResult {
 function applyCommand(
   cmd: GtdCommand,
   rows: EntityRow[],
+  userId: string,
   nextSyncId: () => number,
 ): ApplyResult {
   // purge 后 envelope.deleted + status=DELETED：命令不可作用旧 id（提示 REMOTE_PURGED）
+  // create_task 的 taskId 是新 id（不存在）→ findPurgedTask 返回 undefined，放行；
+  // 若客户端重用已 purge 的 id → 拦截（防复活 purge id）
   const purged = findPurgedTask(rows, cmd.taskId)
   if (purged) {
     throw new Error(remotePurgedReason(purged.data.name))
@@ -155,6 +168,8 @@ function applyCommand(
     .with({ type: 'restore' }, c => restoreTask(c, rows, nextSyncId))
     .with({ type: 'delete' }, c => deleteTask(c, rows, nextSyncId))
     .with({ type: 'restore_from_trash' }, c => restoreFromTrash(c, rows, nextSyncId))
+    .with({ type: 'create_task' }, c => createTask(c, rows, userId, nextSyncId))
+    .with({ type: 'move_task' }, c => moveTask(c, rows, nextSyncId))
     .exhaustive()
 }
 
@@ -252,19 +267,9 @@ function applyMutationUpsert(
 
   return match(mut)
     .with({ entity: 'task' }, (m) => {
-      const norm = normalizeDeferDue(
-        { deferDate: null, dueDate: null },
-        patch as { deferDate?: string | null, dueDate?: string | null },
-      )
-      rows.push({
-        entity: 'task',
-        id: m.entityId,
-        userId,
-        syncId: nextSyncId(),
-        deleted: false,
-        data: { ...patch, ...norm } as EntityRowOf<'task'>['data'],
-      })
-      return 'applied' as const
+      // task upsert 不可建行：patch 已剥离 status/parentId（走命令通道），缺必填字段。
+      // 建行走 create_task 命令（自带 status=ACTIVE+必需字段+默认值+拉回）。
+      throw new Error(`task ${m.entityId} not found (upsert cannot create task; use create_task command)`)
     })
     .otherwise((m) => {
       rows.push({
@@ -280,7 +285,8 @@ function applyMutationUpsert(
 }
 
 /**
- * 普通字段 upsert 的引用完整性校验（parentId/taskId 存在且未软删）；违规 throw。
+ * 普通字段 upsert 的引用完整性校验（taskId 存在且未软删）；违规 throw。
+ * parentId 不在 patch 范围（2026-08-14 剥离，移动走 move_task 命令自带引用/防环校验）。
  * mountDirId 不在纯函数层校验——指向 dirs 表（@agent/gtd 不依赖 @agent/project），
  * 引用存活由 server 落库层 stamp 校验修正（死引用→置 null→Inbox）。
  * tagId 不在纯函数层校验——标签目录在外部 catalog（REST /tags）。
@@ -288,12 +294,8 @@ function applyMutationUpsert(
  */
 function assertMutationPatch(mut: UpsertMutation, rows: EntityRow[]): void {
   void match(mut)
-    .with({ entity: 'task' }, (m) => {
-      const patch = m.patch ?? {}
-      const { parentId } = patch
-      if (parentId != null && !findLive(rows, 'task', parentId)) {
-        throw new Error(`parent task ${parentId} not found`)
-      }
+    .with({ entity: 'task' }, () => {
+      // task upsert 仅更新无约束字段；parentId/status 不在 patch，无引用校验（移动走命令）
     })
     .with({ entity: 'task_tag' }, (m) => {
       const { taskId } = m.patch

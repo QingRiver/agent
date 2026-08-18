@@ -1,6 +1,6 @@
 import type { PerspectiveEntityRef } from '@agent/gtd'
 import type { DirDto } from '@apis/dir-api'
-import { EXPLICIT_STATUS, FILTER_FIELD, GROUP_TYPE, PLANNED_MODE } from '@agent/gtd'
+import { effectiveStatus, EXPLICIT_STATUS, FILTER_FIELD, GROUP_TYPE, PLANNED_MODE, suppressingAncestor } from '@agent/gtd'
 import { GTD_TIME_END_OF_DAY, GTD_TIME_START_OF_DAY, startOfLocalDayIso } from '@components/gtd/gtd-datetime'
 import { GtdDateTimeField } from '@components/gtd/GtdDateTimeField'
 import { GtdRepeatEditor } from '@components/gtd/GtdRepeatEditor'
@@ -17,6 +17,7 @@ import { useState } from 'react'
 export function GtdInspector() {
   const {
     rowStore,
+    tree,
     selectedTaskId,
     selection,
     patchTask,
@@ -51,9 +52,24 @@ export function GtdInspector() {
   const dir = dirId ? dirsById.get(dirId) ?? null : null
 
   if (task) {
-    const done = task.data.status === EXPLICIT_STATUS.COMPLETED
-    const dropped = task.data.status === EXPLICIT_STATUS.HOLD
-    const trashed = task.data.status === EXPLICIT_STATUS.DELETED
+    // 读侧用 effectiveStatus：删父/搁置父/完成父的子有效态被洪水压，徽标/按钮门控跟随有效态（第 4 点）
+    const effStatus = effectiveStatus(task, tree)
+    const done = effStatus === EXPLICIT_STATUS.COMPLETED
+    const dropped = effStatus === EXPLICIT_STATUS.HOLD
+    const trashed = effStatus === EXPLICIT_STATUS.DELETED
+    // 被祖先连带压制（有效≠物理）→ 终态按钮置灰 + hover 提示从压制祖先操作（子不能单独恢复/重开）
+    const suppressor = effStatus !== task.data.status ? suppressingAncestor(task, tree) : null
+    const suppressed = suppressor != null
+    const suppressVerb = suppressor
+      ? suppressor.data.status === EXPLICIT_STATUS.COMPLETED
+        ? '完成'
+        : suppressor.data.status === EXPLICIT_STATUS.HOLD
+          ? '搁置'
+          : '删除'
+      : ''
+    const suppressHint = suppressed && suppressor
+      ? `被「${suppressor.data.name}」连带${suppressVerb}，请从该项操作`
+      : ''
     const tagIds = rowStore.tagIdsOf(task.id)
     const taskChildren = rowStore.liveTasks().filter(t => t.data.parentId === task.id)
     const repeatRule = task.data.repeatRule ?? null
@@ -212,7 +228,8 @@ export function GtdInspector() {
                 type="button"
                 variant="outline"
                 className="h-9 flex-1"
-                disabled={!mounted}
+                disabled={!mounted || effStatus !== EXPLICIT_STATUS.ACTIVE}
+                {...(effStatus !== EXPLICIT_STATUS.ACTIVE ? { title: '任务非活跃状态，不能缩进' } : {})}
                 onClick={() => indentTask(task.id)}
               >
                 缩进
@@ -221,7 +238,8 @@ export function GtdInspector() {
                 type="button"
                 variant="outline"
                 className="h-9 flex-1"
-                disabled={!task.data.parentId}
+                disabled={!task.data.parentId || effStatus !== EXPLICIT_STATUS.ACTIVE}
+                {...(effStatus !== EXPLICIT_STATUS.ACTIVE ? { title: '任务非活跃状态，不能移出' } : {})}
                 onClick={() => outdentTask(task.id)}
               >
                 出缩进
@@ -230,8 +248,8 @@ export function GtdInspector() {
             <div className="flex gap-2">
               <Input
                 value={childName}
-                disabled={!mounted}
-                placeholder={mounted ? '添加子任务…' : '先将任务移入项目'}
+                disabled={!mounted || effStatus !== EXPLICIT_STATUS.ACTIVE}
+                placeholder={!mounted ? '先将任务移入项目' : effStatus !== EXPLICIT_STATUS.ACTIVE ? '任务非活跃，不能加子' : '添加子任务…'}
                 onChange={e => setChildName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && childName.trim()) {
@@ -243,7 +261,8 @@ export function GtdInspector() {
               <Button
                 type="button"
                 className="h-9 shrink-0"
-                disabled={!mounted || !childName.trim()}
+                disabled={!mounted || effStatus !== EXPLICIT_STATUS.ACTIVE || !childName.trim()}
+                {...(effStatus !== EXPLICIT_STATUS.ACTIVE ? { title: '任务非活跃状态，不能加子' } : {})}
                 onClick={() => {
                   addChildTask(task.id, childName)
                   setChildName('')
@@ -267,13 +286,22 @@ export function GtdInspector() {
             {trashed
               ? (
                   <>
-                    <Button type="button" className="h-9" variant="outline" onClick={() => restoreFromTrash(task.id)}>
+                    <Button
+                      type="button"
+                      className="h-9"
+                      variant="outline"
+                      disabled={suppressed}
+                      {...(suppressed ? { title: suppressHint } : {})}
+                      onClick={() => restoreFromTrash(task.id)}
+                    >
                       移出回收站
                     </Button>
                     <Button
                       type="button"
                       className="h-9"
                       variant="ghost"
+                      disabled={suppressed}
+                      {...(suppressed ? { title: suppressHint } : {})}
                       onClick={() => void purgeTrash([task.id])}
                     >
                       永久删除
@@ -282,25 +310,60 @@ export function GtdInspector() {
                 )
               : done
                 ? (
-                    <Button type="button" className="h-9" variant="outline" onClick={() => reopenTask(task.id)}>
+                    <Button
+                      type="button"
+                      className="h-9"
+                      variant="outline"
+                      disabled={suppressed}
+                      {...(suppressed ? { title: suppressHint } : {})}
+                      onClick={() => reopenTask(task.id)}
+                    >
                       重开
                     </Button>
                   )
                 : dropped
                   ? (
-                      <Button type="button" className="h-9" variant="outline" onClick={() => restoreTask(task.id)}>
+                      <Button
+                        type="button"
+                        className="h-9"
+                        variant="outline"
+                        disabled={suppressed}
+                        {...(suppressed ? { title: suppressHint } : {})}
+                        onClick={() => restoreTask(task.id)}
+                      >
                         恢复
                       </Button>
                     )
                   : (
                       <>
-                        <Button type="button" className="h-9" variant="outline" onClick={() => completeTask(task.id)}>
+                        <Button
+                          type="button"
+                          className="h-9"
+                          variant="outline"
+                          disabled={suppressed}
+                          {...(suppressed ? { title: suppressHint } : {})}
+                          onClick={() => completeTask(task.id)}
+                        >
                           完成
                         </Button>
-                        <Button type="button" className="h-9" variant="outline" onClick={() => dropTask(task.id)}>
+                        <Button
+                          type="button"
+                          className="h-9"
+                          variant="outline"
+                          disabled={suppressed}
+                          {...(suppressed ? { title: suppressHint } : {})}
+                          onClick={() => dropTask(task.id)}
+                        >
                           放弃
                         </Button>
-                        <Button type="button" className="h-9" variant="ghost" onClick={() => deleteTaskLogical(task.id)}>
+                        <Button
+                          type="button"
+                          className="h-9"
+                          variant="ghost"
+                          disabled={suppressed}
+                          {...(suppressed ? { title: suppressHint } : {})}
+                          onClick={() => deleteTaskLogical(task.id)}
+                        >
                           移到回收站
                         </Button>
                       </>

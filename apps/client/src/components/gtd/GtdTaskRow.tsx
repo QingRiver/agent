@@ -1,5 +1,5 @@
 import type { ComputedStatus } from '@agent/gtd'
-import { COMPUTED_STATUS, EXPLICIT_STATUS } from '@agent/gtd'
+import { COMPUTED_STATUS, effectiveStatus, EXPLICIT_STATUS } from '@agent/gtd'
 import { Button } from '@components/ui/button'
 import { Checkbox } from '@components/ui/checkbox'
 import { useSortable } from '@dnd-kit/sortable'
@@ -55,6 +55,7 @@ export function GtdTaskRow({
 }) {
   const {
     rowStore,
+    tree,
     selectedTaskId,
     selectTask,
     completeTask,
@@ -74,7 +75,11 @@ export function GtdTaskRow({
   if (!task)
     return null
 
-  const done = task.data.status === EXPLICIT_STATUS.COMPLETED
+  // 读侧用 effectiveStatus：删父/搁置父/完成父的子有效态被洪水压，勾选/状态点跟随有效态（第 4 点）
+  const effStatus = effectiveStatus(task, tree)
+  const done = effStatus === EXPLICIT_STATUS.COMPLETED
+  // 被祖先连带压制（有效≠物理）→ checkbox 置灰（子不能单独完成/重开，须从压制祖先操作）
+  const suppressed = effStatus !== task.data.status
   const selected = selectedTaskId === taskId
   const dueLabel = formatDue(task.data.dueDate)
 
@@ -131,6 +136,8 @@ export function GtdTaskRow({
         : <span className="w-2 shrink-0" />}
       <Checkbox
         checked={done}
+        disabled={suppressed}
+        {...(suppressed ? { title: '被祖先连带压制，请从压制祖先操作' } : {})}
         onCheckedChange={(state) => {
           if (state === true)
             completeTask(taskId)
@@ -141,7 +148,7 @@ export function GtdTaskRow({
         className="size-4"
         aria-label={done ? '标记未完成' : '标记完成'}
       />
-      <span className={cn('size-1.5 shrink-0 rounded-full', statusDotClass(computed, task.data.status))} />
+      <span className={cn('size-1.5 shrink-0 rounded-full', statusDotClass(computed, effStatus))} />
       <span className={cn('min-w-0 flex-1 truncate', done && 'text-muted-foreground line-through')}>
         {task.data.name}
       </span>

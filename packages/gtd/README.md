@@ -70,6 +70,15 @@ prompts/
 └── perspective.md                # 透视 Agent 指南原文
 ```
 
+## 状态级联与不变量 INV
+
+任务状态四种：`ACTIVE` / `COMPLETED` / `HOLD` / `DELETED`（回收站）；后三种为终态。
+
+**不变量 INV**：终态节点不能有 `ACTIVE` 后代 ≡ 任一 `ACTIVE` 节点的祖先链必须全 `ACTIVE`。
+`derived/invariant.ts` 校验此不变量，所有状态命令的级联设计都为维持它。
+
+状态模型（逐层继承 / 自身状态保真）以源码与测试为准，不在此展开易过时的具体规则：见 `inheritance/effective.ts`（有效状态逐层继承）、`inheritance/cascade.ts`（向上拉回 `planUpwardActivation`：重开/恢复子向上翻链路上**已完成**祖先→ACTIVE，祖先是搁置/删除时不向上翻）、`inheritance/cascade.test.ts` [SP-LINK-STATE]、`derived/reconcile.ts`（并发遗留违法态兜底）。
+
 ## 模块一览
 
 | 目录 | 职责 |

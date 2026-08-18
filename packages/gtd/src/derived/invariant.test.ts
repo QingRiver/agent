@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { RowStore } from '../data/rows'
-import { EXPLICIT_STATUS, PLANNED_MODE } from '../data/types'
+import { EXPLICIT_STATUS, GROUP_TYPE, PLANNED_MODE } from '../data/types'
 import { makeTaskRow, makeTaskTagRow } from '../fixtures'
 import { validateInvariants } from './invariant'
 
@@ -82,5 +82,27 @@ describe('validateInvariants', () => {
       dueDate: '2026-07-16T10:00:00.000Z',
     })
     expect(validateInvariants(new RowStore([t])).some(v => v.code === 'invalid_defer_due')).toBe(true)
+  })
+
+  // 物理不变量：禁止「物理 completed ∧ 有效活跃直接子」。父完成时子的有效状态跟随父，完成父的活跃子有效变
+  // 完成（非活跃）→ 不违反——此态由 effectiveStatus 派生层自动保证合法，invariant 静态检查恒不触发。
+  it('completed_with_active_child: 父完成时完成父的活跃子有效变完成 → 不违反', () => {
+    const p = makeTaskRow('p', { status: EXPLICIT_STATUS.COMPLETED, completedAt: '2026-07-16T00:00:00.000Z', mountDirId: 'd1', groupType: GROUP_TYPE.PARALLEL })
+    const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.ACTIVE, mountDirId: 'd1' })
+    expect(validateInvariants(new RowStore([p, c])).some(v => v.code === 'completed_with_active_child')).toBe(false)
+  })
+
+  it('物理 completed 父有有效 hold 直接子 → 不违反（hold 子非有效活跃）', () => {
+    const p = makeTaskRow('p', { status: EXPLICIT_STATUS.COMPLETED, completedAt: '2026-07-16T00:00:00.000Z', mountDirId: 'd1', groupType: GROUP_TYPE.PARALLEL })
+    const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.HOLD, heldAt: '2026-07-16T00:00:00.000Z', mountDirId: 'd1' })
+    expect(validateInvariants(new RowStore([p, c])).some(v => v.code === 'completed_with_active_child')).toBe(false)
+  })
+
+  it('父完成时子的有效状态跟随父整链：完成父→搁置子→活跃孙 → 子孙有效变完成非活跃 → 不违反', () => {
+    // m 的有效状态跟随 p 完成 → m 有效变完成；c 同随 p 有效变完成（非活跃）→ p 的直接子 m 非活跃，不违反
+    const p = makeTaskRow('p', { status: EXPLICIT_STATUS.COMPLETED, completedAt: '2026-07-16T00:00:00.000Z', mountDirId: 'd1', groupType: GROUP_TYPE.PARALLEL })
+    const m = makeTaskRow('m', { parentId: 'p', status: EXPLICIT_STATUS.HOLD, heldAt: '2026-07-16T00:00:00.000Z', mountDirId: 'd1', groupType: GROUP_TYPE.PARALLEL })
+    const c = makeTaskRow('c', { parentId: 'm', status: EXPLICIT_STATUS.ACTIVE, mountDirId: 'd1' })
+    expect(validateInvariants(new RowStore([p, m, c])).some(v => v.code === 'completed_with_active_child')).toBe(false)
   })
 })
