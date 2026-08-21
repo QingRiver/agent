@@ -10,7 +10,7 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "paths": {
-      "@server/api": ["../server/src/routes/index.ts"],
+      "@server/api": ["../../server/gateway/src/routes/index.ts"],
       "@apis/*": ["./src/apis/*"],
       "@components/*": ["./src/components/*"],
       "@contexts/*": ["./src/contexts/*"],

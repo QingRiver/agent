@@ -15,7 +15,7 @@
     "node": ">=26.0.0 <27.0.0"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter server --filter client dev",
+    "dev": "pnpm --parallel --filter server --filter client --filter rsc-engine dev",
     "cli": "pnpm --filter @agent/cli start",
     "tc": "pnpm -r run tc",
     "tsc-go": "tsx scripts/tsc-go.ts",

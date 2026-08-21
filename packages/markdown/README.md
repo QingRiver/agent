@@ -25,4 +25,4 @@ pnpm test
 ## 相关文档
 
 - 仓库根 [README](../../README.md)
-- [apps/client/README.md](../../apps/client/README.md)
+- [apps/client/web/README.md](../../apps/client/web/README.md)

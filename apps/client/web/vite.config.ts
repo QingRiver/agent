@@ -8,7 +8,7 @@ import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
-const certDir = path.resolve(dir, '../server/certificates')
+const certDir = path.resolve(dir, '../../server/gateway/certificates')
 
 function loadDevHttps() {
   const keyPath = path.join(certDir, 'localhost-key.pem')
@@ -27,7 +27,7 @@ const https = loadDevHttps()
 export default defineConfig({
   resolve: {
     alias: {
-      '@server/api': path.resolve(dir, '../server/src/routes/index.ts'),
+      '@server/api': path.resolve(dir, '../../server/gateway/src/routes/index.ts'),
       '@apis': path.resolve(dir, 'src/apis'),
       '@components': path.resolve(dir, 'src/components'),
       '@contexts': path.resolve(dir, 'src/contexts'),
@@ -50,6 +50,9 @@ export default defineConfig({
     }),
     tailwindcss(),
   ],
+  optimizeDeps: {
+    include: ['react-server-dom-webpack/client'],
+  },
   server: {
     ...(https ? { https } : {}),
     proxy: {

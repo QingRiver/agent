@@ -1,6 +1,6 @@
 # @agent/env
 
-Monorepo 统一环境变量：加载根 `.env`（及可选 `apps/server/.env` 覆盖），经 zod 校验后导出 `env`。
+Monorepo 统一环境变量：加载根 `.env`（及可选 `apps/server/gateway/.env` 覆盖），经 zod 校验后导出 `env`。
 
 ## 导出
 
@@ -31,7 +31,7 @@ import { env, dataDirPath } from '@agent/env'
 console.log(env.OPENAI_MODEL, dataDirPath)
 ```
 
-被 server、graph、kb、cli 及各类脚本共同依赖。改 LLM / 密钥只改根 `.env`；`PORT`、`DATA_DIR` 等可在 `apps/server/.env` 覆盖。
+被 server、graph、kb、cli 及各类脚本共同依赖。改 LLM / 密钥只改根 `.env`；`PORT`、`DATA_DIR` 等可在 `apps/server/gateway/.env` 覆盖。
 
 ## 常用命令
 
@@ -46,4 +46,4 @@ pnpm test
 
 - 仓库根 [README](../../README.md)
 - [`.env.example`](../../.env.example)
-- [apps/server/README.md](../../apps/server/README.md)
+- [apps/server/gateway/README.md](../../apps/server/gateway/README.md)

@@ -1,0 +1,27 @@
+{
+  "name": "rsc-engine",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "waku dev --port 3010 --host 127.0.0.1",
+    "build": "waku build",
+    "start": "waku start --port 3010 --host 127.0.0.1",
+    "tc": "pnpm -w run tsc-go --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "esbuild": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-server-dom-webpack": "catalog:",
+    "waku": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

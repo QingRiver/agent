@@ -36,7 +36,7 @@ src/
 └── index.ts
 ```
 
-Interrupt：业务代码应调用 `hitl*`，勿直接 `interrupt({ type })`。Client 侧任意 agent 用 `AgentInterruptUi`（见 `apps/client/src/components/hitl/`）。
+Interrupt：业务代码应调用 `hitl*`，勿直接 `interrupt({ type })`。Client 侧任意 agent 用 `AgentInterruptUi`（见 `apps/client/web/src/components/hitl/`）。
 
 ## 使用
 

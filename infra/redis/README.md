@@ -1,6 +1,6 @@
 # Redis（infra/redis/）
 
-gtd 的 Redis 基础设施预埋。`apps/server/src/gtd/cache.ts` 已移除——派生状态按决策④实时算不缓存；文档快照 / 透视结果 / 分布式锁的缓存策略留待 service 层（P5）重新实现时再消费 Redis。
+gtd 的 Redis 基础设施预埋。`apps/server/gateway/src/gtd/cache.ts` 已移除——派生状态按决策④实时算不缓存；文档快照 / 透视结果 / 分布式锁的缓存策略留待 service 层（P5）重新实现时再消费 Redis。
 
 ## 启动
 

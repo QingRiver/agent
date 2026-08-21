@@ -1,6 +1,6 @@
 /**
  * 预设条 → 领域 TimeSlice（wiki §1.1.1 分层边界）。
- * 连续点选交互见 apps/client `gtd/forecast-strip.ts`。
+ * 连续点选交互见 apps/client/web `gtd/forecast-strip.ts`。
  */
 import type {
   ForecastOptions,

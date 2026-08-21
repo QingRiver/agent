@@ -33,7 +33,7 @@ fixtures/       # 测试样例
 import { retrieveAndRerank, rewriteQuery, validateCitations } from '@agent/kb'
 ```
 
-- **Server**：`apps/server/src/service/kb.ts`、seed / clear 脚本
+- **Server**：`apps/server/gateway/src/service/kb.ts`、seed / clear 脚本
 - **Graph**：`kbGraph` 调用 `retrieveAndRerank` 等
 - 依赖 `@agent/env`（`QDRANT_URL`、`SILICONFLOW_*`、`KB_*` 等）
 
@@ -55,5 +55,4 @@ pnpm test
 ## 相关文档
 
 - 仓库根 [README](../../README.md)
-- Server API：[apps/server/docs/kb-api.md](../../apps/server/docs/kb-api.md)
-- [apps/server/README.md](../../apps/server/README.md)
+- [apps/server/gateway/README.md](../../apps/server/gateway/README.md)

@@ -7,6 +7,7 @@ import { graphsRoutes } from './graphs'
 import { gtdRoutes } from './gtd'
 import { kbRoutes } from './kb'
 import { dirRoutes, projectRoutes } from './project'
+import { rscRoutes } from './rsc'
 import { tagsRoutes } from './tags'
 
 const apiRoutes = new Hono<AppEnv>()
@@ -19,6 +20,7 @@ const apiRoutes = new Hono<AppEnv>()
   .route('/dirs', dirRoutes)
   .route('/projects', projectRoutes)
   .route('/gtd', gtdRoutes)
+  .route('/rsc', rscRoutes)
 
 export type AppType = typeof apiRoutes
 export { apiRoutes }

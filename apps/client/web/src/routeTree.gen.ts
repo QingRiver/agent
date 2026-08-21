@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TextEditorRouteImport } from './routes/text-editor'
+import { Route as RscRouteImport } from './routes/rsc'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as KbRouteImport } from './routes/kb'
@@ -21,6 +22,11 @@ import { Route as SettingsThemeRouteImport } from './routes/settings.theme'
 const TextEditorRoute = TextEditorRouteImport.update({
   id: '/text-editor',
   path: '/text-editor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RscRoute = RscRouteImport.update({
+  id: '/rsc',
+  path: '/rsc',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RegisterRoute = RegisterRouteImport.update({
@@ -66,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/rsc': typeof RscRoute
   '/text-editor': typeof TextEditorRoute
   '/settings/theme': typeof SettingsThemeRoute
 }
@@ -76,6 +83,7 @@ export interface FileRoutesByTo {
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/rsc': typeof RscRoute
   '/text-editor': typeof TextEditorRoute
   '/settings/theme': typeof SettingsThemeRoute
 }
@@ -87,6 +95,7 @@ export interface FileRoutesById {
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/rsc': typeof RscRoute
   '/text-editor': typeof TextEditorRoute
   '/settings/theme': typeof SettingsThemeRoute
 }
@@ -99,6 +108,7 @@ export interface FileRouteTypes {
     | '/kb'
     | '/login'
     | '/register'
+    | '/rsc'
     | '/text-editor'
     | '/settings/theme'
   fileRoutesByTo: FileRoutesByTo
@@ -109,6 +119,7 @@ export interface FileRouteTypes {
     | '/kb'
     | '/login'
     | '/register'
+    | '/rsc'
     | '/text-editor'
     | '/settings/theme'
   id:
@@ -119,6 +130,7 @@ export interface FileRouteTypes {
     | '/kb'
     | '/login'
     | '/register'
+    | '/rsc'
     | '/text-editor'
     | '/settings/theme'
   fileRoutesById: FileRoutesById
@@ -130,6 +142,7 @@ export interface RootRouteChildren {
   KbRoute: typeof KbRoute
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
+  RscRoute: typeof RscRoute
   TextEditorRoute: typeof TextEditorRoute
   SettingsThemeRoute: typeof SettingsThemeRoute
 }
@@ -141,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/text-editor'
       fullPath: '/text-editor'
       preLoaderRoute: typeof TextEditorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rsc': {
+      id: '/rsc'
+      path: '/rsc'
+      fullPath: '/rsc'
+      preLoaderRoute: typeof RscRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/register': {
@@ -202,6 +222,7 @@ const rootRouteChildren: RootRouteChildren = {
   KbRoute: KbRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
+  RscRoute: RscRoute,
   TextEditorRoute: TextEditorRoute,
   SettingsThemeRoute: SettingsThemeRoute,
 }

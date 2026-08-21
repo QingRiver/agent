@@ -18,7 +18,7 @@ import type {
  * 类型全部从 `./sync-schema` 的 Zod 派生（单一事实源）；EntityRow.data 按 entity 收窄
  * （EntityDataOf<E>），联合类型 + ts-pattern 模式匹配收窄，消 Record<string,unknown> 与 as cast。
  * 违规 throw Error，由 radash tryit 捕获入 rejected（不分配 syncId、不阻塞后续）。
- * HTTP handler 在 apps/server 薄包装；持久化由 sync-repository 落 Postgres。
+ * HTTP handler 在 apps/server/gateway 薄包装；持久化由 sync-repository 落 Postgres。
  */
 import { tryit } from 'radash'
 import { match } from 'ts-pattern'

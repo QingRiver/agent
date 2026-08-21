@@ -8,8 +8,9 @@
 
 | 路径 | 说明 |
 |------|------|
-| [apps/server](./apps/server/README.md) | Hono HTTPS API、CopilotRuntime、会话 / 认证 / 知识库 |
-| [apps/client](./apps/client/README.md) | Vite + React：会话聊天、HITL、知识库、文本编辑器 |
+| [apps/server/gateway](./apps/server/gateway/README.md) | Hono HTTPS API、CopilotRuntime、会话 / 认证 / 知识库 |
+| [apps/server/rsc-engine](./apps/server/rsc-engine/README.md) | Waku RSC 编译引擎（loopback `3010`） |
+| [apps/client/web](./apps/client/web/README.md) | Vite + React：会话聊天、HITL、知识库、文本编辑器、RSC 演示 |
 | [packages/graph](./packages/graph/README.md) | `@agent/graph` — LangGraph 图与 AguiTransformer |
 | [packages/kb](./packages/kb/README.md) | `@agent/kb` — 向量召回、rerank、入库算法 |
 | [packages/proto](./packages/proto/README.md) | `@agent/proto` — HITL / 引文 / Writer 中性契约 |
@@ -50,7 +51,7 @@ pnpm install
 cp .env.example .env
 ```
 
-根目录 `.env` 由 [`@agent/env`](./packages/env/README.md) 加载并经 zod 校验；`apps/server/.env` 可选，仅覆盖 `PORT`、`DATA_DIR` 等 server 专有项。**改 LLM / 密钥只改根** `.env`**。**
+根目录 `.env` 由 [`@agent/env`](./packages/env/README.md) 加载并经 zod 校验；`apps/server/gateway/.env` 可选，仅覆盖 `PORT`、`DATA_DIR` 等 server 专有项。**改 LLM / 密钥只改根** `.env`**。**
 
 
 | 变量                                                    | 说明                                           |
@@ -110,11 +111,11 @@ pnpm dev
 | `/text-editor` | AI 文本润色编辑器                    |
 
 
-更细的 API / 前端说明见 [apps/server/README.md](./apps/server/README.md)、[apps/client/README.md](./apps/client/README.md)。
+更细的 API / 前端说明见 [apps/server/gateway/README.md](./apps/server/gateway/README.md)、[apps/client/web/README.md](./apps/client/web/README.md)。
 
 ## 可用 Agent（Graphs）
 
-图定义在 [`packages/graph`](./packages/graph/README.md)，注册与流式入口在 `apps/server/src/agent/graphAgents.ts`。
+图定义在 [`packages/graph`](./packages/graph/README.md)，注册与流式入口在 `apps/server/gateway/src/agent/graphAgents.ts`。
 
 
 | 名称               | 说明                                    |
@@ -164,7 +165,7 @@ pnpm test                # Vitest
 
 | 包 | 文档 |
 |----|------|
-| Server / Client | [apps/server](./apps/server/README.md)、[apps/client](./apps/client/README.md) |
+| Server / Client | [apps/server/gateway](./apps/server/gateway/README.md)、[apps/client/web](./apps/client/web/README.md) |
 | Graph / KB / Proto | [graph](./packages/graph/README.md)、[kb](./packages/kb/README.md)、[proto](./packages/proto/README.md) |
 | Claude / Tools / Markdown | [claude](./packages/claude/README.md)、[tools](./packages/tools/README.md)、[markdown](./packages/markdown/README.md) |
 | Env / CLI / E2E | [env](./packages/env/README.md)、[cli](./packages/cli/README.md)、[e2e](./packages/e2e/README.md) |

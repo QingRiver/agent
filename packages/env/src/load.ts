@@ -13,12 +13,12 @@ export interface LoadWorkspaceEnvOptions {
 /**
  * 将 monorepo 环境变量注入 `process.env`：
  * 1. 仓库根 `.env`
- * 2. `apps/server/.env`（可选覆盖）
+ * 2. `apps/server/gateway/.env`（可选覆盖）
  */
 export function loadWorkspaceEnv(options: LoadWorkspaceEnvOptions = {}): void {
   const { required = true } = options
   const rootEnv = path.join(repoRoot, '.env')
-  const serverEnv = path.join(repoRoot, 'apps/server/.env')
+  const serverEnv = path.join(repoRoot, 'apps/server/gateway/.env')
 
   if (!fs.existsSync(rootEnv)) {
     if (required) {

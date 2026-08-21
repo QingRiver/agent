@@ -13,7 +13,7 @@ export const ServerEnvSchema = LlmEnvSchema.extend({
   ANTHROPIC_BASE_URL: z.url().optional(),
   ANTHROPIC_MODEL: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(3000),
-  DATA_DIR: z.string().default('apps/server/data'),
+  DATA_DIR: z.string().default('apps/server/gateway/data'),
   BETTER_AUTH_SECRET: z.string().min(1).default('dev-secret-change-me-in-production'),
   BETTER_AUTH_URL: z.url().default('https://localhost:3000'),
   // PostgreSQL（infra/postgres/）：better-auth + drizzle + langgraph checkpoint 共用
@@ -33,6 +33,8 @@ export const ServerEnvSchema = LlmEnvSchema.extend({
   KB_RECALL_K: z.coerce.number().int().positive().default(20),
   KB_RERANK_TOPK: z.coerce.number().int().positive().default(5),
   KB_RERANK_MIN_SCORE: z.coerce.number().min(0).max(1).default(0.3),
+  /** rsc-engine loopback（浏览器不直连） */
+  RSC_ENGINE_URL: z.url().default('http://127.0.0.1:3010'),
 })
 
 export type ServerEnv = z.infer<typeof ServerEnvSchema>

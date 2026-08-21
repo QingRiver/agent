@@ -43,4 +43,4 @@ pnpm --filter @agent/claude demo   # tsx src/demo.ts
 
 - 仓库根 [README](../../README.md)
 - [packages/graph/README.md](../graph/README.md) — `claudeAgent` 图
-- [apps/server/README.md](../../apps/server/README.md) — Agent 注册
+- [apps/server/gateway/README.md](../../apps/server/gateway/README.md) — Agent 注册

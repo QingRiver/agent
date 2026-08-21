@@ -49,7 +49,7 @@ export default antfu({
     ],
   },
 }, {
-  files: ['apps/client/src/**/*.{tsx,ts}'],
+  files: ['apps/client/**/src/**/*.{tsx,ts}'],
   plugins: {
     'react-compiler': reactCompiler,
     'react-hooks': reactHooks,
@@ -60,13 +60,13 @@ export default antfu({
     'react-hooks/rules-of-hooks': 'error',
   },
 }, {
-  files: ['apps/client/src/routes/**/*.{tsx,ts}', 'apps/client/src/contexts/**/*.{tsx,ts}'],
+  files: ['apps/client/**/src/routes/**/*.{tsx,ts}', 'apps/client/**/src/contexts/**/*.{tsx,ts}'],
   rules: {
     'react-refresh/only-export-components': 'off',
   },
 }, {
   // dotenv 必须在 router/graph 加载前执行，不可被 import 排序挪到文件末尾
-  files: ['apps/server/src/index.ts'],
+  files: ['apps/server/**/src/index.ts'],
   rules: {
     'perfectionist/sort-imports': 'off',
   },

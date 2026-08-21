@@ -19,7 +19,7 @@ import { ProjectService } from './service/project'
 const runE2e = process.env.E2E === '1'
 const FIXTURE = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../../packages/kb/fixtures/e2e-policy.md',
+  '../../../../packages/kb/fixtures/e2e-policy.md',
 )
 const OWNER = 'kb-e2e-owner'
 

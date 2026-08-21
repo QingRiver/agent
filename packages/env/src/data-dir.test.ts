@@ -4,14 +4,17 @@ import { repoRoot, resolveDataDir } from './data-dir'
 
 describe('resolveDataDir', () => {
   it('相对路径基于 monorepo 根目录', () => {
-    expect(resolveDataDir('apps/server/data')).toBe(
-      path.join(repoRoot, 'apps/server/data'),
+    expect(resolveDataDir('apps/server/gateway/data')).toBe(
+      path.join(repoRoot, 'apps/server/gateway/data'),
     )
   })
 
-  it('旧 DATA_DIR=./data 映射到 apps/server/data', () => {
+  it('旧 DATA_DIR=./data 与 apps/server/data 映射到 gateway 数据目录', () => {
     expect(resolveDataDir('./data')).toBe(
-      path.join(repoRoot, 'apps/server/data'),
+      path.join(repoRoot, 'apps/server/gateway/data'),
+    )
+    expect(resolveDataDir('apps/server/data')).toBe(
+      path.join(repoRoot, 'apps/server/gateway/data'),
     )
   })
 })

@@ -1,4 +1,4 @@
-import { migrateAppSchema } from './apps/server/src/db/migrate'
+import { migrateAppSchema } from './apps/server/gateway/src/db/migrate'
 
 /**
  * vitest 全局 setup：在所有测试 worker 启动前，对 postgres 应用一次 drizzle 迁移。

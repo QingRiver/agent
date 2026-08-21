@@ -1,6 +1,6 @@
 # @agent/e2e
 
-E2E 测试统一工具包与场景库。真实 HTTP/SSE 流程都放在本包；`apps/server` 的 Vitest 只算进程内集成测试，不算 HTTP E2E。
+E2E 测试统一工具包与场景库。真实 HTTP/SSE 流程都放在本包；`apps/server/gateway` 的 Vitest 只算进程内集成测试，不算 HTTP E2E。
 
 ## 分层
 
@@ -107,5 +107,5 @@ await fetch(`${E2E_BASE_URL}/copilotkit/agent/hitl/run`, {
 
 - 仓库根 [README](../../README.md)
 - [`.cursor/skills/devops/SKILL.md`](../../.cursor/skills/devops/SKILL.md) — `pnpm devops` 统一入口
-- [apps/server/README.md](../../apps/server/README.md)
-- [apps/client/README.md](../../apps/client/README.md)
+- [apps/server/gateway/README.md](../../apps/server/gateway/README.md)
+- [apps/client/web/README.md](../../apps/client/web/README.md)

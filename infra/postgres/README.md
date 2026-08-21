@@ -64,4 +64,4 @@ infra/postgres/
 └── pg_data/        # Postgres 数据（gitignore）
 ```
 
-> 旧 SQLite 文件仍留在 `apps/server/data/`（已废弃，不再读写）。
+> 旧 SQLite 文件仍留在 `apps/server/gateway/data/`（已废弃，不再读写）。

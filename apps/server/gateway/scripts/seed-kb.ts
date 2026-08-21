@@ -13,7 +13,7 @@ import { KbService } from '../src/service/kb'
 
 const FIXTURE = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../../packages/kb/fixtures/e2e-policy.md',
+  '../../../../packages/kb/fixtures/e2e-policy.md',
 )
 
 const SEED_OWNER = 'e2e-seed'

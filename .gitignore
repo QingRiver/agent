@@ -149,10 +149,10 @@ vite.config.ts.timestamp-*
 
 .DS_Store
 **/.DS_Store
-apps/server/certificates/
-apps/server/data/*.sqlite
-apps/server/data/*.sqlite-wal
-apps/server/data/*.sqlite-shm
+apps/server/gateway/certificates/
+apps/server/gateway/data/*.sqlite
+apps/server/gateway/data/*.sqlite-wal
+apps/server/gateway/data/*.sqlite-shm
 
 /infra/qlib/qlib_data/
 /infra/qlib/qlib_data/**/*.bin

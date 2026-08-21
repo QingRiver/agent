@@ -36,7 +36,7 @@ export function e2eKbSeed(): void {
 /** KB 内部管线集成测试（不是 HTTP E2E）。 */
 export function e2eKbPipeline(): void {
   console.log('[devops] e2e kb pipeline (vitest)')
-  runInRepo('pnpm', ['exec', 'vitest', 'run', 'apps/server/src/kb.e2e.test.ts'], { E2E: '1' })
+  runInRepo('pnpm', ['exec', 'vitest', 'run', 'apps/server/gateway/src/kb.e2e.test.ts'], { E2E: '1' })
 }
 
 /** shared tags 真实 HTTP flow（需 pnpm dev + e2e auth）。 */

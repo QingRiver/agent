@@ -49,6 +49,12 @@ function RootLayout() {
               >
                 Agent Lab
               </Link>
+              <Link
+                to="/rsc"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
+              >
+                RSC
+              </Link>
               <div className="ml-auto">
                 <UserAvatarMenu />
               </div>

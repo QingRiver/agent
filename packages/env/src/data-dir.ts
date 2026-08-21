@@ -12,7 +12,9 @@ export function resolveDataDir(raw: string): string {
   if (path.isAbsolute(raw))
     return raw
   const relative = raw.replace(/^\.\//, '')
-  // 旧默认 `./data` 在 server cwd 下等价于 apps/server/data；统一到此，避免根目录误建库
-  const fromRoot = relative === 'data' ? 'apps/server/data' : relative
+  // 旧默认 `./data` / `apps/server/data` 映射到 gateway 数据目录，避免根目录误建库
+  const fromRoot = relative === 'data' || relative === 'apps/server/data'
+    ? 'apps/server/gateway/data'
+    : relative
   return path.resolve(repoRoot, fromRoot)
 }
