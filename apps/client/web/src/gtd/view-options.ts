@@ -53,7 +53,7 @@ export function viewOptionsScope(selection: GtdSelection): string {
   return selection.perspectiveId
 }
 
-/** 读 overlay 或默认 REMAINING；回收站强制 ALL（否则 remaining 滤掉 deleted） */
+/** 读 overlay 或默认 REMAINING；回收站默认 ALL（渲染跳过 base filter，控件仅作占位） */
 export function resolveAvailabilityFilter(
   scope: string,
   overlay: Partial<PerspectiveViewOptions> | undefined,

@@ -19,7 +19,7 @@
 |----|------|
 | `available` | 仅可执行任务（available / due_soon / overdue） |
 | `remaining` | 所有 `active` 状态任务 |
-| `all` | 全部 explicit 状态（含 completed / hold / deleted） |
+| `all` | 除 deleted 外全部有效状态（active / completed / hold；deleted 仅回收站） |
 
 ## 规则逻辑（matchMode）
 

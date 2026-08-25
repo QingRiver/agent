@@ -52,9 +52,21 @@ function makeCtx(
 const AVAIL_FILTER = AVAILABILITY_FILTER.AVAILABLE
 
 describe('matchesAvailability', () => {
-  it('all 含终态', () => {
+  it('all 含 active 与终态（除 deleted）', () => {
     const t = makeTaskRow('x', { status: EXPLICIT_STATUS.COMPLETED })
     expect(matchesAvailability(t, AVAILABILITY_FILTER.ALL, COMPUTED_STATUS.BLOCKED, buildTaskTree([t]))).toBe(true)
+  })
+
+  it('all 不含 deleted（物理或有效）', () => {
+    const deleted = makeTaskRow('d', { status: EXPLICIT_STATUS.DELETED })
+    const parent = makeTaskRow('p', { status: EXPLICIT_STATUS.DELETED })
+    const child = makeTaskRow('c', { parentId: 'p' }) // 物理 active，有效 deleted
+    expect(
+      matchesAvailability(deleted, AVAILABILITY_FILTER.ALL, COMPUTED_STATUS.BLOCKED, buildTaskTree([deleted])),
+    ).toBe(false)
+    expect(
+      matchesAvailability(child, AVAILABILITY_FILTER.ALL, COMPUTED_STATUS.BLOCKED, buildTaskTree([parent, child])),
+    ).toBe(false)
   })
 
   it('remaining 仅 active', () => {
@@ -111,10 +123,18 @@ describe('applyBaseFilter', () => {
     expect(all.map(r => r.id).sort()).toEqual(['a', 'h'])
   })
 
-  it('all: 全部', () => {
-    const t = makeTaskRow('a', { status: EXPLICIT_STATUS.COMPLETED })
-    const out = applyBaseFilter([t], AVAILABILITY_FILTER.ALL, makeCtx([t]))
-    expect(out).toHaveLength(1)
+  it('all: 含 completed / hold，不含 deleted', () => {
+    const completed = makeTaskRow('a', { status: EXPLICIT_STATUS.COMPLETED })
+    const hold = makeTaskRow('h', { status: EXPLICIT_STATUS.HOLD, heldAt: NOW.toISOString() })
+    const deleted = makeTaskRow('d', { status: EXPLICIT_STATUS.DELETED })
+    const parent = makeTaskRow('p', { status: EXPLICIT_STATUS.DELETED })
+    const child = makeTaskRow('c', { parentId: 'p' })
+    const all = applyBaseFilter(
+      [completed, hold, deleted, child],
+      AVAILABILITY_FILTER.ALL,
+      makeCtx([completed, hold, deleted, parent, child]),
+    )
+    expect(all.map(r => r.id).sort()).toEqual(['a', 'h'])
   })
 })
 
@@ -432,6 +452,33 @@ describe('inbox 透视', () => {
       availabilityFilter: AVAILABILITY_FILTER.REMAINING,
     })
     // parent 物理 deleted 不进 remaining；child 有效 deleted 也不进
+    expect(collectIds(groups)).toEqual([])
+  })
+
+  it('all 不含 deleted：内置全部与自定义透视均不可见', () => {
+    const deleted = makeTaskRow('del', { status: EXPLICIT_STATUS.DELETED })
+    const active = makeTaskRow('act')
+    const store = new RowStore([deleted, active])
+    const allBuiltin = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.ALL)!
+    const custom = makePerspective({
+      filter: null,
+      sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })],
+    })
+    const opts = { availabilityFilter: AVAILABILITY_FILTER.ALL }
+    expect(collectIds(renderPerspective(store, allBuiltin, NOW, DUE_SOON_MS, 'UTC', opts))).toEqual(['act'])
+    expect(collectIds(renderPerspective(store, custom, NOW, DUE_SOON_MS, 'UTC', opts))).toEqual(['act'])
+  })
+
+  it('自定义透视 DSL status is deleted 仍不可见（deleted 仅回收站）', () => {
+    const deleted = makeTaskRow('del', { status: EXPLICIT_STATUS.DELETED })
+    const custom = makePerspective({
+      filter: { op: LEAF_OP.IS, field: FILTER_FIELD.STATUS, value: EXPLICIT_STATUS.DELETED },
+      sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })],
+    })
+    const store = new RowStore([deleted])
+    const groups = renderPerspective(store, custom, NOW, DUE_SOON_MS, 'UTC', {
+      availabilityFilter: AVAILABILITY_FILTER.ALL,
+    })
     expect(collectIds(groups)).toEqual([])
   })
 

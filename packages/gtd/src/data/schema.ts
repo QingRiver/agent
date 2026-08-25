@@ -6,6 +6,7 @@ import { z } from 'zod'
 import {
   ATTACHMENT_KIND,
   EXPLICIT_STATUS,
+  FILTERABLE_EXPLICIT_STATUS,
   GROUP_KEY,
   GROUP_TYPE,
   PLANNED_MODE,
@@ -31,6 +32,11 @@ import {
 export const ExplicitStatusSchema = z
   .enum(EXPLICIT_STATUS)
   .describe('显式状态（持久化）。Task/Project 共用；hold=dropped 软删可恢复；deleted=硬删')
+
+/** 透视 DSL status 叶子 value（不含 deleted） */
+export const FilterableExplicitStatusSchema = z
+  .enum(FILTERABLE_EXPLICIT_STATUS)
+  .describe('透视 DSL status 过滤值：active / completed / hold')
 
 const GroupTypeSchema = z
   .enum(GROUP_TYPE)

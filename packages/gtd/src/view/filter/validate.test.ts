@@ -129,6 +129,13 @@ describe('validateFilterNode - field × op 矩阵', () => {
       expect(r.errors[0]!.code).toBe(FILTER_ERROR_CODE.INVALID_FIELD_OP)
   })
 
+  it('status 不支持 deleted（仅回收站内置透视）', () => {
+    const r = validate(leaf(FILTER_FIELD.STATUS, LEAF_OP.IS, 'deleted'))
+    expect(r.ok).toBe(false)
+    if (!r.ok)
+      expect(r.errors[0]!.code).toBe(FILTER_ERROR_CODE.INVALID_VALUE_SHAPE)
+  })
+
   it('tag 不支持 is', () => {
     const r = validate(leaf(FILTER_FIELD.TAG, LEAF_OP.IS, 'x'))
     expect(r.ok).toBe(false)

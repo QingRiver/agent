@@ -158,7 +158,7 @@ export function validatePerspectiveInput(
 export function formatFilterMatrixMarkdown(): string {
   const lines = ['| Field | Operators | Value |', '|-------|-----------|-------|']
   const valueHints: Record<string, string> = {
-    [FILTER_FIELD.STATUS]: 'ExplicitStatus',
+    [FILTER_FIELD.STATUS]: 'active | completed | hold（deleted 仅回收站内置透视）',
     [FILTER_FIELD.PROJECT]: 'EntityRef[]（some）/ 无（empty）',
     [FILTER_FIELD.TAG]: 'EntityRef[]（some，交集）/ 无（empty）',
     [FILTER_FIELD.DEFER_DATE]: 'TemporalValue（before/after）/ [TemporalValue, TemporalValue]（within）/ 无（exist）',

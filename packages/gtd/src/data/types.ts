@@ -18,6 +18,15 @@ export const EXPLICIT_STATUS = {
   DELETED: 'deleted',
 } as const
 
+/** DSL status 过滤可选值（不含 deleted；deleted 仅内置回收站透视） */
+export const FILTERABLE_EXPLICIT_STATUS = {
+  ACTIVE: EXPLICIT_STATUS.ACTIVE,
+  COMPLETED: EXPLICIT_STATUS.COMPLETED,
+  HOLD: EXPLICIT_STATUS.HOLD,
+} as const
+
+export type FilterableExplicitStatusValue = (typeof FILTERABLE_EXPLICIT_STATUS)[keyof typeof FILTERABLE_EXPLICIT_STATUS]
+
 export const EXPLICIT_STATUS_TEXT = {
   [EXPLICIT_STATUS.ACTIVE]: '活跃',
   [EXPLICIT_STATUS.COMPLETED]: '已完成',
@@ -124,7 +133,7 @@ export const AVAILABILITY_FILTER = {
   AVAILABLE: 'available',
   /** explicit=active（含 blocked 的 active） */
   REMAINING: 'remaining',
-  /** 全部 explicit 状态 */
+  /** 除 deleted 外全部有效状态（active / completed / hold；deleted 仅回收站透视） */
   ALL: 'all',
 } as const
 
@@ -157,7 +166,7 @@ export const BUILTIN_PERSPECTIVE_ID = {
   HOLD: 'hold',
   /** 回收站（status=deleted ≡ trashed） */
   TRASH: 'trash',
-  /** 全部（无 DSL 过滤；含完成/搁置需 View Options 切到 all） */
+  /** 全部（无 DSL；含完成/搁置需 all；deleted 仅回收站） */
   ALL: 'all',
 } as const
 

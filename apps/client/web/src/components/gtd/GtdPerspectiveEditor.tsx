@@ -11,9 +11,11 @@ import {
   appendToLogicChain,
   BUILTIN_PERSPECTIVE_ID,
   builtinPerspectives,
+  EXPLICIT_STATUS_TEXT,
   FILTER_FIELD,
   FILTER_FIELD_OPS,
   FILTER_FIELD_TEXT,
+  FILTERABLE_EXPLICIT_STATUS,
   flattenSameLogicChain,
   foldLogic,
   GROUP_KEY,
@@ -756,10 +758,11 @@ function renderLeafValue({
   if (field === FILTER_FIELD.STATUS) {
     return (
       <PillSelect value={String(value ?? 'active')} onChange={e => onChange(e.target.value)}>
-        <option value="active">活跃</option>
-        <option value="completed">已完成</option>
-        <option value="hold">已搁置</option>
-        <option value="deleted">已删除</option>
+        {Object.values(FILTERABLE_EXPLICIT_STATUS).map(status => (
+          <option key={status} value={status}>
+            {EXPLICIT_STATUS_TEXT[status]}
+          </option>
+        ))}
       </PillSelect>
     )
   }

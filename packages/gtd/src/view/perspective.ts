@@ -112,7 +112,11 @@ export function renderPerspective(
     collapsibleSet: new Set(),
     ...catalog,
   }
-  let filtered = applyBaseFilter(tasks, availabilityFilter, ctx)
+  const isTrash = perspective.id === BUILTIN_PERSPECTIVE_ID.TRASH
+  // 回收站仅靠 DSL status is deleted；可用性 all 会滤掉 deleted，故跳过 base filter
+  let filtered = isTrash
+    ? tasks
+    : applyBaseFilter(tasks, availabilityFilter, ctx)
 
   if (perspective.id === BUILTIN_PERSPECTIVE_ID.FORECAST) {
     const opts = forecastOptions ?? defaultForecastOptions(now, timeZone)
@@ -145,7 +149,7 @@ export function matchesAvailability(
 ): boolean {
   switch (filter) {
     case AVAILABILITY_FILTER.ALL:
-      return true
+      return effectiveStatus(task, tree) !== EXPLICIT_STATUS.DELETED
     case AVAILABILITY_FILTER.REMAINING:
       return effectiveStatus(task, tree) === EXPLICIT_STATUS.ACTIVE
     case AVAILABILITY_FILTER.AVAILABLE:
@@ -493,7 +497,7 @@ export function builtinPerspectives(): Perspective[] {
       filter: { op: LEAF_OP.IS, field: FILTER_FIELD.STATUS, value: EXPLICIT_STATUS.HOLD },
       sortBy: [{ field: SORT_FIELD.ADDED_AT, dir: SORT_DIR.DESC }],
     }),
-    // 回收站：status=deleted；须配合 availabilityFilter=all（否则 remaining 滤掉）
+    // 回收站：status=deleted；跳过 applyBaseFilter（deleted 仅此处可见）
     builtin(BUILTIN_PERSPECTIVE_ID.TRASH, {
       filter: { op: LEAF_OP.IS, field: FILTER_FIELD.STATUS, value: EXPLICIT_STATUS.DELETED },
       sortBy: [{ field: SORT_FIELD.ADDED_AT, dir: SORT_DIR.DESC }],

@@ -2,7 +2,7 @@ import type { BuiltinPerspectiveId } from '../../data/types'
 import type { EntityRef, FilterNode, PerspectiveInputError, TemporalValue } from './schema'
 import { match, P } from 'ts-pattern'
 import { z } from 'zod'
-import { ExplicitStatusSchema } from '../../data/schema'
+import { FilterableExplicitStatusSchema } from '../../data/schema'
 import { FILTER_FIELD } from '../../data/types'
 import {
   addZonedDays,
@@ -249,7 +249,7 @@ function expectedValueDescription(field: string, op: string): string {
   if (isNullaryOp(op))
     return '无 value'
   if (isStatusField(field))
-    return 'ExplicitStatus'
+    return 'active | completed | hold（deleted 仅回收站内置透视）'
   if (isFlaggedField(field))
     return 'boolean'
   if (isNumericField(field))
@@ -286,15 +286,15 @@ function resolveLeafValue(
       )],
     }))
     .with({ field: P.when(isStatusField) }, ({ value }) => {
-      const parsed = ExplicitStatusSchema.safeParse(value)
+      const parsed = FilterableExplicitStatusSchema.safeParse(value)
       if (!parsed.success) {
         return {
           ok: false as const,
           errors: [err(
             valuePath,
             FILTER_ERROR_CODE.INVALID_VALUE_SHAPE,
-            'status is/is_not 需要 ExplicitStatus',
-            { expected: 'ExplicitStatus', received: value },
+            'status is/is_not 需要 active | completed | hold（deleted 仅回收站内置透视）',
+            { expected: 'FilterableExplicitStatus', received: value },
           )],
         }
       }
