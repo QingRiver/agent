@@ -184,3 +184,7 @@ packages/e2e/playwright-report/
 packages/e2e/blob-report/
 
 .claude/**
+
+# Storybook
+packages/ui/storybook-static/
+*storybook.log

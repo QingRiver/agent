@@ -2,9 +2,10 @@ import type { InterruptRequest, SelectOption } from '@agent/proto'
 import { useState } from 'react'
 
 /**
- * 中断 UI 卡片 —— 按 InterruptRequest.type 分发渲染。
- * 各 Card 收 `onRespond(payload)`,payload 形状由 type 决定
+ * ask_human 中断 UI 卡片 —— 按 InterruptRequest.type 分发渲染。
+ * 各 Card 收 `onRespond(payload)`，payload 形状由 type 决定
  * (input→{value}, select→{value}, multiSelect→{values}, modal→{action}, approval→{approved}, unlock→{})。
+ * 纯展示：不依赖 CopilotKit；resume 由 Host 适配器负责。
  */
 
 export function InterruptCard({
@@ -17,84 +18,84 @@ export function InterruptCard({
   switch (request.type) {
     case 'input':
       return (
-        <InputCard
+        <AskHumanInputCard
           message={request.message}
-          placeholder={request.placeholder}
-          onSubmit={value => onRespond({ value })}
+          {...(request.placeholder != null ? { placeholder: request.placeholder } : {})}
+          onRespond={payload => onRespond(payload)}
         />
       )
     case 'select':
       return (
-        <SelectCard
+        <AskHumanSelectCard
           message={request.message}
           options={request.options}
-          multiple={false}
-          onConfirm={v => onRespond({ value: v as string })}
+          onRespond={payload => onRespond(payload)}
         />
       )
     case 'multiSelect':
       return (
-        <SelectCard
+        <AskHumanMultiSelectCard
           message={request.message}
           options={request.options}
-          multiple
-          onConfirm={v => onRespond({ values: v as string[] })}
+          onRespond={payload => onRespond(payload)}
         />
       )
     case 'modal':
       return (
-        <ModalCard
+        <AskHumanModalCard
           title={request.title}
           body={request.body}
           actions={request.actions}
-          onSelect={action => onRespond({ action })}
+          onRespond={payload => onRespond(payload)}
         />
       )
     case 'approval':
       return (
-        <ApprovalCard
-          title={request.message}
-          content={request.details}
-          onApprove={() => onRespond({ approved: true })}
-          onReject={() => onRespond({ approved: false, reason: '用户拒绝' })}
+        <AskHumanApprovalCard
+          message={request.message}
+          details={request.details}
+          onRespond={payload => onRespond(payload)}
         />
       )
     case 'unlock':
-      return <UnlockCard message={request.message} onConfirm={() => onRespond({})} />
+      return (
+        <AskHumanUnlockCard
+          message={request.message}
+          onRespond={payload => onRespond(payload)}
+        />
+      )
   }
 }
 
-function ApprovalCard({
-  title,
-  content,
-  onApprove,
-  onReject,
+export function AskHumanApprovalCard({
+  message,
+  details,
+  onRespond,
 }: {
-  title: string
-  content: string
-  onApprove: () => void
-  onReject: () => void
+  message: string
+  details: string
+  onRespond: (payload: { approved: boolean, reason?: string }) => void
 }) {
   return (
     <div className="space-y-2">
       <h3 className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-200">
         <span aria-hidden>⚠️</span>
-        {title}
+        {message}
       </h3>
       <p className="mt-2 rounded border border-border bg-card p-2 text-sm text-foreground">
-        {content}
+        {details}
       </p>
       <div className="mt-3 flex gap-2">
         <button
           type="button"
-          onClick={onApprove}
+          onClick={() => onRespond({ approved: true })}
           className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500"
         >
           批准
         </button>
         <button
           type="button"
-          onClick={onReject}
+          onClick={() => onRespond({ approved: false, reason: '用户拒绝' })}
           className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
         >
           拒绝
@@ -104,14 +105,14 @@ function ApprovalCard({
   )
 }
 
-function InputCard({
+export function AskHumanInputCard({
   message,
   placeholder,
-  onSubmit,
+  onRespond,
 }: {
   message: string
   placeholder?: string
-  onSubmit: (value: string) => void
+  onRespond: (payload: { value: string }) => void
 }) {
   const [value, setValue] = useState('')
   return (
@@ -123,7 +124,7 @@ function InputCard({
         onSubmit={(e) => {
           e.preventDefault()
           if (value.trim())
-            onSubmit(value.trim())
+            onRespond({ value: value.trim() })
         }}
         className="flex gap-2"
       >
@@ -143,7 +144,7 @@ function InputCard({
   )
 }
 
-function SelectCard({
+function SelectCardInner({
   message,
   options,
   multiple,
@@ -291,16 +292,54 @@ function SelectCard({
   )
 }
 
-function ModalCard({
+export function AskHumanSelectCard({
+  message,
+  options,
+  onRespond,
+}: {
+  message: string
+  options: SelectOption[]
+  onRespond: (payload: { value: string }) => void
+}) {
+  return (
+    <SelectCardInner
+      message={message}
+      options={options}
+      multiple={false}
+      onConfirm={v => onRespond({ value: v as string })}
+    />
+  )
+}
+
+export function AskHumanMultiSelectCard({
+  message,
+  options,
+  onRespond,
+}: {
+  message: string
+  options: SelectOption[]
+  onRespond: (payload: { values: string[] }) => void
+}) {
+  return (
+    <SelectCardInner
+      message={message}
+      options={options}
+      multiple
+      onConfirm={v => onRespond({ values: v as string[] })}
+    />
+  )
+}
+
+export function AskHumanModalCard({
   title,
   body,
   actions,
-  onSelect,
+  onRespond,
 }: {
   title: string
   body: string
   actions: string[]
-  onSelect: (action: string) => void
+  onRespond: (payload: { action: string }) => void
 }) {
   return (
     <div className="space-y-2 rounded-lg border border-amber-700/50 bg-card p-3">
@@ -316,7 +355,7 @@ function ModalCard({
           <button
             type="button"
             key={action}
-            onClick={() => onSelect(action)}
+            onClick={() => onRespond({ action })}
             className="rounded-lg bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground hover:bg-secondary/80"
           >
             {action}
@@ -327,19 +366,19 @@ function ModalCard({
   )
 }
 
-function UnlockCard({
+export function AskHumanUnlockCard({
   message,
-  onConfirm,
+  onRespond,
 }: {
   message: string
-  onConfirm: () => void
+  onRespond: (payload: Record<string, never>) => void
 }) {
   return (
     <div className="space-y-2">
       <p className="text-sm text-foreground">
         {message}
       </p>
-      <button type="button" onClick={onConfirm} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500">
+      <button type="button" onClick={() => onRespond({})} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500">
         确认
       </button>
     </div>

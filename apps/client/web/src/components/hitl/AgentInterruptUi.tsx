@@ -1,9 +1,9 @@
 import type { GraphsName } from '@apis/api-types'
+import { InterruptCard } from '@agent/ui'
 import { useAgent, useCopilotKit } from '@copilotkit/react-core/v2'
 import { narrowAgUiPendingInterrupt } from '@lib/interruptContracts'
 import { runWithCleanup } from '@lib/runWithCleanup'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { InterruptCard } from './InterruptCards'
 import { useAgentInterruptResume } from './useAgentInterruptResume'
 
 interface AgentInterruptUiProps {

@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "rootDir": "src",
+    "types": ["react", "react-dom"],
+    "noEmit": true
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.stories.tsx"]
+}

@@ -14,6 +14,7 @@
 | [packages/graph](./packages/graph/README.md) | `@agent/graph` — LangGraph 图与 AguiTransformer |
 | [packages/kb](./packages/kb/README.md) | `@agent/kb` — 向量召回、rerank、入库算法 |
 | [packages/proto](./packages/proto/README.md) | `@agent/proto` — HITL / 引文 / Writer 中性契约 |
+| [packages/ui](./packages/ui/README.md) | `@agent/ui` — 对话卡片 View（ask_human）+ Storybook |
 | [packages/claude](./packages/claude/README.md) | `@agent/claude` — Claude Agent SDK 适配 |
 | [packages/tools](./packages/tools/README.md) | `@agent/tools` — Open-Meteo、Tushare / MCP |
 | [packages/markdown](./packages/markdown/README.md) | `@agent/markdown` — Markdown → HTML + TOC |

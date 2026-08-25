@@ -26,7 +26,7 @@ src/
 ├── edges/
 ├── tools/
 │   ├── ask-tools.ts        # ask_* LC tools
-│   ├── hitl/interrupt.ts   # 平台 hitlInput/Select/…（与 InterruptCard 同协议）
+│   ├── hitl/interrupt.ts   # 平台 hitlInput/Select/…（与 @agent/ui InterruptCard 同协议）
 │   ├── tushare/            # resolveStock、toolset、flash fix
 │   ├── weather.ts
 │   └── order.ts
@@ -36,7 +36,7 @@ src/
 └── index.ts
 ```
 
-Interrupt：业务代码应调用 `hitl*`，勿直接 `interrupt({ type })`。Client 侧任意 agent 用 `AgentInterruptUi`（见 `apps/client/web/src/components/hitl/`）。
+Interrupt：业务代码应调用 `hitl*`，勿直接 `interrupt({ type })`。Client 侧任意 agent 用 `AgentInterruptUi`（卡片 View：`@agent/ui`）。
 
 ## 使用
 

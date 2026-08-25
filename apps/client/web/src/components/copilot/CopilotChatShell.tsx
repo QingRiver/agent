@@ -14,6 +14,7 @@ import {
 } from '@copilotkit/react-core/v2'
 import { useLatest } from '@hooks/useLatest'
 import { useMemo, useState } from 'react'
+import { AgentDynamicUi } from './AgentDynamicUi'
 import { AgentErrorBanner } from './AgentErrorBanner'
 import { CopilotRuntimeReady } from './CopilotRuntimeReady'
 import { ErrorAssistantMessage } from './ErrorAssistantMessage'
@@ -164,6 +165,7 @@ export function CopilotChatShell({
               forwardedProps={forwardedProps}
             />
           )}
+          <AgentDynamicUi agentId={agentId} />
           {showBanner && bannerError && (
             <div className="shrink-0 px-2 pt-2">
               <AgentErrorBanner

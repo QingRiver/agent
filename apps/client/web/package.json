@@ -16,6 +16,7 @@
     "@agent/markdown": "workspace:*",
     "@agent/project": "workspace:*",
     "@agent/proto": "workspace:*",
+    "@agent/ui": "workspace:*",
     "@codemirror/lang-markdown": "catalog:",
     "@codemirror/state": "catalog:",
     "@codemirror/view": "catalog:",

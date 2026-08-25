@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test'
 /**
  * dev agent HITL：Playwright 真实点击澄清 → input → select → multiSelect → approval。
  *
- * 与 `flows/hitl-agent.ts`（SSE）对齐；本文件走浏览器 InterruptCard。
+ * 与 `flows/hitl-agent.ts`（SSE）对齐；本文件走浏览器 @agent/ui InterruptCard。
  * 前置：`pnpm dev` + `pnpm devops e2e auth`。
  */
 

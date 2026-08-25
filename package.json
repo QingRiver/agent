@@ -24,7 +24,8 @@
     "test": "pnpm devops infra up test && vitest run",
     "test:watch": "vitest",
     "e2e": "tsx packages/e2e/src/cli.ts e2e",
-    "devops": "tsx packages/e2e/src/cli.ts"
+    "devops": "tsx packages/e2e/src/cli.ts",
+    "storybook": "pnpm --filter @agent/ui storybook"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:",

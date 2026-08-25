@@ -22,6 +22,14 @@ interface ForecastResponse {
   current?: ForecastCurrent
 }
 
+/** 结构化当前天气（供 UI 卡 / get_weather JSON） */
+export interface CurrentWeather {
+  city: string
+  country?: string
+  temperatureC: number
+  condition: string
+}
+
 /** WMO 天气代码 → 中文简述（open-meteo） */
 const WEATHER_CODE_LABEL: Record<number, string> = {
   0: '晴',
@@ -85,23 +93,42 @@ async function getCurrentWeather(
   return data.current
 }
 
-/** 按城市名查询当前天气，返回供 LLM 使用的文本 */
-async function fetchWeatherByCity(cityName: string): Promise<string> {
+/**
+ * 按城市名查询当前天气（结构化）。
+ * 找不到城市时返回 null；网络/解析错误抛出。
+ */
+async function fetchCurrentWeatherByCity(cityName: string): Promise<CurrentWeather | null> {
   const place = await getCoordinates(cityName)
   if (!place)
-    return `找不到城市「${cityName}」，请检查名称或尝试英文名。`
+    return null
 
   const current = await getCurrentWeather(place.latitude, place.longitude)
-  const condition = weatherCodeLabel(current.weather_code)
+  return {
+    city: place.name,
+    country: place.country,
+    temperatureC: current.temperature_2m,
+    condition: weatherCodeLabel(current.weather_code),
+  }
+}
 
+/** 按城市名查询当前天气，返回供 LLM 使用的文本（兼容旧调用） */
+async function fetchWeatherByCity(cityName: string): Promise<string> {
+  const weather = await fetchCurrentWeatherByCity(cityName)
+  if (!weather)
+    return `找不到城市「${cityName}」，请检查名称或尝试英文名。`
+
+  const place = weather.country != null
+    ? `${weather.country} ${weather.city}`
+    : weather.city
   return [
-    `${place.country} ${place.name} 当前天气：`,
-    `- 气温：${current.temperature_2m}°C`,
-    `- 状况：${condition}`,
+    `${place} 当前天气：`,
+    `- 气温：${weather.temperatureC}°C`,
+    `- 状况：${weather.condition}`,
   ].join('\n')
 }
 
 export const openMeteo = {
+  fetchCurrentWeatherByCity,
   fetchWeatherByCity,
   getCoordinates,
   getCurrentWeather,

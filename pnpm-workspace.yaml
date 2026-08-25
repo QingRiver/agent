@@ -37,8 +37,12 @@ catalog:
   '@radix-ui/react-label': ^2.1.7
   '@radix-ui/react-popover': ^1.1.19
   '@radix-ui/react-slot': ^1.2.3
+  '@storybook/addon-docs': ^10.3.0
+  '@storybook/react': ^10.3.0
+  '@storybook/react-vite': ^10.3.0
   '@tailwindcss/typography': ^0.5.20
   '@tailwindcss/vite': ^4.3.2
+  storybook: ^10.3.0
   '@tiptap/pm': ^3.29.2
   '@tiptap/react': ^3.29.2
   '@tiptap/starter-kit': ^3.29.2

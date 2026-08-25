@@ -15,9 +15,10 @@ export {
   toolErrorMessage,
 } from './mcp/stockResolve'
 export type { McpTool, TushareMcp } from './mcp/tushareClient'
+export { createTushareMcp, TOKEN_HINT } from './mcp/tushareClient'
 export { openMeteo, tushare }
 
-export { createTushareMcp, TOKEN_HINT } from './mcp/tushareClient'
 export { renderTushareSystemPrompt, TUSHARE_SYSTEM_PROMPT } from './mcp/tusharePrompt'
+export type { CurrentWeather } from './openMeteo'
 export { createSchemaFromPrompt, extractTemplateVariables, renderPrompt } from './promptTemplate'
 export type { DailyRow, RealtimeQuoteRow, StockBasicRow } from './tushare'

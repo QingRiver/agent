@@ -49,7 +49,7 @@ export default antfu({
     ],
   },
 }, {
-  files: ['apps/client/**/src/**/*.{tsx,ts}'],
+  files: ['apps/client/**/src/**/*.{tsx,ts}', 'packages/ui/src/**/*.{tsx,ts}'],
   plugins: {
     'react-compiler': reactCompiler,
     'react-hooks': reactHooks,
@@ -61,6 +61,11 @@ export default antfu({
   },
 }, {
   files: ['apps/client/**/src/routes/**/*.{tsx,ts}', 'apps/client/**/src/contexts/**/*.{tsx,ts}'],
+  rules: {
+    'react-refresh/only-export-components': 'off',
+  },
+}, {
+  files: ['packages/ui/**/*.stories.tsx', 'packages/ui/.storybook/**/*.{ts,tsx}'],
   rules: {
     'react-refresh/only-export-components': 'off',
   },

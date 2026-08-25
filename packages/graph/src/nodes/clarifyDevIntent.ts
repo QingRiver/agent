@@ -5,7 +5,7 @@ import { hitlSelect } from '../tools/hitl/interrupt'
 const CLARIFY_MESSAGE = '请选择本次要演示的能力：'
 
 const CLARIFY_OPTIONS = [
-  { label: '天气查询', value: 'weather', description: 'Open-Meteo + ask_* 工具' },
+  { label: '天气查询', value: 'weather', description: 'Open-Meteo + 天气卡 + ask_*' },
   { label: '简单工具调用', value: 'simpleTool', description: '模拟取消订单工具' },
   { label: 'HITL 审批演示', value: 'hitlDemo', description: 'input→select→multiSelect→approval' },
   { label: '知识库检索', value: 'kb', description: 'kb_search 工具：改写→召回→rerank' },
