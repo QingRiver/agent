@@ -9,6 +9,7 @@ export type TagRow = TagsListResponse['tags'][number]
 export interface TagDeleteDryRunResult {
   docs: { id: string, title: string }[]
   tasks: { id: string, title: string }[]
+  skills: { id: string, title: string }[]
 }
 
 export type TagDeleteResult = TagDeleteDryRunResult | { ok: true }
@@ -41,6 +42,7 @@ export class TagsApi {
       dryRun?: boolean
       docIds?: string[]
       taskIds?: string[]
+      skillIds?: string[]
     },
   ): Promise<TagDeleteResult> {
     const res = await api.tags[':id'].delete.$post({ param: { id }, json: body })

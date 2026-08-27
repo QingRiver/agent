@@ -48,7 +48,7 @@ docker compose down
 容器只需把库跑起来；表结构由 server 启动时 `bootstrapDatabases()` 自动建：
 
 - **better-auth** 表（`user` / `session` / `account` / `verification`）：better-auth 迁移系统建。
-- **conversation / kb / gtd / tags**：drizzle 迁移建（`0000_threads` → `0001_tags` → `0002_kb` → `0003_gtd`，`migrateAppSchema()` 应用）。
+- **conversation / dirs / gtd / kb / tags / skills**：drizzle 迁移建（`0000_agent_threads` → `0001_tags` → `0002_dirs` → `0003_gtd` → `0004_kb` → `0005_skills`，`migrateAppSchema()` 应用）。
 - **checkpoints** 等：`PostgresSaver.setup()` 建。
 
 E2E 账号种子（写入 `user`/`account` 等）：
@@ -63,5 +63,3 @@ pnpm devops e2e auth
 infra/postgres/
 └── pg_data/        # Postgres 数据（gitignore）
 ```
-
-> 旧 SQLite 文件仍留在 `apps/server/gateway/data/`（已废弃，不再读写）。

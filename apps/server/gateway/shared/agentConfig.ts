@@ -10,8 +10,9 @@ export const UpsertAgentConfigRequestSchema = z.object({
   name: z.string().min(1).max(80),
   description: z.string().max(200).optional().default(''),
   userPrompt: z.string().max(REACT_AGENT_USER_PROMPT_MAX),
-  kbId: z.string().min(1).max(128),
+  kbId: z.string().max(128),
   maxSteps: z.number().int().min(REACT_AGENT_MAX_STEPS_MIN).max(REACT_AGENT_MAX_STEPS_MAX),
+  skillCodes: z.array(z.string().min(1).max(64)).max(32).optional().default([]),
 })
 
 export type UpsertAgentConfigRequest = z.infer<typeof UpsertAgentConfigRequestSchema>

@@ -4,6 +4,7 @@ import type {
   CopilotChatViewProps,
 } from '@copilotkit/react-core/v2'
 import type { AgentErrorInfo } from './AgentErrorBanner'
+import { AGENT_CONFIG_ID_PROPS_KEY } from '@agent/graph/react-agent-prompts'
 import { AgentInterruptUi } from '@components/hitl/AgentInterruptUi'
 import {
   CopilotChat,
@@ -13,6 +14,8 @@ import {
   useCopilotKit,
 } from '@copilotkit/react-core/v2'
 import { useLatest } from '@hooks/useLatest'
+import { ReactAgentRuntimeStore } from '@stores/react-agent-runtime-store'
+import { useAtomValue } from 'jotai'
 import { useMemo, useState } from 'react'
 import { AgentDynamicUi } from './AgentDynamicUi'
 import { AgentErrorBanner } from './AgentErrorBanner'
@@ -53,7 +56,7 @@ export interface CopilotChatShellProps {
 
 interface ShellSubmitRefs {
   agentId: GraphsName
-  kbId: string
+  kbId?: string
   onSubmitMessage?: (value: string) => void | Promise<void>
 }
 
@@ -85,7 +88,9 @@ function createShellChatView(refs: { current: ShellSubmitRefs }) {
         role: 'user',
         content,
       } as never)
-      const forwardedProps = kbForwardedProps(agentId, kbId)
+      const forwardedProps = ReactAgentRuntimeStore.mergeForwardedProps(
+        kbForwardedProps(agentId, kbId),
+      )
       await copilotkit.runAgent({
         agent,
         ...(forwardedProps ? { forwardedProps } : {}),
@@ -122,7 +127,7 @@ export function CopilotChatShell({
   agentId,
   threadId,
   hitl = false,
-  kbId = 'kb_default',
+  kbId,
   chatClassName = 'h-full min-h-[24rem]',
   placeholder = '输入消息…',
   errorMode = 'message',
@@ -140,7 +145,15 @@ export function CopilotChatShell({
 
   const submitRefs = useLatest<ShellSubmitRefs>({ agentId, kbId, onSubmitMessage })
   const chatView = useMemo(() => createShellChatView(submitRefs), [submitRefs])
-  const forwardedProps = useMemo(() => kbForwardedProps(agentId, kbId), [agentId, kbId])
+  const agentConfigId = useAtomValue(ReactAgentRuntimeStore.agentConfigIdAtom)
+  const forwardedProps = useMemo(() => {
+    const extra = kbForwardedProps(agentId, kbId)
+    const merged: Record<string, unknown> = {
+      ...(agentConfigId ? { [AGENT_CONFIG_ID_PROPS_KEY]: agentConfigId } : {}),
+      ...extra,
+    }
+    return Object.keys(merged).length > 0 ? merged : undefined
+  }, [agentId, kbId, agentConfigId])
 
   /** 默认错误卡片需带上 kb forwardedProps；自定义 slot 由调用方自行负责 */
   const resolvedAssistantMessage = useMemo(

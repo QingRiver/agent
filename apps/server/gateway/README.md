@@ -27,7 +27,7 @@ pnpm --filter server dev
 `pnpm dev` 经 [scripts/dev.ts](scripts/dev.ts) 预检 Node、`.env`、证书后执行 `tsx watch src/index.ts`。启动时 [src/db/bootstrap.ts](src/db/bootstrap.ts) 自动迁移：
 
 1. better-auth 表（`user` / `account` / `session` / `verification`）
-2. Drizzle 业务表（`0000_threads` → `0001_tags` → `0002_kb` → `0003_gtd`）
+2. Drizzle 业务表（`0000_agent_threads` → `0001_tags` → `0002_dirs` → `0003_gtd` → `0004_kb` → `0005_skills`）
 3. LangGraph checkpoint 表（`PostgresSaver.setup()`）
 
 空库首次启动后可用 `pnpm devops e2e auth` 写入 E2E 账号。
@@ -62,12 +62,14 @@ Postgres 容器与默认连接串见 [infra/postgres/README.md](../../../infra/p
 
 | 文件 | 表 |
 |------|-----|
-| `0000_threads.sql` | `conversation_threads` |
-| `0001_tags.sql` | `tags`（KB / GTD 共用） |
-| `0002_kb.sql` | `kb_nodes`、`kb_documents`、`kb_chunks`、`kb_doc_tags` |
-| `0003_gtd.sql` | `gtd_folders` / `projects` / `tasks` / `task_tags` / `perspectives` / `attachments` / `sync_*` |
+| `0000_agent_threads.sql` | `agent_configs`、`conversation_threads` |
+| `0001_tags.sql` | `tags` |
+| `0002_dirs.sql` | `dirs` |
+| `0003_gtd.sql` | `gtd_tasks` / `task_tags` / `perspectives` / `attachments` / `sync_*` |
+| `0004_kb.sql` | `kb_documents`、`kb_chunks`、`kb_doc_tags`、`kbs` |
+| `0005_skills.sql` | `skills`、`version_text`、`skill_tags` |
 
-Schema TS：`src/db/schema/{conversation,tags,kb,gtd}.ts`。生成：`pnpm --filter server db:generate`。
+Schema TS：`src/db/schema/{conversation,tags,project,gtd,kb,skill}.ts`。生成：`pnpm --filter server db:generate`。
 
 ### better-auth 账户表（摘要）
 
@@ -277,7 +279,7 @@ src/
 ├── routes/                  # conversations、kb、tags、gtd、default
 ├── service/                 # conversation、kb、tags、gtd
 └── middleware/
-drizzle/                     # 0000_threads → 0003_gtd + meta
+drizzle/                     # 0000_agent_threads → 0005_skills + meta
 shared/                      # 与 client 共享的 zod 契约
 docs/kb-api.md
 ```

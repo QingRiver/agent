@@ -128,6 +128,23 @@ export interface ThreadState {
 
 export { ASK_TOOLS_SYSTEM_PROMPT } from './askTools'
 export {
+  canonicalSkillCode,
+  formatSkillContext,
+  isReservedSkillCode,
+  normalizeSkillPath,
+  parseFrontmatter,
+  READ_SKILL_FILE_TOOL_NAME,
+  readSkillFile,
+  RESERVED_SKILL_CODES,
+  resolveBoundSkillCode,
+  SKILL_ENTRY_FILENAME,
+  type SkillFrontmatter,
+  type SkillIndexEntry,
+  type SkillPathErr,
+  type SkillPathOk,
+  slugifySkillCode,
+} from './skill'
+export {
   computeHunks,
   type EditorChatIntent,
   EditorChatIntentSchema,

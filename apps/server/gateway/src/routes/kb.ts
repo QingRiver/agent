@@ -5,6 +5,8 @@ import {
   KbBatchCommitSchema,
   KbCommitSchema,
   KbCreateDocSchema,
+  KbCreateSchema,
+  KbDirIdParamSchema,
   KbDocIdParamSchema,
   KbDraftUpdateSchema,
   KbIngestTextSchema,
@@ -19,6 +21,15 @@ import { requireAuth } from '../middleware/authMiddleware'
 export const kbRoutes = new Hono<AppEnv>()
   .onError(handleAppError)
   .use('*', requireAuth)
+
+  .post('/kbs/list', c => KbHandlers.listKbs(c, c.get('user')!))
+  .post('/kbs/create', zValidator('json', KbCreateSchema), c =>
+    KbHandlers.markKb(c, c.get('user')!, c.req.valid('json')))
+  .post(
+    '/kbs/:id/unmark',
+    zValidator('param', KbDirIdParamSchema),
+    c => KbHandlers.unmarkKb(c, c.get('user')!, c.req.valid('param').id),
+  )
 
   // ---------- 文档草稿 ----------
   .post('/documents/list', zValidator('json', KbListDocsRequestSchema), c => KbHandlers.listDocs(c, c.get('user')!, c.req.valid('json')))

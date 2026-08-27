@@ -19,6 +19,7 @@ export class AgentConfigHandlers {
       userPrompt: record.userPrompt,
       kbId: record.kbId,
       maxSteps: record.maxSteps,
+      skillCodes: record.skillCodes,
       updatedAt: record.updatedAt,
     })
   }
@@ -38,6 +39,7 @@ export class AgentConfigHandlers {
       userPrompt: record.userPrompt,
       kbId: record.kbId,
       maxSteps: record.maxSteps,
+      skillCodes: record.skillCodes,
       updatedAt: record.updatedAt,
     })
   }

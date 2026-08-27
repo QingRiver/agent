@@ -12,6 +12,7 @@ import {
   FolderPlus,
   Pencil,
   Plus,
+  Sparkles,
   Trash2,
   X,
 } from 'lucide-react'
@@ -60,9 +61,11 @@ export interface KbFileTreeProps {
   onRenameFolder: (id: string, name: string) => Promise<void>
   onDeleteFolder: (id: string) => Promise<void>
   onMoveFolder: (id: string, parentId: string | null) => Promise<void>
-  onMoveDoc: (id: string, mountDirId: string | null) => Promise<void>
+  onMoveDoc: (id: string, mountDirId: string) => Promise<void>
   /** 在指定 project/dir 下引入文档（与新建/改名/删除并列） */
   onImportInto: (mountDirId: string, mountPath: string) => void
+  onMarkSkill?: (dirId: string) => Promise<void>
+  onUnmarkSkill?: (skillId: string) => Promise<void>
 }
 
 export function KbFileTree({
@@ -78,6 +81,8 @@ export function KbFileTree({
   onMoveFolder,
   onMoveDoc,
   onImportInto,
+  onMarkSkill,
+  onUnmarkSkill,
 }: KbFileTreeProps) {
   const [dropTarget, setDropTarget] = useState<string | 'root' | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -92,6 +97,8 @@ export function KbFileTree({
       await onMoveFolder(payload.id, targetParentId)
       return
     }
+    if (targetParentId == null)
+      return
     const current = findDocParent(tree, payload.id)
     if (current !== undefined && current === targetParentId)
       return
@@ -312,6 +319,8 @@ export function KbFileTree({
           onSubmitCreate={parentId => void submitCreate(parentId)}
           onSubmitRename={id => void submitRename(id)}
           onCancelDraft={cancelDraft}
+          onMarkSkill={onMarkSkill}
+          onUnmarkSkill={onUnmarkSkill}
         />
       </div>
     </div>
@@ -424,6 +433,8 @@ function TreeNodes({
   onSubmitCreate,
   onSubmitRename,
   onCancelDraft,
+  onMarkSkill,
+  onUnmarkSkill,
 }: {
   nodes: KbTreeNode[]
   depth: number
@@ -448,6 +459,8 @@ function TreeNodes({
   onSubmitCreate: (parentId: string | null) => void
   onSubmitRename: (id: string) => void
   onCancelDraft: () => void
+  onMarkSkill?: (dirId: string) => Promise<void>
+  onUnmarkSkill?: (skillId: string) => Promise<void>
 }) {
   return (
     <>
@@ -494,6 +507,11 @@ function TreeNodes({
                           ? <FolderOpen className="size-3.5 shrink-0 text-amber-500/80" />
                           : <Folder className="size-3.5 shrink-0 text-amber-500/80" />}
                         <span className="truncate">{node.name}</span>
+                        {node.skillCode && (
+                          <span className="rounded bg-sky-500/15 px-1 py-0.5 text-[10px] text-sky-700 dark:text-sky-300">
+                            {node.skillCode}
+                          </span>
+                        )}
                       </button>
                       <div className="flex shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
                         <button
@@ -512,6 +530,27 @@ function TreeNodes({
                         >
                           <FolderPlus className="size-3" />
                         </button>
+                        {node.skillId
+                          ? (
+                              <button
+                                type="button"
+                                title="卸标 Skill"
+                                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                onClick={() => void onUnmarkSkill?.(node.skillId!)}
+                              >
+                                <Sparkles className="size-3 text-sky-600" />
+                              </button>
+                            )
+                          : node.dirKind === 'dir' && (
+                            <button
+                              type="button"
+                              title="升级为 Skill"
+                              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                              onClick={() => void onMarkSkill?.(node.id)}
+                            >
+                              <Sparkles className="size-3" />
+                            </button>
+                          )}
                         <button
                           type="button"
                           title="重命名"
@@ -566,6 +605,8 @@ function TreeNodes({
                     onSubmitCreate={onSubmitCreate}
                     onSubmitRename={onSubmitRename}
                     onCancelDraft={onCancelDraft}
+                    onMarkSkill={onMarkSkill}
+                    onUnmarkSkill={onUnmarkSkill}
                   />
                 </>
               )}

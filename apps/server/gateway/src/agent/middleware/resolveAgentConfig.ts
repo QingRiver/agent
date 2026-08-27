@@ -7,6 +7,7 @@ import {
 } from '@agent/graph'
 import { defer, from, switchMap } from 'rxjs'
 import { getRequestContext } from '../../context/requestContext'
+import { SkillService } from '../../service/skill'
 import { loadAgentConfig, toRuntimeBundle } from '../agentConfig/store'
 
 /**
@@ -34,6 +35,7 @@ async function enrichInput(input: RunAgentInput): Promise<RunAgentInput> {
     throw new Error(`ResolveAgentConfig: config not found: ${agentConfigId}`)
 
   const bundle = toRuntimeBundle(record)
+  const { skillText, skillBindings } = await SkillService.buildIndex(ctx.userId, record.skillCodes)
   const prev
     = input.forwardedProps != null
       && typeof input.forwardedProps === 'object'
@@ -41,13 +43,17 @@ async function enrichInput(input: RunAgentInput): Promise<RunAgentInput> {
       ? { ...(input.forwardedProps as Record<string, unknown>) }
       : {}
 
-  // 丢弃客户端可能夹带的 reactAgent 全文，只保留 id + 服务端组装结果
+  // 丢弃客户端可能夹带的 reactAgent 全文，只保留 id + 服务端组装结果（含 skill 索引，无 files）
   return {
     ...input,
     forwardedProps: {
       ...prev,
       [AGENT_CONFIG_ID_PROPS_KEY]: agentConfigId,
-      [REACT_AGENT_FORWARDED_PROPS_KEY]: bundle,
+      [REACT_AGENT_FORWARDED_PROPS_KEY]: {
+        ...bundle,
+        ...(skillText ? { skillText } : {}),
+        ...(skillBindings.length > 0 ? { skillBindings } : {}),
+      },
     },
   }
 }

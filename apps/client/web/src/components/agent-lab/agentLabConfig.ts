@@ -18,6 +18,7 @@ export const ReactAgentLabConfigSchema = ReactAgentRuntimeConfigSchema.extend({
   name: z.string().min(1).max(80),
   description: z.string().max(200).default(''),
   builtinToolIds: z.tuple([z.literal('kb_search')]),
+  skillCodes: z.array(z.string().min(1).max(64)).max(32).default([]),
   updatedAt: z.number().int().nonnegative(),
   agentConfigId: z.string().min(1).max(128).nullable(),
 })
@@ -28,11 +29,25 @@ export const DEFAULT_REACT_AGENT_LAB_CONFIG: ReactAgentLabConfig = {
   name: '通用助手',
   description: 'ask_* + kb_search 测试 Agent',
   userPrompt: DEFAULT_REACT_AGENT_USER_PROMPT,
-  kbId: 'kb_default',
+  kbId: '',
   maxSteps: REACT_AGENT_MAX_STEPS_DEFAULT,
   builtinToolIds: ['kb_search'],
+  skillCodes: [],
   updatedAt: 0,
   agentConfigId: null,
+}
+
+export function parseSkillCodesInput(raw: string): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const part of raw.split(/[,\s]+/)) {
+    const code = part.trim().slice(0, 64)
+    if (!code || seen.has(code))
+      continue
+    seen.add(code)
+    out.push(code)
+  }
+  return out.slice(0, 32)
 }
 
 export function labConfigFromRemote(remote: {
@@ -42,6 +57,7 @@ export function labConfigFromRemote(remote: {
   userPrompt: string
   kbId: string
   maxSteps: number
+  skillCodes?: string[] | undefined
   updatedAt: number
 }): ReactAgentLabConfig {
   return ReactAgentLabConfigSchema.parse({
@@ -51,6 +67,7 @@ export function labConfigFromRemote(remote: {
     kbId: remote.kbId,
     maxSteps: remote.maxSteps,
     builtinToolIds: ['kb_search'],
+    skillCodes: remote.skillCodes ?? [],
     updatedAt: remote.updatedAt,
     agentConfigId: remote.id,
   })

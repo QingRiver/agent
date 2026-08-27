@@ -42,6 +42,12 @@ describe('reactAgent prompts / sanitizers', () => {
     expect(out).toContain('kb_search')
   })
 
+  it('composeReactAgentSystemPrompt appends skillText when provided', () => {
+    const out = composeReactAgentSystemPrompt('用户角色', '## 可用 Skill\n- weather')
+    expect(out).toContain('可用 Skill')
+    expect(out).toContain('weather')
+  })
+
   it('sanitizeUserPrompt falls back to default when empty', () => {
     expect(sanitizeUserPrompt('')).toBe(DEFAULT_REACT_AGENT_USER_PROMPT)
     expect(sanitizeUserPrompt(null)).toBe(DEFAULT_REACT_AGENT_USER_PROMPT)
@@ -79,6 +85,24 @@ describe('reactAgent prompts / sanitizers', () => {
     expect(readReactAgentForwardedProps({
       forwardedProps: { reactAgent: { maxSteps: 9999 } },
     })).toEqual({})
+  })
+
+  it('readReactAgentForwardedProps keeps skillBindings extras', () => {
+    expect(readReactAgentForwardedProps({
+      forwardedProps: {
+        reactAgent: {
+          userPrompt: 'p',
+          kbId: 'kb',
+          maxSteps: 12,
+          skillText: '## 可用 Skill',
+          skillBindings: [{ code: 'bark', strategy: 'latest' }],
+        },
+      },
+    })).toMatchObject({
+      userPrompt: 'p',
+      skillText: '## 可用 Skill',
+      skillBindings: [{ code: 'bark', strategy: 'latest' }],
+    })
   })
 })
 

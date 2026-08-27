@@ -11,14 +11,19 @@ import {
   resolveResumeFromRunAgentInput,
   sanitizeKbId,
   sanitizeUserPrompt,
+  setSkillFileLoader,
 } from '@agent/graph'
 import { HumanMessage } from '@langchain/core/messages'
 import { Command } from '@langchain/langgraph'
+import { getRequestContext } from '../context/requestContext'
 import { getCheckpointer } from '../db/checkpointer'
+import { SkillService } from '../service/skill'
 import { buildMessagesInput, extractLastUserMessage } from './extractLastUserMessage'
 import { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
 import { attachResolveAgentConfigMiddleware } from './middleware/resolveAgentConfig'
 import { streamGraphAguiEvents } from './streamGraphAguiEvents'
+
+setSkillFileLoader(async ({ userId, skillCode }) => SkillService.walkFiles(userId, skillCode))
 
 interface GraphAgentDefinition {
   description: string
@@ -47,9 +52,13 @@ const GRAPH_AGENT_DEFINITIONS = {
     },
     resolveConfigurable: (input) => {
       const forwarded = readReactAgentForwardedProps(input)
+      const userId = getRequestContext()?.userId
       return {
         userPrompt: sanitizeUserPrompt(forwarded.userPrompt),
         kbId: sanitizeKbId(forwarded.kbId, env.KB_COLLECTION),
+        ...(userId ? { userId } : {}),
+        ...(forwarded.skillText ? { skillText: forwarded.skillText } : {}),
+        ...(forwarded.skillBindings?.length ? { skillBindings: forwarded.skillBindings } : {}),
       }
     },
     /** 唯一环控：配置 maxSteps ≡ LangGraph recursionLimit（节点转移上限） */

@@ -64,6 +64,7 @@ export class TagsStore {
       dryRun?: boolean
       docIds?: string[]
       taskIds?: string[]
+      skillIds?: string[]
     },
   ) {
     const result = await TagsApi.deleteTag(id, body)

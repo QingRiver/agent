@@ -74,6 +74,14 @@ export class KbStore {
   static readonly mutatingAtom = atom(get => get(KbStore.mutationAtom) != null)
   static readonly errorAtom = atom<string | null>(null)
   static readonly localDirtyAtom = atom(false)
+  static readonly kbsAtom = atom<{ dirId: string, dirName: string, vdir: string }[]>([])
+  static readonly workingDirIdAtom = atom<string | null>(null)
+  static readonly kbsByDirIdAtom = atom((get) => {
+    const map = new Map<string, { dirId: string, dirName: string, vdir: string }>()
+    for (const kb of get(KbStore.kbsAtom))
+      map.set(kb.dirId, kb)
+    return map
+  })
 
   static readonly filteredDocsAtom = atom((get) => {
     const docs = get(KbStore.docsAtom)
@@ -162,10 +170,12 @@ export class KbStore {
     store.set(KbStore.isLoadingAtom, true)
     store.set(KbStore.errorAtom, null)
     try {
-      const [docs] = await Promise.all([
+      const [docs, kbs] = await Promise.all([
         KbApi.listDocs(),
+        KbApi.listKbs(),
         TagsStore.refreshTags(),
       ])
+      store.set(KbStore.kbsAtom, kbs)
       store.set(KbStore.docsAtom, docs)
 
       const prevActive = store.get(KbStore.activeIdAtom)
@@ -257,7 +267,7 @@ export class KbStore {
     id: string,
     patch: {
       tagIds?: string[]
-      mountDirId?: string | null
+      mountDirId?: string
       name?: string
       visibility?: string
       pinned?: boolean
@@ -310,9 +320,26 @@ export class KbStore {
     })
   }
 
+  static setWorkingDirId(dirId: string | null): void {
+    KbStore.store().set(KbStore.workingDirIdAtom, dirId)
+  }
+
+  static async markKb(dirId: string): Promise<void> {
+    await KbApi.markKb(dirId)
+    await KbStore.refresh()
+  }
+
+  static async unmarkKb(dirId: string): Promise<void> {
+    await KbApi.unmarkKb(dirId)
+    await KbStore.refresh()
+  }
+
   static async createBlank(): Promise<KbDoc> {
     const store = KbStore.store()
-    const doc = await KbApi.createDoc({ name: '未命名', content: '' })
+    const mountDirId = store.get(KbStore.workingDirIdAtom) ?? store.get(KbStore.kbsAtom)[0]?.dirId
+    if (!mountDirId)
+      throw new Error('请先选中已初始化的知识库文件夹')
+    const doc = await KbApi.createDoc({ name: '未命名', content: '', mountDirId })
     store.set(KbStore.docsAtom, prev => [toSummary(doc), ...prev])
     store.set(KbStore.activeIdAtom, doc.id)
     store.set(KbStore.activeDocAtom, doc)
@@ -334,8 +361,8 @@ export class KbStore {
     })
   }
 
-  /** 文档改挂载 dir（跨文件夹 / 移 Inbox）；零 Qdrant 写（认 id，setPayload 同步） */
-  static async moveDoc(id: string, mountDirId: string | null): Promise<void> {
+  /** 文档改挂载 dir（须仍在已初始化知识库子树内）；零 Qdrant 写（认 id，setPayload 同步） */
+  static async moveDoc(id: string, mountDirId: string): Promise<void> {
     await KbStore.updateMeta(id, { mountDirId })
   }
 }

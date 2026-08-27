@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { env } from '@agent/env'
 import { bootstrapDatabases } from '../src/db/bootstrap'
 import { KbService } from '../src/service/kb'
+import { ProjectService } from '../src/service/project'
 
 const FIXTURE = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -22,12 +23,16 @@ async function main(): Promise<void> {
   await bootstrapDatabases()
 
   const kbId = env.KB_COLLECTION
+  const proj = await ProjectService.createProject(SEED_OWNER, { name: 'seed-kb' })
+  const kbDir = await ProjectService.createDir(SEED_OWNER, { parentId: proj.id, name: 'kb' })
+  await KbService.mark(SEED_OWNER, kbDir.id)
   const buffer = Buffer.from(await readFile(FIXTURE))
   const items = await KbService.ingestFiles({
     userId: SEED_OWNER,
     files: [{ buffer, filename: 'e2e-policy.md' }],
     owner: SEED_OWNER,
     tags: ['seed'],
+    mountDirId: kbDir.id,
   })
   const item = items[0]
   if (!item)

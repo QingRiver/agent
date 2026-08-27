@@ -8,6 +8,7 @@ export class AgentConfigApi {
     userPrompt: string
     kbId: string
     maxSteps: number
+    skillCodes?: string[]
   }) {
     return successData(await api['agent-configs'].upsert.$post({ json: body }))
   }

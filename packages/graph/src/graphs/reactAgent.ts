@@ -12,6 +12,7 @@ import {
 } from '../prompts/reactAgentPrompts'
 import { ASK_TOOLS } from '../tools/ask-tools'
 import { KB_TOOLS } from '../tools/kb'
+import { readSkillFileTool } from '../tools/read-skill-file'
 
 export {
   AGENT_CONFIG_ID_PROPS_KEY,
@@ -41,7 +42,7 @@ const ReactAgentState = Annotation.Root({
 
 type ReactAgentStateType = typeof ReactAgentState.State
 
-const tools = [...KB_TOOLS, ...ASK_TOOLS]
+const tools = [...KB_TOOLS, ...ASK_TOOLS, readSkillFileTool]
 /** 必须直接挂 ToolNode：外层再 toolNode.invoke 会导致同 id 双发 TOOL_CALL_START（AG-UI verify 失败） */
 const toolsNode = new ToolNode(tools)
 
@@ -54,14 +55,18 @@ function readUserPrompt(config: LangGraphRunnableConfig): string {
   return sanitizeUserPrompt(config.configurable?.userPrompt)
 }
 
+function readSkillText(config: LangGraphRunnableConfig): string | undefined {
+  const raw = config.configurable?.skillText
+  return typeof raw === 'string' && raw.trim() ? raw : undefined
+}
+
 async function agentNode(
   state: ReactAgentStateType,
   config: LangGraphRunnableConfig,
 ) {
-  const systemContent = composeReactAgentSystemPrompt(readUserPrompt(config))
-  const messages = state.messages[0]?.type === 'system'
-    ? state.messages
-    : [new SystemMessage(systemContent), ...state.messages]
+  const systemContent = composeReactAgentSystemPrompt(readUserPrompt(config), readSkillText(config))
+  const rest = state.messages[0]?.type === 'system' ? state.messages.slice(1) : state.messages
+  const messages = [new SystemMessage(systemContent), ...rest]
   // 正常流式：模型按工具给出的模板写出标准 Markdown 链接 `[n](/kb?…)`
   const response = await llmWithTools.invoke(messages, config) as AIMessage
   return { messages: [response] }

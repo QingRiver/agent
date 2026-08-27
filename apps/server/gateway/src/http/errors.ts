@@ -2,6 +2,7 @@ import type { Context } from 'hono'
 import { ProjectDirError } from '@agent/project'
 import { HTTPException } from 'hono/http-exception'
 import { KbConflictError } from '../service/kb'
+import { SkillConflictError } from '../service/skill'
 import { TagsConflictError } from '../service/tags'
 
 /** 存在但非本人 / 不存在 → 404（不可见） */
@@ -18,6 +19,8 @@ export function notFound(message = 'Not found'): never {
 /** Hono onError：HTTPException / KbConflictError → JSON；其余 500 */
 export function handleAppError(err: Error, c: Context): Response | Promise<Response> {
   if (err instanceof HTTPException)
+    return c.json({ error: err.message }, err.status)
+  if (err instanceof SkillConflictError)
     return c.json({ error: err.message }, err.status)
   if (err instanceof KbConflictError || err instanceof TagsConflictError || err instanceof ProjectDirError)
     return c.json({ error: err.message }, 409)

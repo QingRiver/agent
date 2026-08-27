@@ -36,6 +36,7 @@ export class TagsHandlers {
       ...(req.dryRun != null ? { dryRun: req.dryRun } : {}),
       ...(req.docIds != null ? { docIds: req.docIds } : {}),
       ...(req.taskIds != null ? { taskIds: req.taskIds } : {}),
+      ...(req.skillIds != null ? { skillIds: req.skillIds } : {}),
     })
     if (!result)
       notFound()

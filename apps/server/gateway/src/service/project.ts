@@ -13,9 +13,10 @@ import {
   renameDir,
   subtreeDirIds,
 } from '@agent/project'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '../db/drizzle'
-import { dirs, gtdTasks, kbDocuments } from '../db/schema'
+import { dirs, gtdTasks, kbDocuments, kbs, skills, versionTexts } from '../db/schema'
+import { ancestorIdsOf, assertMoveAllowed, SkillService } from './skill'
 
 /**
  * 统一 dirs 树在线服务（project 根 + dir 子树）。
@@ -227,7 +228,7 @@ export class ProjectService {
    * gtd_tasks 仅认 mountDirId（无 projectId 列），不级联刷 task。
    */
   static async move(userId: string, id: string, input: { newParentId: string, sortOrder?: number }): Promise<DirDto> {
-    const crossProject = await db.transaction(async (tx) => {
+    const moveResult = await db.transaction(async (tx) => {
       const node = await loadOwnedDir(id, userId, tx)
       if (node.kind === 'project')
         throw new ProjectDirError('project 不可移动（仅作根）')
@@ -238,9 +239,45 @@ export class ProjectService {
         .filter(d => d.parentId === newParent.id && d.id !== node.id)
         .map(d => d.name)
       assertMoveValid(node, newParent, tree, siblingNames)
+      await assertMoveAllowed(userId, id, newParent.id)
+
+      // kb/skill 互斥 + 文档归属：事务内拦截避免 partial failure
+      const movingSubtree = collectSubtree(allDirs, id)
+      const movingSubtreeIds = movingSubtree.map(d => d.id)
+      const destChain = ancestorIdsOf(allDirs, newParent.id)
+      const [destKb] = await tx.select({ dirId: kbs.dirId })
+        .from(kbs)
+        .where(and(eq(kbs.userId, userId), inArray(kbs.dirId, destChain)))
+        .limit(1)
+      if (destKb) {
+        // 目标在 kb 子树 → 移动子树不能含 skill 或 version_text（互斥）
+        const [hasSkill] = await tx.select({ id: skills.id })
+          .from(skills)
+          .where(and(eq(skills.userId, userId), inArray(skills.dirId, movingSubtreeIds)))
+          .limit(1)
+        if (hasSkill)
+          throw new ProjectDirError('含 skill 的目录不能移入知识库子树')
+        const [hasText] = await tx.select({ id: versionTexts.id })
+          .from(versionTexts)
+          .where(and(eq(versionTexts.userId, userId), inArray(versionTexts.mountDirId, movingSubtreeIds)))
+          .limit(1)
+        if (hasText)
+          throw new ProjectDirError('含 skill 文本的目录不能移入知识库子树')
+      }
+      else {
+        // 目标不在 kb 子树 → 移动子树不能含文档（文档必须挂在 kb 子树内）
+        const [hasDoc] = await tx.select({ id: kbDocuments.id })
+          .from(kbDocuments)
+          .where(and(eq(kbDocuments.userId, userId), inArray(kbDocuments.mountDirId, movingSubtreeIds)))
+          .limit(1)
+        if (hasDoc)
+          throw new ProjectDirError('含文档的目录只能移动到知识库子树内')
+      }
 
       const oldRoot = node.projectId
       const newRoot = newParent.projectId
+      if (oldRoot !== newRoot)
+        throw new ProjectDirError('禁止跨项目移动目录')
       const now = new Date().toISOString()
       const newProjectId = movedProjectId(oldRoot, newRoot) // null=同 project，不动
 
@@ -271,17 +308,14 @@ export class ProjectService {
         }
       }
 
-      if (!newProjectId)
-        return null
-      return { subtreeIds: [...subtreeDirIds(tree, id)], newProjectId }
+      return { subtreeIds: [...subtreeDirIds(tree, id)], newProjectId: newProjectId ?? oldRoot }
     })
-    // 跨 project：级联子树挂载 KB 文档的 projectId（PG）+ Qdrant setPayload（不重 embed）。
+    // 级联子树挂载 KB 文档的 kbId + projectId（PG）+ Qdrant setPayload（不重 embed）。
+    // 同 project move 只刷 kbId（projectId 不变，冗余写无害）；跨 project 刷两者。
     // 经 KbService 委托，保持 project 域不直接触 Qdrant。tx 外执行（Qdrant 非 PG 事务边界）。
     // 动态 import 破 kb↔project 静态循环。
-    if (crossProject) {
-      const { KbService } = await import('./kb')
-      await KbService.syncProjectIdForSubtree(userId, crossProject.subtreeIds, crossProject.newProjectId)
-    }
+    const { KbService } = await import('./kb')
+    await KbService.syncProjectIdForSubtree(userId, moveResult.subtreeIds, moveResult.newProjectId)
     const [row] = await db.select().from(dirs).where(eq(dirs.id, id)).limit(1)
     return toDto(row!)
   }
@@ -313,7 +347,8 @@ export class ProjectService {
       const hasChildren = await tx.select({ id: dirs.id }).from(dirs).where(and(eq(dirs.parentId, id), eq(dirs.deleted, false))).limit(1)
       const hasTaskMounts = await tx.select({ id: gtdTasks.id }).from(gtdTasks).where(and(eq(gtdTasks.userId, userId), eq(gtdTasks.mountDirId, id), eq(gtdTasks.deleted, false))).limit(1)
       const hasDocMounts = await tx.select({ id: kbDocuments.id }).from(kbDocuments).where(and(eq(kbDocuments.userId, userId), eq(kbDocuments.mountDirId, id))).limit(1)
-      assertCanDelete(hasChildren.length > 0, hasTaskMounts.length > 0 || hasDocMounts.length > 0)
+      const hasTextMounts = await SkillService.hasVersionTextMount(userId, id, tx)
+      assertCanDelete(hasChildren.length > 0, hasTaskMounts.length > 0 || hasDocMounts.length > 0 || hasTextMounts)
       await tx.update(dirs).set({ deleted: true, etag: node.etag + 1, updatedAt: new Date() }).where(eq(dirs.id, id))
     })
   }

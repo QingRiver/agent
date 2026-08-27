@@ -2,6 +2,7 @@ import type { TagDeleteDryRunResult, TagRow } from '@apis/tags-api'
 import { Checkbox } from '@components/ui/checkbox'
 import { GtdStore } from '@stores/gtd-store'
 import { KbStore } from '@stores/kb-store'
+import { SkillStore } from '@stores/skill-store'
 import { TagsStore } from '@stores/tags-store'
 import { useAtomValue } from 'jotai'
 import { Check, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react'
@@ -17,7 +18,7 @@ interface TagManagerProps {
 type DeleteMode = 'untag' | 'delete_entities'
 
 function isDryRunResult(r: unknown): r is TagDeleteDryRunResult {
-  return r != null && typeof r === 'object' && 'docs' in r && 'tasks' in r
+  return r != null && typeof r === 'object' && 'docs' in r && 'tasks' in r && 'skills' in r
 }
 
 export function TagManager({ open, onClose }: TagManagerProps) {
@@ -36,6 +37,7 @@ export function TagManager({ open, onClose }: TagManagerProps) {
   const [dryRunResult, setDryRunResult] = useState<TagDeleteDryRunResult | null>(null)
   const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(() => new Set())
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(() => new Set())
+  const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(() => new Set())
   const [confirmDestructive, setConfirmDestructive] = useState(false)
 
   // 目录 SSOT = TagsStore；打开管理弹窗时 refresh，避免只进过 GTD 时 atom 仍空
@@ -55,6 +57,7 @@ export function TagManager({ open, onClose }: TagManagerProps) {
     setDryRunResult(null)
     setSelectedDocIds(new Set())
     setSelectedTaskIds(new Set())
+    setSelectedSkillIds(new Set())
     setConfirmDestructive(false)
   }
 
@@ -72,6 +75,7 @@ export function TagManager({ open, onClose }: TagManagerProps) {
 
   async function afterDeleteRefresh(hadTasks: boolean) {
     void KbStore.refresh()
+    void SkillStore.refresh()
     // REST 已软删 gtd_task_tags；pull + 刷 rowsAtom（不依赖 /gtd 是否挂了 GtdSync）
     if (hadTasks)
       await GtdStore.refreshBindingsFromServer()
@@ -117,7 +121,7 @@ export function TagManager({ open, onClose }: TagManagerProps) {
   async function fetchDryRun(tagId: string, mode: DeleteMode): Promise<TagDeleteDryRunResult> {
     const result = await TagsStore.deleteTag(tagId, { mode, dryRun: true })
     if (!isDryRunResult(result))
-      return { docs: [], tasks: [] }
+      return { docs: [], tasks: [], skills: [] }
     return result
   }
 
@@ -168,6 +172,7 @@ export function TagManager({ open, onClose }: TagManagerProps) {
       setDryRunResult(result)
       setSelectedDocIds(new Set(result.docs.map(d => d.id)))
       setSelectedTaskIds(new Set(result.tasks.map(t => t.id)))
+      setSelectedSkillIds(new Set(result.skills.map(s => s.id)))
       setDeleteStep(2)
       setConfirmDestructive(false)
     }
@@ -206,6 +211,7 @@ export function TagManager({ open, onClose }: TagManagerProps) {
         mode: 'delete_entities',
         docIds: [...selectedDocIds],
         taskIds: [...selectedTaskIds],
+        skillIds: [...selectedSkillIds],
       })
       resetDeleteFlow()
       await afterDeleteRefresh(hadTasks)
@@ -244,8 +250,19 @@ export function TagManager({ open, onClose }: TagManagerProps) {
     })
   }
 
-  const linkedCount = (dryRunResult?.docs.length ?? 0) + (dryRunResult?.tasks.length ?? 0)
-  const entityDeleteCount = selectedDocIds.size + selectedTaskIds.size
+  function toggleSkillId(id: string) {
+    setSelectedSkillIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id))
+        next.delete(id)
+      else
+        next.add(id)
+      return next
+    })
+  }
+
+  const linkedCount = (dryRunResult?.docs.length ?? 0) + (dryRunResult?.tasks.length ?? 0) + (dryRunResult?.skills.length ?? 0)
+  const entityDeleteCount = selectedDocIds.size + selectedTaskIds.size + selectedSkillIds.size
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -371,7 +388,7 @@ export function TagManager({ open, onClose }: TagManagerProps) {
             {deleteMode === 'untag' && (
               <p className="text-muted-foreground">
                 {linkedCount > 0
-                  ? `将从 ${dryRunResult?.docs.length ?? 0} 篇文档和 ${dryRunResult?.tasks.length ?? 0} 个 GTD 任务中移除此标签（内容保留）`
+                  ? `将从 ${dryRunResult?.docs.length ?? 0} 篇文档、${dryRunResult?.tasks.length ?? 0} 个任务、${dryRunResult?.skills.length ?? 0} 个 Skill 中移除此标签（内容保留）`
                   : '无关联内容，仅删除标签'}
               </p>
             )}
@@ -440,6 +457,40 @@ export function TagManager({ open, onClose }: TagManagerProps) {
                         onCheckedChange={() => toggleDocId(doc.id)}
                       />
                       <span className="min-w-0 truncate">{doc.title}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            {dryRunResult.skills.length > 0 && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">Skill</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => setSelectedSkillIds(new Set(dryRunResult.skills.map(s => s.id)))}
+                    >
+                      全选
+                    </button>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => setSelectedSkillIds(new Set())}
+                    >
+                      全不选
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-32 space-y-1 overflow-y-auto">
+                  {dryRunResult.skills.map(skill => (
+                    <label key={skill.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-accent/50">
+                      <Checkbox
+                        checked={selectedSkillIds.has(skill.id)}
+                        onCheckedChange={() => toggleSkillId(skill.id)}
+                      />
+                      <span className="min-w-0 truncate">{skill.title}</span>
                     </label>
                   ))}
                 </div>

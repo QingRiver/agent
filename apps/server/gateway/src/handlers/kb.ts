@@ -2,6 +2,7 @@ import type { Context } from 'hono'
 import type {
   KbBatchCommit,
   KbCommit,
+  KbCreate,
   KbCreateDoc,
   KbDraftUpdate,
   KbIngestText,
@@ -16,6 +17,21 @@ import { notFound, requireOwned } from '../http/errors'
 import { KbService } from '../service/kb'
 
 export class KbHandlers {
+  static async listKbs(c: Context<AppEnv>, user: AuthUser) {
+    const kbs = await KbService.listBindings(user.id)
+    return c.json({ kbs })
+  }
+
+  static async markKb(c: Context<AppEnv>, user: AuthUser, req: KbCreate) {
+    const kb = await KbService.mark(user.id, req.dirId)
+    return c.json({ kb })
+  }
+
+  static async unmarkKb(c: Context<AppEnv>, user: AuthUser, dirId: string) {
+    await KbService.unmark(user.id, dirId)
+    return c.json({ ok: true })
+  }
+
   // ---------- 文档草稿 ----------
 
   static async listDocs(c: Context<AppEnv>, user: AuthUser, q: KbListDocsRequest) {
@@ -39,8 +55,8 @@ export class KbHandlers {
   static async createDoc(c: Context<AppEnv>, user: AuthUser, req: KbCreateDoc) {
     const doc = await KbService.createDraft({
       userId: user.id,
+      mountDirId: req.mountDirId,
       ...(req.kbId != null ? { kbId: req.kbId } : {}),
-      ...(req.mountDirId != null ? { mountDirId: req.mountDirId } : {}),
       name: req.name,
       ...(req.content != null ? { content: req.content } : {}),
       owner: user.id,
@@ -100,6 +116,8 @@ export class KbHandlers {
       ? body.tags.split(',').map(t => t.trim()).filter(Boolean)
       : undefined
     const mountDirId = typeof body.mountDirId === 'string' ? body.mountDirId : undefined
+    if (!mountDirId)
+      throw new HTTPException(400, { message: 'mountDirId is required' })
 
     const fileData = await Promise.all(files.map(async f => ({
       buffer: Buffer.from(await f.arrayBuffer()),
@@ -109,7 +127,7 @@ export class KbHandlers {
     const items = await KbService.ingestFiles({
       userId: user.id,
       files: fileData,
-      ...(mountDirId ? { mountDirId } : {}),
+      mountDirId,
       owner: user.id,
       ...(tags ? { tags } : {}),
     })
@@ -127,12 +145,14 @@ export class KbHandlers {
       ? body.tags.split(',').map(t => t.trim()).filter(Boolean)
       : undefined
     const mountDirId = typeof body.mountDirId === 'string' ? body.mountDirId : undefined
+    if (!mountDirId)
+      throw new HTTPException(400, { message: 'mountDirId is required' })
 
     const zip = Buffer.from(await file.arrayBuffer())
     const items = await KbService.ingestFromZip({
       userId: user.id,
       zip,
-      ...(mountDirId ? { mountDirId } : {}),
+      mountDirId,
       owner: user.id,
       ...(tags ? { tags } : {}),
     })
@@ -144,7 +164,7 @@ export class KbHandlers {
       userId: user.id,
       content: req.content,
       name: req.name,
-      ...(req.mountDirId != null ? { mountDirId: req.mountDirId } : {}),
+      mountDirId: req.mountDirId,
       owner: user.id,
       tags: req.tags,
     })

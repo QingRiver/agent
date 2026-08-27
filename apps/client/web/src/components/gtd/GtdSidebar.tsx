@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { BUILTIN_PERSPECTIVE_ID, BUILTIN_PERSPECTIVE_NAME, FILTER_FIELD } from '@agent/gtd'
 import { GtdPerspectiveEditor } from '@components/gtd/GtdPerspectiveEditor'
+import { ProjectManager } from '@components/project/ProjectManager'
 import { TagManager } from '@components/tags/TagManager'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
@@ -170,6 +171,7 @@ export function GtdSidebar() {
   const [projectName, setProjectName] = useState('')
   const [tagName, setTagName] = useState('')
   const [tagManagerOpen, setTagManagerOpen] = useState(false)
+  const [projectManagerOpen, setProjectManagerOpen] = useState(false)
   const [perspectiveEditorId, setPerspectiveEditorId] = useState<string | 'new' | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const sensors = useSensors(
@@ -339,8 +341,18 @@ export function GtdSidebar() {
             ))}
           </div>
 
-          <div className="mb-1 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            项目
+          <div className="mb-1 flex items-center gap-1 px-2">
+            <span className="flex-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              项目
+            </span>
+            <button
+              type="button"
+              title="项目管理"
+              onClick={() => setProjectManagerOpen(true)}
+              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <Settings2 className="size-3.5" />
+            </button>
           </div>
           <div className="mb-3 space-y-0.5">
             <ProjectList
@@ -437,6 +449,7 @@ export function GtdSidebar() {
         )}
       </aside>
       <TagManager open={tagManagerOpen} onClose={() => setTagManagerOpen(false)} />
+      <ProjectManager open={projectManagerOpen} onClose={() => setProjectManagerOpen(false)} />
       {perspectiveEditorId && (
         <GtdPerspectiveEditor
           perspective={editingPerspective}

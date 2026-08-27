@@ -38,20 +38,24 @@ export const REACT_AGENT_MAX_STEPS_MAX = 200
 /** 请求级运行配置（不含 Lab UI 元数据） */
 export const ReactAgentRuntimeConfigSchema = z.object({
   userPrompt: z.string().max(REACT_AGENT_USER_PROMPT_MAX),
-  kbId: z.string().min(1).max(128),
+  kbId: z.string().max(128),
   /** 图节点转移上限（= LangGraph recursionLimit） */
   maxSteps: z.number().int().min(REACT_AGENT_MAX_STEPS_MIN).max(REACT_AGENT_MAX_STEPS_MAX),
 })
 
 export type ReactAgentRuntimeConfig = z.infer<typeof ReactAgentRuntimeConfigSchema>
 
-/** 与服务端一致的最终 system 拼接（配置页预览用） */
-export function composeReactAgentSystemPrompt(userPrompt: string): string {
-  return [
+/** 与服务端一致的最终 system 拼接（配置页预览可不传 skillText） */
+export function composeReactAgentSystemPrompt(userPrompt: string, skillText?: string): string {
+  const parts = [
     userPrompt.trim() || DEFAULT_REACT_AGENT_USER_PROMPT,
     ASK_TOOLS_SYSTEM_PROMPT,
     KB_SEARCH_SYSTEM_PROMPT,
-  ].join('\n\n---\n\n')
+  ]
+  const extra = skillText?.trim()
+  if (extra)
+    parts.push(extra)
+  return parts.join('\n\n---\n\n')
 }
 
 /** 唯一环控配置：直接作为 streamEvents.recursionLimit */
@@ -81,17 +85,54 @@ export function sanitizeKbId(raw: unknown, fallback = 'kb_default'): string {
  * 从 RunAgentInput.forwardedProps.reactAgent 读取运行配置（partial）。
  * 非法结构返回空对象；调用方用默认值，不再回退 input.state。
  */
+export interface ReactAgentSkillBinding {
+  code: string
+  name?: string
+  strategy: 'latest'
+}
+
+export interface ReactAgentForwardedExtras {
+  skillText?: string
+  skillBindings?: ReactAgentSkillBinding[]
+}
+
+function readSkillExtras(raw: unknown): ReactAgentForwardedExtras {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw))
+    return {}
+  const rec = raw as Record<string, unknown>
+  const out: ReactAgentForwardedExtras = {}
+  if (typeof rec.skillText === 'string')
+    out.skillText = rec.skillText
+  if (Array.isArray(rec.skillBindings)) {
+    const skillBindings: ReactAgentSkillBinding[] = []
+    for (const item of rec.skillBindings) {
+      if (item != null && typeof item === 'object' && typeof (item as { code?: unknown }).code === 'string') {
+        const name = (item as { name?: unknown }).name
+        skillBindings.push({
+          code: (item as { code: string }).code,
+          ...(typeof name === 'string' && name.trim() ? { name: name.trim() } : {}),
+          strategy: 'latest',
+        })
+      }
+    }
+    if (skillBindings.length > 0)
+      out.skillBindings = skillBindings
+  }
+  return out
+}
+
 export function readReactAgentForwardedProps(
   input: Pick<RunAgentInput, 'forwardedProps'>,
-): Partial<ReactAgentRuntimeConfig> {
+): Partial<ReactAgentRuntimeConfig> & ReactAgentForwardedExtras {
   const props = input.forwardedProps
   if (props == null || typeof props !== 'object' || Array.isArray(props))
     return {}
   const raw = (props as Record<string, unknown>)[REACT_AGENT_FORWARDED_PROPS_KEY]
   const parsed = ReactAgentRuntimeConfigSchema.partial().safeParse(raw)
+  const extras = readSkillExtras(raw)
   if (!parsed.success)
-    return {}
-  const out: Partial<ReactAgentRuntimeConfig> = {}
+    return extras
+  const out: Partial<ReactAgentRuntimeConfig> & ReactAgentForwardedExtras = { ...extras }
   if (parsed.data.userPrompt !== undefined)
     out.userPrompt = parsed.data.userPrompt
   if (parsed.data.kbId !== undefined)

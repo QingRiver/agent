@@ -40,19 +40,34 @@ export class KbApi {
     return (await successData(res)).doc
   }
 
+  static async listKbs() {
+    const res = await api.kb.kbs.list.$post()
+    return (await successData(res)).kbs
+  }
+
+  static async markKb(dirId: string) {
+    const res = await api.kb.kbs.create.$post({ json: { dirId } })
+    return (await successData(res)).kb
+  }
+
+  static async unmarkKb(dirId: string) {
+    const res = await api.kb.kbs[':id'].unmark.$post({ param: { id: dirId } })
+    await successData(res)
+  }
+
   static async createDoc(
     body: {
       name: string
       content?: string
       tagIds?: string[]
-      /** 挂载 dirs.id；null/缺省=Inbox */
-      mountDirId?: string | null
+      /** 挂载 dirs.id；必须落在已初始化的知识库子树内 */
+      mountDirId: string
     },
   ) {
     const res = await api.kb.documents.create.$post({
       json: {
         name: body.name,
-        ...(body.mountDirId != null ? { mountDirId: body.mountDirId } : {}),
+        mountDirId: body.mountDirId,
         ...(body.content != null ? { content: body.content } : {}),
         tagIds: body.tagIds ?? [],
       },
@@ -69,8 +84,8 @@ export class KbApi {
     id: string,
     body: {
       tagIds?: string[]
-      /** 挂载 dirs.id；null=移到 Inbox。位置变 → 零重 embed，仅 setPayload 同步 id */
-      mountDirId?: string | null
+      /** 挂载 dirs.id；必须落在已初始化的知识库子树内。位置变 → 零重 embed，仅 setPayload 同步 id */
+      mountDirId?: string
       name?: string
       visibility?: string
       pinned?: boolean
@@ -100,13 +115,13 @@ export class KbApi {
   /** 多文件上传（multipart）。tags 后端按逗号分隔字符串解析 */
   static async ingestFiles(
     files: File[],
-    opts?: { mountDirId?: string, tags?: string[] },
+    opts: { mountDirId: string, tags?: string[] },
   ) {
     // hono client 的 form 须为普通对象（会自行 new FormData）；传 FormData 实例时 Object.entries 为空
     const res = await api.kb.ingest.files.$post({
       form: {
         files,
-        ...(opts?.mountDirId != null ? { mountDirId: opts.mountDirId } : {}),
+        mountDirId: opts.mountDirId,
         ...(opts?.tags?.length ? { tags: opts.tags.join(',') } : {}),
       },
     })
@@ -114,11 +129,11 @@ export class KbApi {
   }
 
   /** zip 压缩包上传（multipart），按包内目录结构还原成 dirs 子树（挂到 mountDirId 下） */
-  static async ingestZip(file: File, opts?: { mountDirId?: string, tags?: string[] }) {
+  static async ingestZip(file: File, opts: { mountDirId: string, tags?: string[] }) {
     const res = await api.kb.ingest.zip.$post({
       form: {
         file,
-        ...(opts?.mountDirId != null ? { mountDirId: opts.mountDirId } : {}),
+        mountDirId: opts.mountDirId,
         ...(opts?.tags?.length ? { tags: opts.tags.join(',') } : {}),
       },
     })
@@ -129,7 +144,7 @@ export class KbApi {
     body: {
       content: string
       name: string
-      mountDirId?: string | null
+      mountDirId: string
       tags?: string[]
     },
   ) {
@@ -137,7 +152,7 @@ export class KbApi {
       json: {
         content: body.content,
         name: body.name,
-        ...(body.mountDirId != null ? { mountDirId: body.mountDirId } : {}),
+        mountDirId: body.mountDirId,
         tags: body.tags ?? [],
       },
     })

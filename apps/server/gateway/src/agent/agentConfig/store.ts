@@ -15,6 +15,7 @@ export interface AgentConfigRecord extends ReactAgentRuntimeConfig {
   userId: string
   name: string
   description: string
+  skillCodes: string[]
   createdAt: number
   updatedAt: number
 }
@@ -27,12 +28,28 @@ export interface UpsertAgentConfigInput {
   userPrompt: string
   kbId: string
   maxSteps: number
+  skillCodes?: string[] | undefined
 }
 
 const cache = new Map<string, AgentConfigRecord>()
 
 function cacheKey(userId: string, id: string) {
   return `${userId}:${id}`
+}
+
+function normalizeSkillCodes(raw: string[] | undefined | null): string[] {
+  if (!raw?.length)
+    return []
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const item of raw) {
+    const code = item.trim().slice(0, 64)
+    if (!code || seen.has(code))
+      continue
+    seen.add(code)
+    out.push(code)
+  }
+  return out.slice(0, 32)
 }
 
 function rowToRecord(row: typeof agentConfigs.$inferSelect): AgentConfigRecord {
@@ -44,6 +61,7 @@ function rowToRecord(row: typeof agentConfigs.$inferSelect): AgentConfigRecord {
     userPrompt: row.userPrompt,
     kbId: row.kbId,
     maxSteps: row.maxSteps,
+    skillCodes: normalizeSkillCodes(row.skillCodes),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
@@ -93,6 +111,7 @@ export async function upsertAgentConfig(
   const now = Date.now()
   const name = input.name.trim().slice(0, 80) || '未命名 Agent'
   const description = (input.description ?? '').slice(0, 200)
+  const skillCodes = normalizeSkillCodes(input.skillCodes)
 
   if (input.id?.trim()) {
     const id = input.id.trim()
@@ -106,6 +125,7 @@ export async function upsertAgentConfig(
           userPrompt: runtime.userPrompt,
           kbId: runtime.kbId,
           maxSteps: runtime.maxSteps,
+          skillCodes,
           updatedAt: now,
         })
         .where(and(eq(agentConfigs.id, id), eq(agentConfigs.userId, userId)))
@@ -115,6 +135,7 @@ export async function upsertAgentConfig(
         name,
         description,
         ...runtime,
+        skillCodes,
         updatedAt: now,
       }
       cache.set(cacheKey(userId, id), updated)
@@ -129,6 +150,7 @@ export async function upsertAgentConfig(
     name,
     description,
     ...runtime,
+    skillCodes,
     createdAt: now,
     updatedAt: now,
   }
@@ -140,6 +162,7 @@ export async function upsertAgentConfig(
     userPrompt: record.userPrompt,
     kbId: record.kbId,
     maxSteps: record.maxSteps,
+    skillCodes: record.skillCodes,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   })

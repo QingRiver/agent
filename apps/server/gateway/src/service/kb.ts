@@ -19,8 +19,9 @@ import { dirVdir } from '@agent/project'
 import { and, desc, eq, inArray, isNull, not, sql } from 'drizzle-orm'
 import JSZip from 'jszip'
 import { db } from '../db/drizzle'
-import { dirs, kbChunks, kbDocTags, kbDocuments } from '../db/schema'
+import { dirs, kbChunks, kbDocTags, kbDocuments, kbs, skills } from '../db/schema'
 import { ProjectService } from './project'
+import { ancestorIdsOf, assertNotSkillSubtree, loadLiveDirs, subtreeIdsOf } from './skill'
 import { TagsService } from './tags'
 
 const SUPPORTED_EXTENSIONS = new Set(['.md', '.markdown', '.docx', '.pdf', '.html', '.htm', '.txt'])
@@ -44,9 +45,9 @@ export interface KbDocSummary {
   id: string
   userId: string
   kbId: string
-  /** 挂载 dirs.id（权威位置）；null=未归位/Inbox */
-  mountDirId: string | null
-  /** 冗余缓存 = walkToProjectRoot(mountDirId)；Inbox→null */
+  /** 挂载 dirs.id（权威位置）；必须落在已初始化知识库子树内 */
+  mountDirId: string
+  /** 冗余缓存 = walkToProjectRoot(mountDirId) */
   projectId: string | null
   name: string
   filename: string | null
@@ -81,7 +82,7 @@ export interface KbIngestFile {
 export interface KbIngestResultItem {
   docId: string
   name: string
-  mountDirId: string | null
+  mountDirId: string
   skipped: boolean
 }
 
@@ -187,7 +188,7 @@ async function attachTagIdsToDoc<T extends { id: string }>(
 
 /**
  * 取挂载 dir 的 vdir + projectId（认 id 不认 name）。
- * mountDirId null 或不在/非本人 → null（视为 Inbox：vdir=name，projectId=null）。
+ * mountDirId 不在/非本人 → null。
  * 用 dirs.projectId 缓存（= walkToProjectRoot 派生，server 维护），无需再 walk。
  */
 async function loadMount(
@@ -234,9 +235,117 @@ async function subtreeMountDirIds(userId: string, rootDirId: string): Promise<Se
   return ids
 }
 
-// ---------- KB service ----------
+export interface KbBinding {
+  dirId: string
+  userId: string
+  dirName: string
+  vdir: string
+}
+
+export async function findEnclosingKbDirId(userId: string, dirId: string | null | undefined): Promise<string | null> {
+  if (dirId == null)
+    return null
+  const all = await loadLiveDirs(userId)
+  const chain = ancestorIdsOf(all, dirId)
+  if (chain.length === 0)
+    return null
+  const rows = await db.select({ dirId: kbs.dirId }).from(kbs).where(and(
+    eq(kbs.userId, userId),
+    inArray(kbs.dirId, chain),
+  ))
+  const marked = new Set(rows.map(r => r.dirId))
+  for (const id of chain) {
+    if (marked.has(id))
+      return id
+  }
+  return null
+}
 
 export class KbService {
+  static async listBindings(userId: string): Promise<KbBinding[]> {
+    const rows = await db.select().from(kbs).where(eq(kbs.userId, userId))
+    if (rows.length === 0)
+      return []
+    const dirRows = await db.select().from(dirs).where(and(
+      eq(dirs.userId, userId),
+      inArray(dirs.id, rows.map(r => r.dirId)),
+      eq(dirs.deleted, false),
+    ))
+    const dirById = new Map(dirRows.map(d => [d.id, d]))
+    const out: KbBinding[] = []
+    for (const r of rows) {
+      const dir = dirById.get(r.dirId)
+      if (!dir)
+        continue
+      out.push({
+        dirId: r.dirId,
+        userId: r.userId,
+        dirName: dir.name,
+        vdir: dir.vdir,
+      })
+    }
+    return out
+  }
+
+  static async mark(userId: string, dirId: string): Promise<KbBinding> {
+    const all = await loadLiveDirs(userId)
+    const dir = all.find(d => d.id === dirId)
+    if (!dir)
+      throw new KbConflictError('dir 不存在或不可见')
+    if (dir.kind !== 'dir')
+      throw new KbConflictError('只能把子文件夹初始化为知识库（项目根不行）')
+    await assertNotSkillSubtree(userId, dirId)
+    const chain = ancestorIdsOf(all, dirId)
+    const subtree = subtreeIdsOf(all, dirId)
+    const [already] = await db.select().from(kbs).where(eq(kbs.dirId, dirId)).limit(1)
+    if (already)
+      throw new KbConflictError('该文件夹已是知识库')
+    const ancestorIds = chain.filter(id => id !== dirId)
+    if (ancestorIds.length > 0) {
+      const ancestorKbs = await db.select({ dirId: kbs.dirId }).from(kbs).where(and(
+        eq(kbs.userId, userId),
+        inArray(kbs.dirId, ancestorIds),
+      ))
+      if (ancestorKbs.length > 0)
+        throw new KbConflictError('禁止嵌套知识库')
+    }
+    const descendantIds = subtree.filter(id => id !== dirId)
+    if (descendantIds.length > 0) {
+      const childKbs = await db.select({ dirId: kbs.dirId }).from(kbs).where(and(
+        eq(kbs.userId, userId),
+        inArray(kbs.dirId, descendantIds),
+      ))
+      if (childKbs.length > 0)
+        throw new KbConflictError('子树内已有知识库')
+    }
+    const childSkills = await db.select({ id: skills.id }).from(skills).where(and(
+      eq(skills.userId, userId),
+      inArray(skills.dirId, subtree),
+    )).limit(1)
+    if (childSkills[0])
+      throw new KbConflictError('禁止在含 skill 的目录上初始化知识库')
+    await db.insert(kbs).values({ dirId, userId })
+    return {
+      dirId: dir.id,
+      userId,
+      dirName: dir.name,
+      vdir: dir.vdir,
+    }
+  }
+
+  static async unmark(userId: string, dirId: string): Promise<void> {
+    const [row] = await db.select().from(kbs).where(and(eq(kbs.dirId, dirId), eq(kbs.userId, userId))).limit(1)
+    if (!row)
+      throw new KbConflictError('知识库不存在或不可见')
+    const [doc] = await db.select({ id: kbDocuments.id }).from(kbDocuments).where(and(
+      eq(kbDocuments.userId, userId),
+      eq(kbDocuments.kbId, dirId),
+    )).limit(1)
+    if (doc)
+      throw new KbConflictError('知识库下仍有文档，无法卸标')
+    await db.delete(kbs).where(eq(kbs.dirId, dirId))
+  }
+
   // ---------- vdir 重算（PG only，零 Qdrant 写） ----------
 
   /** 重算单个文档的 vdir 展示缓存（mountDir/name 变更时）。不触 Qdrant（vdir 不进 payload）。 */
@@ -284,21 +393,32 @@ export class KbService {
   ): Promise<void> {
     if (!subtreeDirIds.length)
       return
-    // PG：刷 kb_documents.projectId（mountDirId ∈ 子树）
-    await db
-      .update(kbDocuments)
-      .set({ projectId: newProjectId })
-      .where(and(eq(kbDocuments.userId, userId), inArray(kbDocuments.mountDirId, subtreeDirIds)))
-    // Qdrant：已索引文档 setPayload({project_id})（id 稳定，不重 embed）
     const docs = await db
-      .select({ id: kbDocuments.id, kbId: kbDocuments.kbId })
+      .select({
+        id: kbDocuments.id,
+        kbId: kbDocuments.kbId,
+        mountDirId: kbDocuments.mountDirId,
+        indexingStatus: kbDocuments.indexingStatus,
+      })
       .from(kbDocuments)
-      .where(and(
-        eq(kbDocuments.userId, userId),
-        inArray(kbDocuments.mountDirId, subtreeDirIds),
-        eq(kbDocuments.indexingStatus, 'completed'),
-      ))
-    await Promise.all(docs.map(d => setPayloadByDocId(d.kbId, d.id, { project_id: newProjectId })))
+      .where(and(eq(kbDocuments.userId, userId), inArray(kbDocuments.mountDirId, subtreeDirIds)))
+    const kbByMount = new Map<string, string>()
+    for (const mount of new Set(docs.map(d => d.mountDirId))) {
+      const kbId = await findEnclosingKbDirId(userId, mount)
+      if (!kbId)
+        throw new KbConflictError('移动后文档须仍在已初始化的知识库内')
+      kbByMount.set(mount, kbId)
+    }
+    await Promise.all(docs.map(d => db
+      .update(kbDocuments)
+      .set({ projectId: newProjectId, kbId: kbByMount.get(d.mountDirId)! })
+      .where(eq(kbDocuments.id, d.id))))
+    const indexed = docs.filter(d => d.indexingStatus === 'completed')
+    await Promise.all(indexed.map(d => setPayloadByDocId(
+      kbByMount.get(d.mountDirId)!,
+      d.id,
+      { project_id: newProjectId },
+    )))
   }
 
   // ---------- 草稿 CRUD ----------
@@ -306,7 +426,7 @@ export class KbService {
   static async createDraft(args: {
     userId: string
     kbId?: string
-    mountDirId?: string | null
+    mountDirId: string
     name: string
     content?: string
     owner?: string
@@ -318,7 +438,13 @@ export class KbService {
     const ts = now()
     const content = args.content ?? ''
     const draftHash = hashContent(content)
-    const mountDirId = args.mountDirId ?? null
+    const mountDirId = args.mountDirId
+    await assertNotSkillSubtree(args.userId, mountDirId)
+    const kbId = await findEnclosingKbDirId(args.userId, mountDirId)
+    if (!kbId)
+      throw new KbConflictError('请先把目标文件夹初始化为知识库')
+    if (args.kbId != null && args.kbId !== kbId)
+      throw new KbConflictError('kbId 与包围知识库不一致')
     const mount = await loadMount(mountDirId, args.userId)
     const vdir = dirVdir(mount?.vdir ?? null, args.name)
     const projectId = mount?.projectId ?? null
@@ -326,7 +452,7 @@ export class KbService {
     await db.insert(kbDocuments).values({
       id,
       userId: args.userId,
-      kbId: args.kbId ?? 'kb_default',
+      kbId,
       mountDirId,
       projectId,
       name: args.name,
@@ -391,7 +517,7 @@ export class KbService {
         conditions.push(inArray(kbDocuments.mountDirId, [...ids]))
       }
       else {
-        // dirId 精确 + Inbox(null) 不命中（Inbox 文档无 mountDirId，不走 dir 过滤）
+        // dirId 精确匹配挂载点
         conditions.push(eq(kbDocuments.mountDirId, args.dirId))
       }
     }
@@ -451,8 +577,20 @@ export class KbService {
     const mountChanged = patch.mountDirId !== undefined && patch.mountDirId !== prev.mountDirId
     const nameChanged = patch.name != null && patch.name !== prev.name
 
-    // mount 变 → 重 stamp projectId（认 id；不重 embed，稍后 setPayload 同步）
-    const newMount = mountChanged ? await loadMount(patch.mountDirId ?? null, prev.userId) : null
+    let nextKbId = prev.kbId
+    let nextProjectId = prev.projectId
+    if (mountChanged) {
+      const dest = patch.mountDirId
+      if (dest == null)
+        throw new KbConflictError('文档必须挂在知识库文件夹下')
+      await assertNotSkillSubtree(prev.userId, dest)
+      const kbId = await findEnclosingKbDirId(prev.userId, dest)
+      if (kbId == null)
+        throw new KbConflictError('请先把目标文件夹初始化为知识库')
+      nextKbId = kbId
+      nextProjectId = (await loadMount(dest, prev.userId))?.projectId ?? null
+    }
+
     const updated = await db
       .update(kbDocuments)
       .set({
@@ -462,7 +600,7 @@ export class KbService {
         ...(patch.owner !== undefined ? { owner: patch.owner } : {}),
         ...(patch.visibility != null ? { visibility: patch.visibility } : {}),
         ...(patch.pinned != null ? { pinned: patch.pinned } : {}),
-        ...(mountChanged ? { projectId: newMount?.projectId ?? null } : {}),
+        ...(mountChanged ? { projectId: nextProjectId, kbId: nextKbId } : {}),
       })
       .where(eq(kbDocuments.id, id))
       .returning()
@@ -662,7 +800,7 @@ export class KbService {
   static async ingestFiles(args: {
     userId: string
     files: KbIngestFile[]
-    mountDirId?: string | null
+    mountDirId: string
     owner?: string
     tags?: string[]
   }): Promise<KbIngestResultItem[]> {
@@ -688,7 +826,7 @@ export class KbService {
       const cleaned = cleanMarkdown(markdown, { sourceDocId: 'pending' })
       const draftHash = hashContent(cleaned)
       const name = path.parse(file.filename).name
-      const mountDirId = args.mountDirId ?? null
+      const mountDirId = args.mountDirId
 
       // 去重：同 mountDirId+name 已存在
       const [existing] = await db
@@ -697,9 +835,7 @@ export class KbService {
         .where(and(
           eq(kbDocuments.userId, args.userId),
           eq(kbDocuments.name, name),
-          mountDirId == null
-            ? isNull(kbDocuments.mountDirId)
-            : eq(kbDocuments.mountDirId, mountDirId),
+          eq(kbDocuments.mountDirId, mountDirId),
         ))
         .limit(1)
 
@@ -722,7 +858,7 @@ export class KbService {
 
       const doc = await KbService.createDraft({
         userId: args.userId,
-        ...(mountDirId != null ? { mountDirId } : {}),
+        mountDirId,
         name,
         content: cleaned,
         ...(args.owner != null ? { owner: args.owner } : {}),
@@ -742,7 +878,7 @@ export class KbService {
   static async ingestFromZip(args: {
     userId: string
     zip: Buffer
-    mountDirId?: string | null
+    mountDirId: string
     owner?: string
     tags?: string[]
   }): Promise<KbIngestResultItem[]> {
@@ -775,13 +911,15 @@ export class KbService {
         const folderSegments = segments.slice(0, -1)
         const filename = segments[segments.length - 1]!
         const baseMountDirId = folderSegments.length
-          ? (await KbService.ensureDirPath(args.userId, args.mountDirId ?? null, folderSegments))
-          : args.mountDirId ?? null
+          ? (await KbService.ensureDirPath(args.userId, args.mountDirId, folderSegments))
+          : args.mountDirId
+        if (baseMountDirId == null)
+          continue
 
         const items = await KbService.ingestFiles({
           userId: args.userId,
           files: [{ buffer, filename }],
-          ...(baseMountDirId != null ? { mountDirId: baseMountDirId } : {}),
+          mountDirId: baseMountDirId,
           ...(args.owner != null ? { owner: args.owner } : {}),
           ...(args.tags ? { tags: args.tags } : {}),
         })
@@ -834,14 +972,14 @@ export class KbService {
     userId: string
     content: string
     name: string
-    mountDirId?: string | null
+    mountDirId: string
     owner?: string
     tags?: string[]
   }): Promise<KbDoc> {
     const cleaned = cleanMarkdown(args.content, { sourceDocId: 'pending' })
     return KbService.createDraft({
       userId: args.userId,
-      ...(args.mountDirId != null ? { mountDirId: args.mountDirId } : {}),
+      mountDirId: args.mountDirId,
       name: args.name,
       content: cleaned,
       ...(args.owner != null ? { owner: args.owner } : {}),

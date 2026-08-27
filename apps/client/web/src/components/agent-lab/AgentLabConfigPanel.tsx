@@ -15,6 +15,7 @@ import {
   DEFAULT_REACT_AGENT_LAB_CONFIG,
   resetAgentLabConfig,
 } from './agentLabConfig'
+import { AgentLabSkillPicker } from './AgentLabSkillPicker'
 
 interface AgentLabConfigPanelProps {
   config: ReactAgentLabConfig
@@ -136,8 +137,16 @@ export function AgentLabConfigPanel({
         </div>
       </div>
 
+      <div className="space-y-1.5">
+        <Label htmlFor="lab-skills">绑定 Skill（多选，一律 latest）</Label>
+        <AgentLabSkillPicker
+          value={config.skillCodes}
+          onChange={skillCodes => patch({ skillCodes })}
+        />
+      </div>
+
       <p className="text-xs text-muted-foreground">
-        平台工具（不可移除）：ask_input / ask_choice / ask_multi_choice / ask_confirm / kb_search
+        平台工具（不可移除）：ask_input / ask_choice / ask_multi_choice / ask_confirm / kb_search / read_skill_file
       </p>
 
       <div className="rounded-lg border border-border">

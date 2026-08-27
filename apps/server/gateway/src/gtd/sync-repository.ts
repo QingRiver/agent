@@ -33,6 +33,7 @@ import {
   gtdTaskTags,
   tags,
 } from '../db/schema'
+import { findEnclosingSkillDirId, SkillConflictError } from '../service/skill'
 
 /** ISO 字符串 → Date（drizzle timestamptz mode:'date' 期望 Date 对象） */
 /** ISO 字符串 → Date（重载：string→Date, null/undefined→null） */
@@ -359,6 +360,14 @@ export async function applyPushToPg(userId: string, req: PushRequest): Promise<P
         if (!dirsById.has(mount) && row.data.parentId == null) {
           row.data.mountDirId = null
         }
+      }
+      for (const row of changedTasks) {
+        const mount = row.data.mountDirId ?? null
+        if (mount == null)
+          continue
+        const enclosed = await findEnclosingSkillDirId(userId, mount, tx)
+        if (enclosed)
+          throw new SkillConflictError('skill 子树禁止挂载 kb / task')
       }
     }
 

@@ -59,6 +59,7 @@ export {
   FETCH_USER_ORDER_TOOL_NAME,
   ORDER_TOOL_PROGRESS_EVENT,
 } from './tools/order'
+export { setSkillFileLoader, type SkillBinding, type SkillFileLoader } from './tools/read-skill-file'
 
 export const Graphs = {
   claudeAgent: claudeAgentGraph,

@@ -15,8 +15,8 @@ CREATE TABLE "kb_doc_tags" (
 CREATE TABLE "kb_documents" (
 	"id" text PRIMARY KEY NOT NULL,
 	"user_id" text NOT NULL,
-	"kb_id" text DEFAULT 'kb_default' NOT NULL,
-	"mount_dir_id" text,
+	"kb_id" text NOT NULL,
+	"mount_dir_id" text NOT NULL,
 	"project_id" text,
 	"name" text NOT NULL,
 	"filename" text,
@@ -44,6 +44,13 @@ CREATE INDEX "idx_kb_chunks_doc" ON "kb_chunks" USING btree ("doc_id");--> state
 CREATE INDEX "idx_kb_doc_tags_tag" ON "kb_doc_tags" USING btree ("tag_id");--> statement-breakpoint
 CREATE INDEX "idx_kb_docs_user_owner" ON "kb_documents" USING btree ("user_id","owner");--> statement-breakpoint
 CREATE INDEX "idx_kb_docs_user_mount" ON "kb_documents" USING btree ("user_id","mount_dir_id");--> statement-breakpoint
+CREATE INDEX "idx_kb_docs_user_kb" ON "kb_documents" USING btree ("user_id","kb_id");--> statement-breakpoint
 CREATE INDEX "idx_kb_docs_user_project" ON "kb_documents" USING btree ("user_id","project_id");--> statement-breakpoint
 CREATE INDEX "idx_kb_docs_user_vdir" ON "kb_documents" USING btree ("user_id","vdir");--> statement-breakpoint
 CREATE INDEX "idx_kb_docs_user_list" ON "kb_documents" USING btree ("user_id","pinned","updated_at");--> statement-breakpoint
+CREATE TABLE "kbs" (
+	"dir_id" text PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);--> statement-breakpoint
+CREATE INDEX "idx_kbs_user" ON "kbs" USING btree ("user_id");--> statement-breakpoint

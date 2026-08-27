@@ -1,4 +1,4 @@
-import { bigint, boolean, index, integer, jsonb, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
+import { bigint, boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core'
 import { tags } from './tags'
 
 /**
@@ -7,18 +7,20 @@ import { tags } from './tags'
  * 草稿/提交分离：saveDraft 只动 content/draft_hash/updated_at；commit 才跑 chunk+enrich+embed+Qdrant。
  *
  * 并入统一 dirs 树（废弃 kb_nodes）。
- * - mountDirId = 挂载到 dirs.id（权威位置，无 FK 靠 server stamp 校验存活，同 task 模式）；null=未归位/Inbox
+ * - mountDirId = 挂载到 dirs.id（权威位置，无 FK 靠 server stamp 校验存活，同 task 模式）；必须落在已初始化知识库子树内
  * - projectId = walkToProjectRoot(mountDirId) 冗余缓存（server 维护，非 LWW）
- * - userId = 属主隔离（对齐 dirs.userId）；kbId 降为分区标签不再驱动树隔离/collection
+ * - userId = 属主隔离（对齐 dirs.userId）
+ * - kbId = 包围知识库 kbs.dir_id（项目里升级文件夹得到），不再有 kb_default
  * - vdir = 派生展示缓存（mountDir.vdir + '/' + name，不进 Qdrant payload）
  */
 export const kbDocuments = pgTable('kb_documents', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(),
-  kbId: text('kb_id').notNull().default('kb_default'),
-  /** 挂载到 dirs.id（权威位置）；null=未归位/Inbox。无 FK——dir 存活由 server stamp 校验修正 */
-  mountDirId: text('mount_dir_id'),
-  /** 冗余缓存 = walkToProjectRoot(mountDirId)（server 维护，非 LWW）；Inbox→null */
+  /** 包围知识库 = kbs.dir_id */
+  kbId: text('kb_id').notNull(),
+  /** 挂载到 dirs.id（权威位置）。无 FK——dir 存活由 server stamp 校验修正 */
+  mountDirId: text('mount_dir_id').notNull(),
+  /** 冗余缓存 = walkToProjectRoot(mountDirId)（server 维护，非 LWW） */
   projectId: text('project_id'),
   name: text('name').notNull(),
   filename: text('filename'),
@@ -44,6 +46,7 @@ export const kbDocuments = pgTable('kb_documents', {
 }, table => [
   index('idx_kb_docs_user_owner').on(table.userId, table.owner),
   index('idx_kb_docs_user_mount').on(table.userId, table.mountDirId),
+  index('idx_kb_docs_user_kb').on(table.userId, table.kbId),
   index('idx_kb_docs_user_project').on(table.userId, table.projectId),
   index('idx_kb_docs_user_vdir').on(table.userId, table.vdir),
   index('idx_kb_docs_user_list').on(table.userId, table.pinned, table.updatedAt),
@@ -72,4 +75,13 @@ export const kbChunks = pgTable('kb_chunks', {
   createdAt: bigint('created_at', { mode: 'number' }).notNull(),
 }, table => [
   index('idx_kb_chunks_doc').on(table.docId),
+])
+
+/** 知识库控制面：1:1 打标 dirs.id。kbId = dirId（项目里升级文件夹得到）。 */
+export const kbs = pgTable('kbs', {
+  dirId: text('dir_id').primaryKey(),
+  userId: text('user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, table => [
+  index('idx_kbs_user').on(table.userId),
 ])

@@ -22,5 +22,6 @@ export const TagsDeleteSchema = z.object({
   dryRun: z.boolean().optional(),
   docIds: z.array(z.uuid()).optional(),
   taskIds: z.array(z.string().min(1)).optional(),
+  skillIds: z.array(z.string().min(1)).optional(),
 })
 export type TagsDelete = z.infer<typeof TagsDeleteSchema>

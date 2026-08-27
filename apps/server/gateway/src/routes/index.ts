@@ -8,6 +8,7 @@ import { gtdRoutes } from './gtd'
 import { kbRoutes } from './kb'
 import { dirRoutes, projectRoutes } from './project'
 import { rscRoutes } from './rsc'
+import { skillRoutes, versionTextRoutes } from './skill'
 import { tagsRoutes } from './tags'
 
 const apiRoutes = new Hono<AppEnv>()
@@ -21,6 +22,8 @@ const apiRoutes = new Hono<AppEnv>()
   .route('/projects', projectRoutes)
   .route('/gtd', gtdRoutes)
   .route('/rsc', rscRoutes)
+  .route('/skills', skillRoutes)
+  .route('/version-texts', versionTextRoutes)
 
 export type AppType = typeof apiRoutes
 export { apiRoutes }

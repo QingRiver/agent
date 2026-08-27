@@ -9,9 +9,12 @@ import {
   gtdTaskTags,
   kbDocTags,
   kbDocuments,
+  skills,
+  skillTags,
   tags,
 } from '../db/schema'
 import { KbService } from './kb'
+import { SkillService } from './skill'
 
 export class TagsConflictError extends Error {
   constructor(message: string) {
@@ -39,9 +42,15 @@ export interface TagLinkedTask {
   title: string
 }
 
+export interface TagLinkedSkill {
+  id: string
+  title: string
+}
+
 export interface TagDeleteDryRunResult {
   docs: TagLinkedDoc[]
   tasks: TagLinkedTask[]
+  skills: TagLinkedSkill[]
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -210,6 +219,43 @@ export class TagsService {
     })
   }
 
+  static async getSkillTagIds(skillId: string): Promise<string[]> {
+    const rows = await db
+      .select({ tagId: skillTags.tagId })
+      .from(skillTags)
+      .where(eq(skillTags.skillId, skillId))
+    return rows.map(r => r.tagId)
+  }
+
+  static async setSkillTagIds(skillId: string, userId: string, tagIds: string[]): Promise<void> {
+    const [skill] = await db.select({ id: skills.id }).from(skills).where(and(
+      eq(skills.id, skillId),
+      eq(skills.userId, userId),
+    )).limit(1)
+    if (!skill)
+      throw new TagsConflictError('skill 不存在或不可见')
+
+    const unique = [...new Set(tagIds)]
+    if (unique.length) {
+      const owned = await db
+        .select({ id: tags.id })
+        .from(tags)
+        .where(and(
+          eq(tags.userId, userId),
+          eq(tags.deleted, false),
+          inArray(tags.id, unique),
+        ))
+      if (owned.length !== unique.length)
+        throw new TagsConflictError('one or more tags are invalid or not owned by user')
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.delete(skillTags).where(eq(skillTags.skillId, skillId))
+      if (unique.length)
+        await tx.insert(skillTags).values(unique.map(tagId => ({ skillId, tagId })))
+    })
+  }
+
   static async syncQdrantTagIds(kbId: string, docId: string): Promise<void> {
     const tagIds = await TagsService.getDocTagIds(docId)
     await setPayloadByDocId(kbId, docId, { tag_ids: tagIds })
@@ -236,6 +282,15 @@ export class TagsService {
         eq(gtdTasks.userId, userId),
         eq(gtdTasks.deleted, false),
       ))
+    return rows.map(r => ({ id: r.id, title: r.title }))
+  }
+
+  private static async getLinkedSkills(tagId: string, userId: string): Promise<TagLinkedSkill[]> {
+    const rows = await db
+      .select({ id: skills.id, title: skills.code })
+      .from(skillTags)
+      .innerJoin(skills, eq(skillTags.skillId, skills.id))
+      .where(and(eq(skillTags.tagId, tagId), eq(skills.userId, userId)))
     return rows.map(r => ({ id: r.id, title: r.title }))
   }
 
@@ -285,6 +340,18 @@ export class TagsService {
       }
     }
 
+    const skillTagRows = await tx
+      .select({ skillId: skillTags.skillId })
+      .from(skillTags)
+      .innerJoin(skills, eq(skillTags.skillId, skills.id))
+      .where(and(eq(skillTags.tagId, tagId), eq(skills.userId, userId)))
+    if (skillTagRows.length) {
+      await tx.delete(skillTags).where(and(
+        eq(skillTags.tagId, tagId),
+        inArray(skillTags.skillId, skillTagRows.map(r => r.skillId)),
+      ))
+    }
+
     // project defaultTagIds 已弃用（project facet 全删），不再清理
 
     return { docIds: linkedDocs.map(d => d.id) }
@@ -305,6 +372,7 @@ export class TagsService {
       dryRun?: boolean
       docIds?: string[]
       taskIds?: string[]
+      skillIds?: string[]
     },
   ): Promise<TagDeleteDryRunResult | { ok: true } | null> {
     const tag = (await db.select().from(tags).where(eq(tags.id, tagId)).limit(1))[0]
@@ -313,9 +381,10 @@ export class TagsService {
 
     const linkedDocs = await TagsService.getLinkedDocs(tagId, userId)
     const linkedTasks = await TagsService.getLinkedTasks(tagId, userId)
+    const linkedSkills = await TagsService.getLinkedSkills(tagId, userId)
 
     if (args.dryRun)
-      return { docs: linkedDocs, tasks: linkedTasks }
+      return { docs: linkedDocs, tasks: linkedTasks, skills: linkedSkills }
 
     if (args.mode === 'untag') {
       let affectedDocIds: string[] = []
@@ -336,6 +405,11 @@ export class TagsService {
     const remainingDocIds = linkedDocs
       .map(d => d.id)
       .filter(id => !docIdsToDelete.includes(id))
+    const linkedSkillIdSet = new Set(linkedSkills.map(s => s.id))
+    const skillIdsToUnmark = (args.skillIds ?? []).filter(id => linkedSkillIdSet.has(id))
+    const remainingSkillIds = linkedSkills
+      .map(s => s.id)
+      .filter(id => !skillIdsToUnmark.includes(id))
 
     for (const docId of docIdsToDelete)
       await KbService.removeDoc(docId)
@@ -408,10 +482,20 @@ export class TagsService {
         }
       }
 
+      if (remainingSkillIds.length) {
+        await tx.delete(skillTags).where(and(
+          eq(skillTags.tagId, tagId),
+          inArray(skillTags.skillId, remainingSkillIds),
+        ))
+      }
+
       // project defaultTagIds 已弃用（project facet 全删），不再清理
 
       await TagsService.softDeleteTag(userId, tagId, tx)
     })
+
+    for (const skillId of skillIdsToUnmark)
+      await SkillService.unmark(userId, skillId)
 
     await TagsService.syncQdrantForUntaggedDocs(remainingDocIds)
     return { ok: true }

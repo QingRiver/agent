@@ -10,7 +10,7 @@ import JSZip from 'jszip'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db } from './db/drizzle'
 import { migrateAppSchema } from './db/migrate'
-import { dirs, kbChunks, kbDocuments } from './db/schema'
+import { dirs, kbChunks, kbDocuments, kbs } from './db/schema'
 import { kbRoutes } from './routes/kb'
 import { KbConflictError, KbService } from './service/kb'
 import { ProjectService } from './service/project'
@@ -47,7 +47,15 @@ async function cleanupUser(userId: string): Promise<void> {
     }
   }
   await db.delete(kbDocuments).where(eq(kbDocuments.userId, userId))
+  await db.delete(kbs).where(eq(kbs.userId, userId))
   await db.delete(dirs).where(eq(dirs.userId, userId))
+}
+
+async function setupKb(userId: string, name: string): Promise<{ projectId: string, kbDirId: string }> {
+  const proj = await ProjectService.createProject(userId, { name })
+  const kbDir = await ProjectService.createDir(userId, { parentId: proj.id, name: 'kb' })
+  await KbService.mark(userId, kbDir.id)
+  return { projectId: proj.id, kbDirId: kbDir.id }
 }
 
 async function assertNoResidue(userId: string): Promise<void> {
@@ -76,13 +84,15 @@ afterAll(async () => {
 describe('kb PG 逻辑', () => {
   const projName = `pg-${RUN_TAG}`
   let projectId: string
+  let kbDirId: string
   let dirId: string
   let docId: string
 
-  it('建项目 + 建 dir + createDraft 派生 vdir/projectId + status=draft', async () => {
-    const proj = await ProjectService.createProject(TEST_USER.id, { name: projName })
-    projectId = proj.id
-    const dir = await ProjectService.createDir(TEST_USER.id, { parentId: projectId, name: 'rust' })
+  it('建项目 + 初始化知识库 + createDraft 派生 vdir/projectId/kbId + status=draft', async () => {
+    const setup = await setupKb(TEST_USER.id, projName)
+    projectId = setup.projectId
+    kbDirId = setup.kbDirId
+    const dir = await ProjectService.createDir(TEST_USER.id, { parentId: kbDirId, name: 'rust' })
     dirId = dir.id
 
     const doc = await KbService.createDraft({
@@ -94,7 +104,8 @@ describe('kb PG 逻辑', () => {
     })
     docId = doc.id
     expect(doc.indexingStatus).toBe('draft')
-    expect(doc.vdir).toBe(`${projName}/rust/basics`)
+    expect(doc.kbId).toBe(kbDirId)
+    expect(doc.vdir).toBe(`${projName}/kb/rust/basics`)
     expect(doc.mountDirId).toBe(dirId)
     expect(doc.projectId).toBe(projectId)
     expect(doc.userId).toBe(TEST_USER.id)
@@ -102,11 +113,15 @@ describe('kb PG 逻辑', () => {
     expect(doc.publishedHash).toBeNull()
   })
 
-  it('inbox 文档（mountDirId=null）vdir=name', async () => {
-    const doc = await KbService.createDraft({ userId: TEST_USER.id, name: 'orphan', content: 'x' })
-    expect(doc.vdir).toBe('orphan')
-    expect(doc.mountDirId).toBeNull()
-    expect(doc.projectId).toBeNull()
+  it('未初始化知识库时 createDraft 拒绝', async () => {
+    const proj = await ProjectService.createProject(TEST_USER.id, { name: `${projName}-nkb` })
+    const dir = await ProjectService.createDir(TEST_USER.id, { parentId: proj.id, name: 'plain' })
+    await expect(KbService.createDraft({
+      userId: TEST_USER.id,
+      mountDirId: dir.id,
+      name: 'orphan',
+      content: 'x',
+    })).rejects.toBeInstanceOf(KbConflictError)
   })
 
   it('saveDraft 内容变 → draftHash 更新', async () => {
@@ -124,8 +139,8 @@ describe('kb PG 逻辑', () => {
 
   it('listDocs: dirId 精确 / includeDescendants 子树 / tagId 过滤', async () => {
     // docId 在 dirId(rust) 下；再造一个其它项目下的文档不应命中
-    const otherProj = await ProjectService.createProject(TEST_USER.id, { name: `${projName}-other` })
-    const d2 = await KbService.createDraft({ userId: TEST_USER.id, mountDirId: otherProj.id, name: 'x', content: 'y' })
+    const other = await setupKb(TEST_USER.id, `${projName}-other`)
+    const d2 = await KbService.createDraft({ userId: TEST_USER.id, mountDirId: other.kbDirId, name: 'x', content: 'y' })
 
     const exact = await KbService.listDocs({ userId: TEST_USER.id, dirId })
     expect(exact.some(d => d.id === docId)).toBe(true)
@@ -145,13 +160,14 @@ describe('kb PG 逻辑', () => {
 
   it('updateMeta 改名 → vdir 重算（PG only）', async () => {
     const updated = (await KbService.updateMeta(docId, { name: 'basics-v2' }))!
-    expect(updated.vdir).toBe(`${projName}/rust/basics-v2`)
+    expect(updated.vdir).toBe(`${projName}/kb/rust/basics-v2`)
   })
 
   it('updateMeta 移动 mountDirId → vdir + projectId 重 stamp', async () => {
-    const newDir = await ProjectService.createDir(TEST_USER.id, { parentId: projectId, name: 'other' })
+    const newDir = await ProjectService.createDir(TEST_USER.id, { parentId: kbDirId, name: 'other' })
     const updated = (await KbService.updateMeta(docId, { mountDirId: newDir.id }))!
-    expect(updated.vdir).toBe(`${projName}/other/basics-v2`)
+    expect(updated.vdir).toBe(`${projName}/kb/other/basics-v2`)
+    expect(updated.kbId).toBe(kbDirId)
     expect(updated.mountDirId).toBe(newDir.id)
     expect(updated.projectId).toBe(projectId) // 同 project，projectId 不变
   })
@@ -172,7 +188,7 @@ describe('kb PG 逻辑', () => {
   })
 
   it('delete 非空文件夹（有挂载文档）→ ProjectDirError', async () => {
-    const f = await ProjectService.createDir(TEST_USER.id, { parentId: projectId, name: 'delfolder' })
+    const f = await ProjectService.createDir(TEST_USER.id, { parentId: kbDirId, name: 'delfolder' })
     await KbService.createDraft({ userId: TEST_USER.id, mountDirId: f.id, name: 'inner', content: 'x' })
     await expect(ProjectService.delete(TEST_USER.id, f.id)).rejects.toBeInstanceOf(ProjectDirError)
   })
@@ -197,17 +213,17 @@ describe('kb PG 逻辑', () => {
   })
 
   it('ingestText 直建草稿', async () => {
-    const doc = await KbService.ingestText({ userId: TEST_USER.id, content: '# Hi\nsome text', name: 'paste1' })
+    const doc = await KbService.ingestText({ userId: TEST_USER.id, content: '# Hi\nsome text', name: 'paste1', mountDirId: kbDirId })
     expect(doc.indexingStatus).toBe('draft')
     expect(doc.content).toContain('Hi')
   })
 
   it('ingestFiles .md → 草稿 + 去重 skip', async () => {
     const buf = Buffer.from('# Title\nbody content here')
-    const r1 = await KbService.ingestFiles({ userId: TEST_USER.id, files: [{ buffer: buf, filename: 'a.md' }] })
+    const r1 = await KbService.ingestFiles({ userId: TEST_USER.id, files: [{ buffer: buf, filename: 'a.md' }], mountDirId: kbDirId })
     expect(r1).toHaveLength(1)
     expect(r1[0]!.skipped).toBe(false)
-    const r2 = await KbService.ingestFiles({ userId: TEST_USER.id, files: [{ buffer: buf, filename: 'a.md' }] })
+    const r2 = await KbService.ingestFiles({ userId: TEST_USER.id, files: [{ buffer: buf, filename: 'a.md' }], mountDirId: kbDirId })
     expect(r2[0]!.skipped).toBe(true)
   })
 
@@ -224,13 +240,13 @@ describe('kb PG 逻辑', () => {
       'top.md': '# Top\nhello',
       'sub/nested.md': '# Nested\nworld',
     })
-    const items = await KbService.ingestFromZip({ userId: TEST_USER.id, zip, mountDirId: projectId })
+    const items = await KbService.ingestFromZip({ userId: TEST_USER.id, zip, mountDirId: kbDirId })
     expect(items.length).toBe(2)
     const nested = items.find(i => i.name === 'nested')
     expect(nested).toBeDefined()
     expect(nested!.mountDirId).not.toBeNull() // 挂在 sub 子树
     const top = items.find(i => i.name === 'top')
-    expect(top!.mountDirId).toBe(projectId)
+    expect(top!.mountDirId).toBe(kbDirId)
   })
 
   it('ingestFromZip 超过 5 层子目录则跳过', async () => {
@@ -238,7 +254,7 @@ describe('kb PG 逻辑', () => {
       'a/b/c/d/e/ok.md': '# ok',
       'a/b/c/d/e/f/too-deep.md': '# too deep',
     })
-    const items = await KbService.ingestFromZip({ userId: TEST_USER.id, zip, mountDirId: projectId })
+    const items = await KbService.ingestFromZip({ userId: TEST_USER.id, zip, mountDirId: kbDirId })
     expect(items.some(i => i.name === 'ok')).toBe(true)
     expect(items.some(i => i.name === 'too-deep')).toBe(false)
   })
@@ -252,7 +268,7 @@ describe('kb PG 逻辑', () => {
       'sub/notes.txt': 'notes',
       'doc.docx': 'fake-docx',
     })
-    const items = await KbService.ingestFromZip({ userId: TEST_USER.id, zip, mountDirId: projectId })
+    const items = await KbService.ingestFromZip({ userId: TEST_USER.id, zip, mountDirId: kbDirId })
     expect(items.map(i => i.name).sort()).toEqual(['notes', 'readme'])
   })
 
@@ -264,12 +280,12 @@ describe('kb PG 逻辑', () => {
       'wiki/.DS_Store': 'store',
       'wiki/._hidden.md': ' appledouble',
     })
-    const items = await KbService.ingestFromZip({ userId: TEST_USER.id, zip, mountDirId: projectId })
+    const items = await KbService.ingestFromZip({ userId: TEST_USER.id, zip, mountDirId: kbDirId })
     expect(items.map(i => i.name)).toEqual(['good'])
   })
 
   it('saveDraft 把 error 复位 draft 并清 error', async () => {
-    const doc = await KbService.createDraft({ userId: TEST_USER.id, name: 'err-reset', content: 'v1' })
+    const doc = await KbService.createDraft({ userId: TEST_USER.id, mountDirId: kbDirId, name: 'err-reset', content: 'v1' })
     await db.update(kbDocuments).set({ indexingStatus: 'error', error: 'boom' }).where(eq(kbDocuments.id, doc.id))
     const saved = (await KbService.saveDraft(doc.id, { content: 'v2' }))!
     expect(saved.indexingStatus).toBe('draft')
@@ -284,27 +300,31 @@ describe('kb PG 逻辑', () => {
 describe('kb HTTP 路由', () => {
   const projName = `http-${RUN_TAG}`
   let projectId: string
+  let kbDirId: string
+  let otherKbDirId: string
 
   beforeAll(async () => {
-    const proj = await ProjectService.createProject(TEST_USER.id, { name: projName })
-    projectId = proj.id
+    const setup = await setupKb(TEST_USER.id, projName)
+    projectId = setup.projectId
+    kbDirId = setup.kbDirId
+    otherKbDirId = (await setupKb(OTHER_USER.id, `${projName}-other`)).kbDirId
   })
 
   it('路由建文档 POST /documents/create → 200', async () => {
     const res = await app.request('/documents/create', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'rdoc', mountDirId: projectId, content: 'c' }),
+      body: JSON.stringify({ name: 'rdoc', mountDirId: kbDirId, content: 'c' }),
     })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.doc.name).toBe('rdoc')
-    expect(body.doc.mountDirId).toBe(projectId)
+    expect(body.doc.mountDirId).toBe(kbDirId)
   })
 
   it('路由列表文档 POST /documents/list 默认只看自己（userId 隔离）', async () => {
-    await KbService.createDraft({ userId: TEST_USER.id, mountDirId: projectId, name: 'mine', content: 'c' })
-    await KbService.createDraft({ userId: OTHER_USER.id, name: 'other-doc', content: 'c' })
+    await KbService.createDraft({ userId: TEST_USER.id, mountDirId: kbDirId, name: 'mine', content: 'c' })
+    await KbService.createDraft({ userId: OTHER_USER.id, mountDirId: otherKbDirId, name: 'other-doc', content: 'c' })
     const res = await app.request('/documents/list', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -317,7 +337,7 @@ describe('kb HTTP 路由', () => {
   })
 
   it('路由 listDocs dirId + includeDescendants 列子树文档', async () => {
-    const dir = await ProjectService.createDir(TEST_USER.id, { parentId: projectId, name: 'sub' })
+    const dir = await ProjectService.createDir(TEST_USER.id, { parentId: kbDirId, name: 'sub' })
     await KbService.createDraft({ userId: TEST_USER.id, mountDirId: dir.id, name: 'in-sub', content: 'x' })
     const res = await app.request('/documents/list', {
       method: 'POST',
@@ -330,13 +350,13 @@ describe('kb HTTP 路由', () => {
   })
 
   it('他人 getDoc → 404', async () => {
-    const doc = await KbService.createDraft({ userId: TEST_USER.id, name: 'private-doc', content: 'secret' })
+    const doc = await KbService.createDraft({ userId: TEST_USER.id, mountDirId: kbDirId, name: 'private-doc', content: 'secret' })
     const res = await otherApp.request(`/documents/${doc.id}/get`, { method: 'POST' })
     expect(res.status).toBe(404)
   })
 
   it('他人 save-draft → 404', async () => {
-    const doc = await KbService.createDraft({ userId: TEST_USER.id, name: 'priv-patch', content: 'a' })
+    const doc = await KbService.createDraft({ userId: TEST_USER.id, mountDirId: kbDirId, name: 'priv-patch', content: 'a' })
     const res = await otherApp.request(`/documents/${doc.id}/save-draft`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -346,7 +366,7 @@ describe('kb HTTP 路由', () => {
   })
 
   it('路由草稿保存 POST /documents/:id/save-draft（含 content）', async () => {
-    const doc = await KbService.createDraft({ userId: TEST_USER.id, name: 'rpatch', content: 'a' })
+    const doc = await KbService.createDraft({ userId: TEST_USER.id, mountDirId: kbDirId, name: 'rpatch', content: 'a' })
     const res = await app.request(`/documents/${doc.id}/save-draft`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -380,17 +400,23 @@ const hasEmbedding = !!env.SILICONFLOW_API_KEY
 describe.runIf(hasEmbedding)('kb 提交流水线 + Phase 2 零写/setPayload', () => {
   const projName = `pipe-${RUN_TAG}`
   let projectId: string
+  let kbDirId: string
   let otherProjectId: string
+  let otherKbDirId: string
   let docId: string
   let chunkIdsBefore: string[]
 
   beforeAll(async () => {
-    projectId = (await ProjectService.createProject(TEST_USER.id, { name: projName })).id
-    otherProjectId = (await ProjectService.createProject(TEST_USER.id, { name: `${projName}-p2` })).id
+    const a = await setupKb(TEST_USER.id, projName)
+    projectId = a.projectId
+    kbDirId = a.kbDirId
+    const b = await setupKb(TEST_USER.id, `${projName}-p2`)
+    otherProjectId = b.projectId
+    otherKbDirId = b.kbDirId
   })
 
   it('commit(skipEnrich) → chunks=Qdrant点数 + completed', async () => {
-    const dir = await ProjectService.createDir(TEST_USER.id, { parentId: projectId, name: 'folder-a' })
+    const dir = await ProjectService.createDir(TEST_USER.id, { parentId: kbDirId, name: 'folder-a' })
     const doc = await KbService.createDraft({
       userId: TEST_USER.id,
       mountDirId: dir.id,
@@ -418,7 +444,7 @@ describe.runIf(hasEmbedding)('kb 提交流水线 + Phase 2 零写/setPayload', (
   })
 
   it('phase 2: 文档移动不重 embed + setPayload(mount_dir_id/project_id)，无 vdir', async () => {
-    const newDir = await ProjectService.createDir(TEST_USER.id, { parentId: projectId, name: 'moved' })
+    const newDir = await ProjectService.createDir(TEST_USER.id, { parentId: kbDirId, name: 'moved' })
     await KbService.updateMeta(docId, { mountDirId: newDir.id })
 
     // chunk id 不变（不重 embed）
@@ -469,7 +495,7 @@ describe.runIf(hasEmbedding)('kb 提交流水线 + Phase 2 零写/setPayload', (
     // 把 moved-renamed dir 移到 otherProject 根下
     const tree = await ProjectService.listTree(TEST_USER.id)
     const moved = tree.find(d => d.name === 'moved-renamed')!
-    await ProjectService.move(TEST_USER.id, moved.id, { newParentId: otherProjectId })
+    await ProjectService.move(TEST_USER.id, moved.id, { newParentId: otherKbDirId })
 
     const chunksAfter = (await db.select({ id: kbChunks.id }).from(kbChunks).where(eq(kbChunks.docId, docId))).map(c => c.id)
     expect([...chunksAfter].sort()).toEqual([...chunkIdsBefore].sort())
@@ -485,7 +511,7 @@ describe.runIf(hasEmbedding)('kb 提交流水线 + Phase 2 零写/setPayload', (
   it('commitBatch 并发：单篇失败不中断，聚合抛错', async () => {
     const doc = await KbService.createDraft({
       userId: TEST_USER.id,
-      mountDirId: projectId,
+      mountDirId: kbDirId,
       name: 'batch-ok',
       content: '# 批量提交\n并发提交应不因单篇失败而中断其余。',
     })
@@ -510,11 +536,11 @@ describe.runIf(hasEmbedding)('kb 提交流水线 + Phase 2 零写/setPayload', (
 // ============================================================
 describe.runIf(hasEmbedding)('kb 召回', () => {
   const projName = `recall-${RUN_TAG}`
-  let projectId: string
+  let kbDirId: string
   const docs = new Map<string, string>()
 
   beforeAll(async () => {
-    projectId = (await ProjectService.createProject(TEST_USER.id, { name: projName })).id
+    kbDirId = (await setupKb(TEST_USER.id, projName)).kbDirId
     const seed: Array<{ name: string, content: string }> = [
       {
         name: 'refund-policy',
@@ -555,7 +581,7 @@ describe.runIf(hasEmbedding)('kb 召回', () => {
     ]
 
     for (const s of seed) {
-      const doc = await KbService.createDraft({ userId: TEST_USER.id, mountDirId: projectId, name: s.name, content: s.content })
+      const doc = await KbService.createDraft({ userId: TEST_USER.id, mountDirId: kbDirId, name: s.name, content: s.content })
       docs.set(s.name, doc.id)
       await KbService.commit(doc.id, { skipEnrich: true })
     }

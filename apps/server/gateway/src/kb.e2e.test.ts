@@ -12,7 +12,7 @@ import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db } from './db/drizzle'
 import { migrateAppSchema } from './db/migrate'
-import { dirs, kbDocuments } from './db/schema'
+import { dirs, kbDocuments, kbs } from './db/schema'
 import { KbService } from './service/kb'
 import { ProjectService } from './service/project'
 
@@ -25,17 +25,20 @@ const OWNER = 'kb-e2e-owner'
 
 async function cleanup(): Promise<void> {
   await db.delete(kbDocuments).where(eq(kbDocuments.userId, OWNER))
+  await db.delete(kbs).where(eq(kbs.userId, OWNER))
   await db.delete(dirs).where(eq(dirs.userId, OWNER))
 }
 
 describe.runIf(runE2e)('kb e2e（业务流：草稿 → 提交 → 检索）', () => {
-  let projectId: string
+  let kbDirId: string
 
   beforeAll(async () => {
     await migrateAppSchema()
     await cleanup()
     const proj = await ProjectService.createProject(OWNER, { name: `e2e-${Date.now().toString(36)}` })
-    projectId = proj.id
+    const kbDir = await ProjectService.createDir(OWNER, { parentId: proj.id, name: 'kb' })
+    await KbService.mark(OWNER, kbDir.id)
+    kbDirId = kbDir.id
   })
 
   afterAll(async () => {
@@ -71,7 +74,7 @@ describe.runIf(runE2e)('kb e2e（业务流：草稿 → 提交 → 检索）', (
       files: [{ buffer, filename: 'e2e-policy.md' }],
       owner: OWNER,
       tags: ['e2e'],
-      mountDirId: projectId,
+      mountDirId: kbDirId,
     })
     expect(items).toHaveLength(1)
     expect(items[0]!.skipped).toBe(false)

@@ -6,6 +6,7 @@ CREATE TABLE "agent_configs" (
 	"user_prompt" text NOT NULL,
 	"kb_id" text NOT NULL,
 	"max_steps" integer NOT NULL,
+	"skill_codes" text[] DEFAULT '{}'::text[] NOT NULL,
 	"created_at" bigint NOT NULL,
 	"updated_at" bigint NOT NULL
 );--> statement-breakpoint

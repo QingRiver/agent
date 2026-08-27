@@ -7,6 +7,9 @@ export interface KbTreeFolder {
   name: string
   /** dirs.vdir 缓存路径，引入对话框展示用 */
   vdir: string
+  dirKind: 'project' | 'dir'
+  skillId: string | null
+  skillCode: string | null
   children: KbTreeNode[]
 }
 export interface KbTreeDoc {
@@ -19,12 +22,16 @@ export type KbTreeNode = KbTreeFolder | KbTreeDoc
 
 /**
  * 由 DirStore.dirTreeAtom（统一 dirs 树：project 根 + dir 子树）+ 文档列表
- * （按 mountDirId 挂载）组装渲染树。mountDirId=null 的文档挂根级（Inbox）。
+ * （按 mountDirId 挂载）组装渲染树。文档必须挂在知识库文件夹下。
  *
  * 替代旧 buildKbTree(nodes, docs)：KB 不再独立持树，文件夹即 dirs。
  */
-export function buildKbTree(tree: DirTree, docs: KbDocSummary[]): KbTreeNode[] {
-  const docsByMount = new Map<string | null, KbDocSummary[]>()
+export function buildKbTree(
+  tree: DirTree,
+  docs: KbDocSummary[],
+  skillsByDirId: Map<string, { id: string, code: string }> = new Map(),
+): KbTreeNode[] {
+  const docsByMount = new Map<string, KbDocSummary[]>()
   for (const d of docs) {
     const list = docsByMount.get(d.mountDirId) ?? []
     list.push(d)
@@ -33,14 +40,22 @@ export function buildKbTree(tree: DirTree, docs: KbDocSummary[]): KbTreeNode[] {
   for (const list of docsByMount.values())
     list.sort((a, b) => b.updatedAt - a.updatedAt)
 
-  function buildChildren(node: DirTreeNode): KbTreeNode[] {
-    const folders = node.children.map((n): KbTreeNode => ({
+  function toFolder(n: DirTreeNode): KbTreeFolder {
+    const skill = skillsByDirId.get(n.dir.id)
+    return {
       kind: 'folder',
       id: n.dir.id,
       name: n.dir.name,
       vdir: n.dir.vdir,
+      dirKind: n.dir.kind === 'project' ? 'project' : 'dir',
+      skillId: skill?.id ?? null,
+      skillCode: skill?.code ?? null,
       children: buildChildren(n),
-    }))
+    }
+  }
+
+  function buildChildren(node: DirTreeNode): KbTreeNode[] {
+    const folders = node.children.map((n): KbTreeNode => toFolder(n))
     const files = (docsByMount.get(node.dir.id) ?? []).map((d): KbTreeNode => ({
       kind: 'doc',
       id: d.id,
@@ -50,20 +65,7 @@ export function buildKbTree(tree: DirTree, docs: KbDocSummary[]): KbTreeNode[] {
     return [...folders, ...files]
   }
 
-  const roots: KbTreeNode[] = tree.roots.map((n): KbTreeNode => ({
-    kind: 'folder',
-    id: n.dir.id,
-    name: n.dir.name,
-    vdir: n.dir.vdir,
-    children: buildChildren(n),
-  }))
-  const rootDocs = (docsByMount.get(null) ?? []).map((d): KbTreeNode => ({
-    kind: 'doc',
-    id: d.id,
-    name: d.name,
-    doc: d,
-  }))
-  return [...roots, ...rootDocs]
+  return tree.roots.map((n): KbTreeNode => toFolder(n))
 }
 
 /** nodeId 是否在 ancestorId 子树内（含自身）——基于 DirTree 的 parentId 链 */

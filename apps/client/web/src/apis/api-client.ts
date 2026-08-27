@@ -36,10 +36,24 @@ function isOK<R extends ClientResponse<unknown, number>>(
     throw new Error(res.statusText || `Request failed: ${res.status}`)
 }
 
+async function errorMessage(res: ClientResponse<unknown, number>): Promise<string> {
+  try {
+    const body = await res.json() as { error?: string }
+    if (typeof body.error === 'string' && body.error)
+      return body.error
+  }
+  catch {
+    // ignore
+  }
+  return res.statusText || `Request failed: ${res.status}`
+}
+
 /** 非 200 抛错；返回 200 响应体。 */
 export async function successData<R extends ClientResponse<unknown, number>>(
   res: R,
 ): Promise<SuccessBody<R>> {
+  if (res.status !== 200)
+    throw new Error(await errorMessage(res))
   isOK(res)
   return await res.json() as SuccessBody<R>
 }

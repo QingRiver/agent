@@ -117,12 +117,15 @@ export function AgentLabPage() {
     }
   }, [])
 
-  // 表单变更 → debounce upsert → 只把 agentConfigId 交给 CopilotKit properties
+  // 表单变更 → upsert。skillCodes 立即写库，避免勾选后立刻对话仍 SKILL_NOT_BOUND
   const name = config?.name
   const description = config?.description
   const userPrompt = config?.userPrompt
   const kbId = config?.kbId
   const maxSteps = config?.maxSteps
+  const skillCodes = config?.skillCodes
+  const prevSkillCodesRef = useRef<string[] | undefined>(undefined)
+
   useEffect(() => {
     if (
       name === undefined
@@ -130,9 +133,12 @@ export function AgentLabPage() {
       || userPrompt === undefined
       || kbId === undefined
       || maxSteps === undefined
+      || skillCodes === undefined
     ) {
       return
     }
+    const skillsChanged = JSON.stringify(prevSkillCodesRef.current) !== JSON.stringify(skillCodes)
+    prevSkillCodesRef.current = skillCodes
     let cancelled = false
     const timer = window.setTimeout(() => {
       void (async () => {
@@ -144,6 +150,7 @@ export function AgentLabPage() {
           userPrompt,
           kbId,
           maxSteps,
+          skillCodes,
         }
         try {
           const saved = await AgentConfigApi.upsert(payload)
@@ -164,12 +171,12 @@ export function AgentLabPage() {
           console.error('[AgentLabPage] upsert failed', err)
         }
       })()
-    }, 350)
+    }, skillsChanged ? 0 : 350)
     return () => {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [name, description, userPrompt, kbId, maxSteps])
+  }, [name, description, userPrompt, kbId, maxSteps, skillCodes])
 
   async function createThread() {
     setCreating(true)
