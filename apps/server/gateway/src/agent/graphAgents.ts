@@ -96,6 +96,18 @@ const GRAPH_AGENT_DEFINITIONS = {
       return buildMessagesInput(userText)
     },
   },
+  ha: {
+    description: 'Home Assistant（官方 MCP + ask_human 中断）',
+    resolveStreamInput: (input) => {
+      const resume = resolveResumeFromRunAgentInput(input)
+      if (resume != null)
+        return new Command({ resume })
+      const userText = extractLastUserMessage(input, {
+        defaultMessage: '客厅灯现在是什么状态？',
+      })
+      return buildMessagesInput(userText)
+    },
+  },
   editor: {
     description: '文本编辑器（editorPath=job 润色/⌘K；chat 为 Ask/Write 对话）',
     resolveStreamInput: (input) => {

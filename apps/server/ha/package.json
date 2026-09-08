@@ -1,0 +1,11 @@
+{
+  "name": "ha",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Home Assistant Python service (uv)",
+  "scripts": {
+    "setup": "uv sync",
+    "dev": "uv run python -m ha.main",
+    "lint": "uv run ruff check ."
+  }
+}

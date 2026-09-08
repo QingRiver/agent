@@ -1,7 +1,7 @@
 ---
 name: devops
 description: >-
-  本仓库基础设施与 E2E 的统一入口。用户或 agent 要启动/检查 Docker infra（postgres、qdrant、markitdown、qlib、redis）、
+  本仓库基础设施与 E2E 的统一入口。用户或 agent 要启动/检查 Docker infra（postgres、qdrant、markitdown、qlib、redis、ha）、
   跑 kb/auth e2e、qlib 数据更新时，先读本 skill，再执行 `pnpm devops` 子命令；不要散落调用已废弃的
   kb:infra:* / kb:e2e / qlib:init 等根脚本。
 ---
@@ -19,6 +19,7 @@ Agent 执行启停、健康检查、E2E 时**必须**走此入口，不要直接
 | 启动知识库依赖 | `pnpm devops infra up kb` |
 | 启动 server 持久化 | `pnpm devops infra up postgres` |
 | 启动 Redis（gtd 缓存/锁） | `pnpm devops infra up redis` |
+| 启动 Home Assistant | `pnpm devops infra up ha` |
 | 启动测试依赖（含 Redis） | `pnpm devops infra up test` |
 | 启动全部 infra | `pnpm devops infra up all` |
 | 健康检查 | `pnpm devops infra status kb` |
@@ -41,9 +42,10 @@ Agent 执行启停、健康检查、E2E 时**必须**走此入口，不要直接
 | `markitdown` | 文档转换 `:8200` |
 | `qlib` | 行情 API `:8000` |
 | `redis` | Redis `:6379`（gtd 缓存 + 分布式锁；首次需拉 `redis:7-alpine`） |
+| `ha` | Home Assistant `:8123`（管理 UI + 可选官方 MCP；**不**含于 `test`/`all`，按需启动） |
 | `kb` | qdrant + markitdown（RAG 默认） |
-| `test` | postgres + qdrant + markitdown + redis（不含 qlib） |
-| `all` | postgres + qdrant + markitdown + qlib + redis |
+| `test` | postgres + qdrant + markitdown + redis（不含 qlib / ha） |
+| `all` | postgres + qdrant + markitdown + qlib + redis（不含 ha） |
 
 ```bash
 pnpm devops infra up kb [--build]   # 已健康则跳过；--build 强制 rebuild 本地镜像

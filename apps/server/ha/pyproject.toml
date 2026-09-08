@@ -1,0 +1,18 @@
+[project]
+name = "ha"
+version = "0.1.0"
+description = "Home Assistant Python service in the agent monorepo"
+readme = "README.md"
+authors = [ { name = "kscarrot", email = "kelstrait@icloud.com" } ]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+ha = "ha.main:main"
+
+[build-system]
+requires = [ "uv_build>=0.9.21,<0.10.0" ]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [ "ruff>=0.16.6", ]

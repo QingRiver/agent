@@ -54,6 +54,12 @@ const SERVICES: Record<Exclude<InfraTarget, 'kb' | 'test' | 'all'>, ServiceDef> 
     container: 'redis',
     healthExec: ['redis-cli', 'ping'],
   },
+  ha: {
+    name: 'ha',
+    composeDir: INFRA.ha,
+    container: 'homeassistant',
+    healthUrl: 'http://localhost:8123/',
+  },
 }
 
 /** kb = qdrant + markitdown；test = 测试所需（postgres+kb+redis，不含 qlib）；all = 全部。 */

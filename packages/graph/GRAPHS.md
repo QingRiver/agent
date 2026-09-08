@@ -147,3 +147,25 @@ graph TD
 	classDef last fill:#bfb6fc;
 ```
 
+## `haGraph`
+
+来源：`src/graphs/ha.ts`
+
+Home Assistant 官方 MCP（`HA_URL` + `HA_TOKEN` → `{HA_URL}/api/mcp`），懒加载工具集。
+
+```mermaid
+%%{init: {'flowchart': {'curve': 'linear'}}}%%
+graph TD
+	__start__([__start__]):::first
+	agent(agent)
+	tools(tools)
+	__end__([__end__]):::last
+	__start__ --> agent;
+	tools --> agent;
+	agent -.-> tools;
+	agent -.-> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2;
+	classDef first fill-opacity:0;
+	classDef last fill:#bfb6fc;
+```
+

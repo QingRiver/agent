@@ -1,6 +1,7 @@
 packages:
   - apps/*/*
   - packages/*
+  - '!**/.venv/**'
 
 catalog:
   '@ag-ui/client': ^0.0.57

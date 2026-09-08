@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { claudeAgentGraph } from './graphs/claudeAgent'
 import { devGraph } from './graphs/dev'
 import { editorGraph } from './graphs/editor'
+import { haGraph } from './graphs/ha'
 import { kbGraph } from './graphs/kb'
 import { reactAgentGraph } from './graphs/reactAgent'
 import { tushareGraph } from './graphs/tushare'
@@ -14,6 +15,7 @@ export {
   WRITER_CHANGE_SUMMARIES_EVENT,
   type WriterChangeSummary,
 } from './graphs/editor'
+export { haGraph } from './graphs/ha'
 export {
   kbGraph,
 } from './graphs/kb'
@@ -67,6 +69,7 @@ export const Graphs = {
   dev: devGraph,
   kb: kbGraph,
   tushare: tushareGraph,
+  ha: haGraph,
   editor: editorGraph,
 } as const
 

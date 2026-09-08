@@ -146,6 +146,7 @@ vite.config.ts.timestamp-*
 **/__pycache__/
 *.py[cod]
 .pytest_cache/
+.venv/
 
 .DS_Store
 **/.DS_Store
@@ -168,6 +169,8 @@ apps/server/gateway/data/*.sqlite-shm
 /infra/postgres/pg_data/
 
 /infra/redis/redis_data/
+
+/infra/ha/config/
 
 # Qlib 共享数据包 zip（仓库根目录）
 /source.zip

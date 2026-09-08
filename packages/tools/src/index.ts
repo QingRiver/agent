@@ -1,6 +1,8 @@
 import { openMeteo } from './openMeteo'
 import { tushare } from './tushare'
 
+export type { HaMcp } from './mcp/haClient'
+export { createHaMcp, HA_TOKEN_HINT, HA_URL_HINT } from './mcp/haClient'
 export type { StockCandidate } from './mcp/stockResolve'
 
 export {

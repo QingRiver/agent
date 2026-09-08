@@ -16,12 +16,12 @@
 | [packages/proto](./packages/proto/README.md) | `@agent/proto` — HITL / 引文 / Writer 中性契约 |
 | [packages/ui](./packages/ui/README.md) | `@agent/ui` — 对话卡片 View（ask_human）+ Storybook |
 | [packages/claude](./packages/claude/README.md) | `@agent/claude` — Claude Agent SDK 适配 |
-| [packages/tools](./packages/tools/README.md) | `@agent/tools` — Open-Meteo、Tushare / MCP |
+| [packages/tools](./packages/tools/README.md) | `@agent/tools` — Open-Meteo、Tushare / HA MCP |
 | [packages/markdown](./packages/markdown/README.md) | `@agent/markdown` — Markdown → HTML + TOC |
 | [packages/env](./packages/env/README.md) | `@agent/env` — 根 `.env` 加载 + zod 校验 |
 | [packages/cli](./packages/cli/README.md) | `@agent/cli` — 终端交互实验 |
 | [packages/e2e](./packages/e2e/README.md) | `@agent/e2e` — agent / UI E2E（经 `pnpm devops`） |
-| [infra/](./infra/) | postgres、qdrant、markitdown、qlib |
+| [infra/](./infra/) | postgres、qdrant、markitdown、qlib、redis、ha |
 
 
 
@@ -63,6 +63,8 @@ cp .env.example .env
 | `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL`              | better-auth                                  |
 | `QDRANT_URL` / `SILICONFLOW_*` / `KB_*`               | 知识库 RAG（可选）                                  |
 | `TUSHARE_TOKEN`                                       | A 股行情 MCP（可选）                                |
+| `HA_URL` / `HA_TOKEN`                                 | Home Assistant MCP（可选；本地：`pnpm devops infra up ha`） |
+
 | `PORT`                                                | Server 端口，默认 `3000`                          |
 
 
@@ -75,6 +77,7 @@ cp .env.example .env
 ```bash
 pnpm devops infra up postgres   # 认证、会话、checkpoint
 pnpm devops infra up kb         # qdrant + markitdown（RAG）
+pnpm devops infra up ha         # Home Assistant UI :8123（按需，不在 all）
 # 或一次性：pnpm devops infra up all
 pnpm devops infra status all
 ```
@@ -126,6 +129,7 @@ pnpm dev
 | `hitl`           | 人在回路（`interrupt` + resume）            |
 | `kb`             | 知识库 RAG（混合召回 + rerank + 引文）           |
 | `tushare`        | A 股个股分析（Tushare MCP + ask_human）      |
+| `ha`             | Home Assistant（官方 MCP + ask_human）       |
 | `editor`         | 文本编辑器（job 润色/⌘K；chat Ask/Write）   |
 | `claudeAgent`    | Claude Agent SDK + checkpoint + AG-UI |
 | `reactAgent`     | 通用 ReAct（可配 prompt）                   |

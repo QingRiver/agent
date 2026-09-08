@@ -19,6 +19,7 @@ export const INFRA = {
   markitdown: join(REPO_ROOT, 'infra/markitdown'),
   qlib: join(REPO_ROOT, 'infra/qlib'),
   redis: join(REPO_ROOT, 'infra/redis'),
+  ha: join(REPO_ROOT, 'infra/ha'),
 } as const
 
 export type InfraTarget = keyof typeof INFRA | 'kb' | 'test' | 'all'

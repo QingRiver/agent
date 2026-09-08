@@ -16,6 +16,9 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter server --filter client --filter rsc-engine dev",
+    "dev:ha": "pnpm --filter ha run dev",
+    "setup:ha": "pnpm --filter ha run setup",
+    "prepare": "pnpm --filter ha run setup",
     "cli": "pnpm --filter @agent/cli start",
     "tc": "pnpm -r run tc",
     "tsc-go": "tsx scripts/tsc-go.ts",

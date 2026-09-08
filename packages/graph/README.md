@@ -11,13 +11,13 @@ LangGraph Agent 图定义与 AG-UI 流式映射。Web / Copilot 侧可运行图�
 | `devGraph` / `kbGraph` / `editorGraph` 等 | 各图及扩展事件名 |
 | `ASK_*` | 人在回路 ask 工具与系统提示（内部走 `hitl*` helpers） |
 
-当前 `Graphs` 键：`claudeAgent`、`reactAgent`、`dev`、`kb`、`tushare`、`editor`。
+当前 `Graphs` 键：`claudeAgent`、`reactAgent`、`dev`、`kb`、`tushare`、`ha`、`editor`。
 
 ## 目录
 
 ```text
 src/
-├── graphs/                 # 薄装配（dev / kb / tushare / editor / claudeAgent / reactAgent）
+├── graphs/                 # 薄装配（dev / kb / tushare / ha / editor / claudeAgent / reactAgent）
 ├── nodes/
 │   ├── writeEdit.ts        # makeWriteEditNode + runWriteEdit
 │   ├── chatCompletion.ts   # runChatCompletion(silent|streamReasoning)
@@ -28,6 +28,7 @@ src/
 │   ├── ask-tools.ts        # ask_* LC tools
 │   ├── hitl/interrupt.ts   # 平台 hitlInput/Select/…（与 @agent/ui InterruptCard 同协议）
 │   ├── tushare/            # resolveStock、toolset、flash fix
+│   ├── ha/                 # Home Assistant MCP toolset
 │   ├── weather.ts
 │   └── order.ts
 ├── prompts/                # editorPrompts 等
