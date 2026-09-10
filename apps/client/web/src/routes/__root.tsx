@@ -20,22 +20,10 @@ function RootLayout() {
           <header className="border-b border-border px-6 py-4">
             <nav className="mx-auto flex max-w-4xl items-center gap-4">
               <Link
-                to="/"
+                to="/projects"
                 className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
               >
-                Chat
-              </Link>
-              <Link
-                to="/text-editor"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
-              >
-                编辑器
-              </Link>
-              <Link
-                to="/kb"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
-              >
-                知识库
+                项目
               </Link>
               <Link
                 to="/gtd"
@@ -48,12 +36,6 @@ function RootLayout() {
                 className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
               >
                 Agent Lab
-              </Link>
-              <Link
-                to="/rsc"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
-              >
-                RSC
               </Link>
               <div className="ml-auto">
                 <UserAvatarMenu />

@@ -69,4 +69,25 @@ describe('renderMarkdown', () => {
     expect(html).toBe('')
     expect(toc).toEqual([])
   })
+
+  it('剥离文首 YAML frontmatter，不把收尾 --- 当成 Setext 标题进 toc', () => {
+    const md = [
+      '---',
+      'name: bark',
+      'description: 大狗叫',
+      '---',
+      '',
+      '如果你听到 大狗',
+      '你就直接回复叫叫叫',
+      '',
+      '## 真正标题',
+      '',
+    ].join('\n')
+    const { html, toc } = renderMarkdown(md)
+    expect(html).not.toMatch(/name:\s*bark/)
+    expect(html).toContain('如果你听到 大狗')
+    expect(toc).toEqual([
+      { text: '真正标题', level: 2, slug: '真正标题' },
+    ])
+  })
 })

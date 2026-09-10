@@ -1,5 +1,13 @@
 import type { Context } from 'hono'
-import type { SkillCreate, SkillSetTags, VersionTextUpsert } from '../../shared/skill'
+import type {
+  SkillCreate,
+  SkillSetTags,
+  VersionTextGet,
+  VersionTextListVersions,
+  VersionTextPublish,
+  VersionTextType,
+  VersionTextUpsert,
+} from '../../shared/skill'
 import type { AppEnv, AuthUser } from '../types'
 import { SkillService } from '../service/skill'
 import { TagsService } from '../service/tags'
@@ -32,18 +40,47 @@ export class SkillHandlers {
     return c.json({ skill })
   }
 
-  static async listAllVersionTexts(c: Context<AppEnv>, user: AuthUser) {
-    const versionTexts = await SkillService.listAllVersionTexts(user.id)
+  static async listAllVersionTexts(c: Context<AppEnv>, user: AuthUser, type?: VersionTextType) {
+    const versionTexts = await SkillService.listAllVersionTexts(user.id, type)
     return c.json({ versionTexts })
   }
 
-  static async listVersionTexts(c: Context<AppEnv>, user: AuthUser, dirId: string) {
-    const versionTexts = await SkillService.listVersionTexts(user.id, dirId)
+  static async listVersionTexts(
+    c: Context<AppEnv>,
+    user: AuthUser,
+    dirId: string,
+    type?: VersionTextType,
+  ) {
+    const versionTexts = await SkillService.listVersionTexts(user.id, dirId, type)
     return c.json({ versionTexts })
+  }
+
+  static async listVersions(c: Context<AppEnv>, user: AuthUser, req: VersionTextListVersions) {
+    const versionTexts = await SkillService.listVersions(user.id, req.dirId, req.filename)
+    return c.json({ versionTexts })
+  }
+
+  static async getVersionText(c: Context<AppEnv>, user: AuthUser, req: VersionTextGet) {
+    const versionText = await SkillService.getVersionText(user.id, req)
+    return c.json({ versionText })
   }
 
   static async upsertVersionText(c: Context<AppEnv>, user: AuthUser, req: VersionTextUpsert) {
-    const versionText = await SkillService.upsertVersionText(user.id, req)
+    const versionText = await SkillService.upsertVersionText(user.id, {
+      dirId: req.dirId,
+      filename: req.filename,
+      content: req.content,
+      ...(req.type != null ? { type: req.type } : {}),
+    })
+    return c.json({ versionText })
+  }
+
+  static async publishVersionText(c: Context<AppEnv>, user: AuthUser, req: VersionTextPublish) {
+    const versionText = await SkillService.publishVersionText(user.id, {
+      dirId: req.dirId,
+      filename: req.filename,
+      ...(req.versionDesc != null ? { versionDesc: req.versionDesc } : {}),
+    })
     return c.json({ versionText })
   }
 

@@ -3,6 +3,21 @@ export const SKILL_ENTRY_FILENAME = 'SKILL.md'
 
 export const READ_SKILL_FILE_TOOL_NAME = 'read_skill_file'
 
+/** version_text.type：用途枚举（不参与同名唯一） */
+export const VERSION_TEXT_TYPE = {
+  SKILL: 'skill',
+  PROMPT: 'prompt',
+  CONFIG: 'config',
+} as const
+
+export type VersionTextType = (typeof VERSION_TEXT_TYPE)[keyof typeof VERSION_TEXT_TYPE]
+
+export const VERSION_TEXT_TYPES = [
+  VERSION_TEXT_TYPE.SKILL,
+  VERSION_TEXT_TYPE.PROMPT,
+  VERSION_TEXT_TYPE.CONFIG,
+] as const
+
 export const RESERVED_SKILL_CODES = [
   'kb_search',
   'ask_input',

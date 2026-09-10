@@ -4,9 +4,12 @@ import {
   SkillCreateSchema,
   SkillIdParamSchema,
   SkillSetTagsSchema,
+  VersionTextGetSchema,
   VersionTextIdParamSchema,
   VersionTextListAllSchema,
   VersionTextListSchema,
+  VersionTextListVersionsSchema,
+  VersionTextPublishSchema,
   VersionTextUpsertSchema,
 } from '../../shared/skill'
 import { SkillHandlers } from '../handlers/skill'
@@ -36,11 +39,22 @@ export const versionTextRoutes = new Hono<AppEnv>()
   .onError(handleAppError)
   .use('*', requireAuth)
   .post('/list', zValidator('json', VersionTextListSchema), c =>
-    SkillHandlers.listVersionTexts(c, c.get('user')!, c.req.valid('json').dirId))
+    SkillHandlers.listVersionTexts(
+      c,
+      c.get('user')!,
+      c.req.valid('json').dirId,
+      c.req.valid('json').type,
+    ))
   .post('/list-all', zValidator('json', VersionTextListAllSchema), c =>
-    SkillHandlers.listAllVersionTexts(c, c.get('user')!))
+    SkillHandlers.listAllVersionTexts(c, c.get('user')!, c.req.valid('json').type))
+  .post('/list-versions', zValidator('json', VersionTextListVersionsSchema), c =>
+    SkillHandlers.listVersions(c, c.get('user')!, c.req.valid('json')))
+  .post('/get', zValidator('json', VersionTextGetSchema), c =>
+    SkillHandlers.getVersionText(c, c.get('user')!, c.req.valid('json')))
   .post('/upsert', zValidator('json', VersionTextUpsertSchema), c =>
     SkillHandlers.upsertVersionText(c, c.get('user')!, c.req.valid('json')))
+  .post('/publish', zValidator('json', VersionTextPublishSchema), c =>
+    SkillHandlers.publishVersionText(c, c.get('user')!, c.req.valid('json')))
   .post(
     '/:id/delete',
     zValidator('param', VersionTextIdParamSchema),

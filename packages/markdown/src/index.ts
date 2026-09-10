@@ -50,6 +50,13 @@ const marked = new Marked()
 
 const HEADING_RE = /<h([1-6])[^>]*\sid=["']([^"']+)["'][^>]*>([\s\S]*?)<\/h\1>/gi
 
+/** 文首 YAML frontmatter（`---` … `---`）；不剥则会把收尾 --- 当成 Setext h2 下划线。 */
+const YAML_FRONTMATTER_RE = /^---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/
+
+export function stripYamlFrontmatter(md: string): string {
+  return md.replace(YAML_FRONTMATTER_RE, '')
+}
+
 function stripTags(html: string): string {
   return html.replace(/<[^>]+>/g, '').trim()
 }
@@ -73,7 +80,8 @@ function extractToc(html: string): TocItem[] {
  */
 export function renderMarkdown(md: string): { html: string, toc: TocItem[] } {
   try {
-    const html = marked.parse(md || '', { async: false }) as string
+    const body = stripYamlFrontmatter(md || '')
+    const html = marked.parse(body, { async: false }) as string
     return {
       html,
       toc: extractToc(html),

@@ -37,9 +37,12 @@ function writeLsExpanded(ids: string[]): void {
 export function KbSidebar({
   recallOpen = false,
   onToggleRecall,
+  focusKbDirId,
 }: {
   recallOpen?: boolean
   onToggleRecall?: () => void
+  /** 从项目进入时只展示该知识库子树 */
+  focusKbDirId?: string
 }) {
   const {
     dirTree,
@@ -62,16 +65,24 @@ export function KbSidebar({
   const skillsByDirId = useAtomValue(SkillStore.skillsByDirIdAtom)
   const dirsById = useAtomValue(DirStore.dirsByIdAtom)
   const skillError = useAtomValue(SkillStore.errorAtom)
-  const tree = buildKbTree(dirTree, filteredDocs, skillsByDirId)
+  const tree = buildKbTree(
+    dirTree,
+    filteredDocs,
+    focusKbDirId ? new Map() : skillsByDirId,
+    focusKbDirId ? { rootDirId: focusKbDirId } : undefined,
+  )
 
   useEffect(() => {
     void SkillStore.refresh()
   }, [])
-  const rootFolderIds = new Set(dirTree.roots.map(n => n.dir.id))
   /** 展开/折叠持久化：localStorage 记用户展开的文件夹 id；首次（无记录）默认根展开 */
   const [expanded, setExpanded] = useState<Set<string>>(() => {
+    if (focusKbDirId)
+      return new Set([focusKbDirId])
     const raw = readLsExpanded()
-    return raw ? new Set(raw) : new Set(rootFolderIds)
+    if (raw)
+      return new Set(raw)
+    return new Set(dirTree.roots.map(n => n.dir.id))
   })
   const [importTarget, setImportTarget] = useState<{ mountDirId: string, mountPath: string } | null>(null)
   const [tagManagerOpen, setTagManagerOpen] = useState(false)
@@ -125,14 +136,16 @@ export function KbSidebar({
             <Search className="size-3.5" />
           </button>
         )}
-        <button
-          type="button"
-          title="项目管理"
-          onClick={() => setProjectManagerOpen(true)}
-          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <Settings2 className="size-3.5" />
-        </button>
+        {!focusKbDirId && (
+          <button
+            type="button"
+            title="项目管理"
+            onClick={() => setProjectManagerOpen(true)}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <Settings2 className="size-3.5" />
+          </button>
+        )}
         <button
           type="button"
           title="刷新"
@@ -186,7 +199,7 @@ export function KbSidebar({
       )}
       {!isLoading && tree.length === 0 && (
         <p className="px-2 py-2 text-sm text-muted-foreground">
-          暂无内容。先用下方「新建项目」创建根级项目，再在项目/文件夹行上点「引入文档」。
+          暂无内容。在项目中初始化知识库文件夹后，可在此引入文档。
         </p>
       )}
       <KbFileTree
@@ -202,13 +215,17 @@ export function KbSidebar({
         onMoveFolder={moveFolder}
         onMoveDoc={moveDoc}
         onImportInto={(mountDirId, mountPath) => setImportTarget({ mountDirId, mountPath })}
-        onMarkSkill={async (dirId) => {
-          const dir = dirsById.get(dirId)
-          if (!dir)
-            return
-          await SkillStore.markDir(dirId, dir).catch(() => {})
-        }}
-        onUnmarkSkill={id => SkillStore.unmark(id)}
+        {...(focusKbDirId
+          ? {}
+          : {
+              onMarkSkill: async (dirId: string) => {
+                const dir = dirsById.get(dirId)
+                if (!dir)
+                  return
+                await SkillStore.markDir(dirId, dir).catch(() => {})
+              },
+              onUnmarkSkill: (id: string) => SkillStore.unmark(id),
+            })}
       />
       {importTarget && (
         <KbImportDialog

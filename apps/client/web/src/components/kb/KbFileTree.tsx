@@ -503,13 +503,18 @@ function TreeNodes({
                         {open
                           ? <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
                           : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
-                        {open
-                          ? <FolderOpen className="size-3.5 shrink-0 text-amber-500/80" />
-                          : <Folder className="size-3.5 shrink-0 text-amber-500/80" />}
-                        <span className="truncate">{node.name}</span>
-                        {node.skillCode && (
-                          <span className="rounded bg-sky-500/15 px-1 py-0.5 text-[10px] text-sky-700 dark:text-sky-300">
-                            {node.skillCode}
+                        {node.skillCode && onMarkSkill
+                          ? <Sparkles className="size-3.5 shrink-0 text-sky-600" />
+                          : open
+                            ? <FolderOpen className="size-3.5 shrink-0 text-amber-500/80" />
+                            : <Folder className="size-3.5 shrink-0 text-amber-500/80" />}
+                        <span className="min-w-0 flex-1 truncate">{node.name}</span>
+                        {node.skillCode && onMarkSkill && (
+                          <span
+                            className="shrink-0 rounded bg-sky-500/15 px-1 py-0.5 text-[10px] text-sky-700 dark:text-sky-300"
+                            title={node.skillCode}
+                          >
+                            Skill
                           </span>
                         )}
                       </button>
@@ -530,27 +535,29 @@ function TreeNodes({
                         >
                           <FolderPlus className="size-3" />
                         </button>
-                        {node.skillId
-                          ? (
+                        {onMarkSkill && (
+                          node.skillId
+                            ? (
+                                <button
+                                  type="button"
+                                  title="卸标 Skill"
+                                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                  onClick={() => void onUnmarkSkill?.(node.skillId!)}
+                                >
+                                  <Sparkles className="size-3 text-sky-600" />
+                                </button>
+                              )
+                            : node.dirKind === 'dir' && (
                               <button
                                 type="button"
-                                title="卸标 Skill"
+                                title="升级为 Skill"
                                 className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                onClick={() => void onUnmarkSkill?.(node.skillId!)}
+                                onClick={() => void onMarkSkill(node.id)}
                               >
-                                <Sparkles className="size-3 text-sky-600" />
+                                <Sparkles className="size-3" />
                               </button>
                             )
-                          : node.dirKind === 'dir' && (
-                            <button
-                              type="button"
-                              title="升级为 Skill"
-                              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                              onClick={() => void onMarkSkill?.(node.id)}
-                            >
-                              <Sparkles className="size-3" />
-                            </button>
-                          )}
+                        )}
                         <button
                           type="button"
                           title="重命名"

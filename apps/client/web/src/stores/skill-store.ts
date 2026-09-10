@@ -1,5 +1,6 @@
+import type { VersionTextType } from '@agent/proto'
 import type { SkillRow, VersionTextRow } from '@apis/skill-api'
-import { SKILL_ENTRY_FILENAME, slugifySkillCode } from '@agent/proto'
+import { SKILL_ENTRY_FILENAME, slugifySkillCode, VERSION_TEXT_TYPE } from '@agent/proto'
 import { SkillApi } from '@apis/skill-api'
 import { atom, getDefaultStore } from 'jotai'
 
@@ -61,6 +62,7 @@ export class SkillStore {
           dirId,
           filename: SKILL_ENTRY_FILENAME,
           content: `---\nname: ${dir.name.replace(/[\n\r]+/g, ' ')}\ndescription: \n---\n`,
+          type: VERSION_TEXT_TYPE.SKILL,
         })
       }
       return skill
@@ -83,8 +85,16 @@ export class SkillStore {
     store.set(SkillStore.skillsAtom, prev => prev.map(s => s.id === skill.id ? skill : s))
   }
 
-  static async upsertText(body: { dirId: string, filename: string, content: string }): Promise<VersionTextRow> {
-    const text = await SkillApi.upsertVersionText(body)
+  static async upsertText(body: {
+    dirId: string
+    filename: string
+    content: string
+    type?: VersionTextType
+  }): Promise<VersionTextRow> {
+    const text = await SkillApi.upsertVersionText({
+      ...body,
+      type: body.type ?? VERSION_TEXT_TYPE.SKILL,
+    })
     const store = SkillStore.store()
     store.set(SkillStore.textsAtom, (prev) => {
       const idx = prev.findIndex(t => t.id === text.id)
@@ -104,8 +114,28 @@ export class SkillStore {
     return text
   }
 
+  static async listVersions(dirId: string, filename: string): Promise<VersionTextRow[]> {
+    return SkillApi.listVersions(dirId, filename)
+  }
+
+  static async getVersion(dirId: string, filename: string, version: number): Promise<VersionTextRow> {
+    return SkillApi.getVersion(dirId, filename, version)
+  }
+
+  static async publishText(body: {
+    dirId: string
+    filename: string
+    versionDesc?: string
+  }): Promise<VersionTextRow> {
+    return SkillApi.publishVersionText(body)
+  }
+
   static async deleteText(id: string): Promise<void> {
+    const row = SkillStore.store().get(SkillStore.textsAtom).find(t => t.id === id)
     await SkillApi.deleteVersionText(id)
-    SkillStore.store().set(SkillStore.textsAtom, prev => prev.filter(t => t.id !== id))
+    SkillStore.store().set(SkillStore.textsAtom, prev =>
+      row
+        ? prev.filter(t => !(t.mountDirId === row.mountDirId && t.filename === row.filename))
+        : prev.filter(t => t.id !== id))
   }
 }

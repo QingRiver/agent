@@ -12,12 +12,15 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TextEditorRouteImport } from './routes/text-editor'
 import { Route as RscRouteImport } from './routes/rsc'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as KbRouteImport } from './routes/kb'
 import { Route as GtdRouteImport } from './routes/gtd'
 import { Route as AgentLabRouteImport } from './routes/agent-lab'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as SettingsThemeRouteImport } from './routes/settings.theme'
+import { Route as ProjectsIdRouteImport } from './routes/projects.$id'
 
 const TextEditorRoute = TextEditorRouteImport.update({
   id: '/text-editor',
@@ -32,6 +35,11 @@ const RscRoute = RscRouteImport.update({
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectsRoute = ProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -59,10 +67,20 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProjectsRoute,
+} as any)
 const SettingsThemeRoute = SettingsThemeRouteImport.update({
   id: '/settings/theme',
   path: '/settings/theme',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectsIdRoute = ProjectsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ProjectsRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -71,10 +89,13 @@ export interface FileRoutesByFullPath {
   '/gtd': typeof GtdRoute
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
+  '/projects': typeof ProjectsRouteWithChildren
   '/register': typeof RegisterRoute
   '/rsc': typeof RscRoute
   '/text-editor': typeof TextEditorRoute
+  '/projects/$id': typeof ProjectsIdRoute
   '/settings/theme': typeof SettingsThemeRoute
+  '/projects/': typeof ProjectsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -85,7 +106,9 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/rsc': typeof RscRoute
   '/text-editor': typeof TextEditorRoute
+  '/projects/$id': typeof ProjectsIdRoute
   '/settings/theme': typeof SettingsThemeRoute
+  '/projects': typeof ProjectsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -94,10 +117,13 @@ export interface FileRoutesById {
   '/gtd': typeof GtdRoute
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
+  '/projects': typeof ProjectsRouteWithChildren
   '/register': typeof RegisterRoute
   '/rsc': typeof RscRoute
   '/text-editor': typeof TextEditorRoute
+  '/projects/$id': typeof ProjectsIdRoute
   '/settings/theme': typeof SettingsThemeRoute
+  '/projects/': typeof ProjectsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -107,10 +133,13 @@ export interface FileRouteTypes {
     | '/gtd'
     | '/kb'
     | '/login'
+    | '/projects'
     | '/register'
     | '/rsc'
     | '/text-editor'
+    | '/projects/$id'
     | '/settings/theme'
+    | '/projects/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -121,7 +150,9 @@ export interface FileRouteTypes {
     | '/register'
     | '/rsc'
     | '/text-editor'
+    | '/projects/$id'
     | '/settings/theme'
+    | '/projects'
   id:
     | '__root__'
     | '/'
@@ -129,10 +160,13 @@ export interface FileRouteTypes {
     | '/gtd'
     | '/kb'
     | '/login'
+    | '/projects'
     | '/register'
     | '/rsc'
     | '/text-editor'
+    | '/projects/$id'
     | '/settings/theme'
+    | '/projects/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -141,6 +175,7 @@ export interface RootRouteChildren {
   GtdRoute: typeof GtdRoute
   KbRoute: typeof KbRoute
   LoginRoute: typeof LoginRoute
+  ProjectsRoute: typeof ProjectsRouteWithChildren
   RegisterRoute: typeof RegisterRoute
   RscRoute: typeof RscRoute
   TextEditorRoute: typeof TextEditorRoute
@@ -168,6 +203,13 @@ declare module '@tanstack/react-router' {
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/projects': {
+      id: '/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -205,6 +247,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects/': {
+      id: '/projects/'
+      path: '/'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof ProjectsIndexRouteImport
+      parentRoute: typeof ProjectsRoute
+    }
     '/settings/theme': {
       id: '/settings/theme'
       path: '/settings/theme'
@@ -212,8 +261,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsThemeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects/$id': {
+      id: '/projects/$id'
+      path: '/$id'
+      fullPath: '/projects/$id'
+      preLoaderRoute: typeof ProjectsIdRouteImport
+      parentRoute: typeof ProjectsRoute
+    }
   }
 }
+
+interface ProjectsRouteChildren {
+  ProjectsIdRoute: typeof ProjectsIdRoute
+  ProjectsIndexRoute: typeof ProjectsIndexRoute
+}
+
+const ProjectsRouteChildren: ProjectsRouteChildren = {
+  ProjectsIdRoute: ProjectsIdRoute,
+  ProjectsIndexRoute: ProjectsIndexRoute,
+}
+
+const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
+  ProjectsRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -221,6 +291,7 @@ const rootRouteChildren: RootRouteChildren = {
   GtdRoute: GtdRoute,
   KbRoute: KbRoute,
   LoginRoute: LoginRoute,
+  ProjectsRoute: ProjectsRouteWithChildren,
   RegisterRoute: RegisterRoute,
   RscRoute: RscRoute,
   TextEditorRoute: TextEditorRoute,

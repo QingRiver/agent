@@ -30,6 +30,7 @@ export function buildKbTree(
   tree: DirTree,
   docs: KbDocSummary[],
   skillsByDirId: Map<string, { id: string, code: string }> = new Map(),
+  options?: { rootDirId?: string },
 ): KbTreeNode[] {
   const docsByMount = new Map<string, KbDocSummary[]>()
   for (const d of docs) {
@@ -63,6 +64,13 @@ export function buildKbTree(
       doc: d,
     }))
     return [...folders, ...files]
+  }
+
+  if (options?.rootDirId) {
+    const root = tree.byId.get(options.rootDirId)
+    if (!root)
+      return []
+    return [toFolder(root)]
   }
 
   return tree.roots.map((n): KbTreeNode => toFolder(n))

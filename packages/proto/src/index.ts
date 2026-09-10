@@ -143,6 +143,9 @@ export {
   type SkillPathErr,
   type SkillPathOk,
   slugifySkillCode,
+  VERSION_TEXT_TYPE,
+  VERSION_TEXT_TYPES,
+  type VersionTextType,
 } from './skill'
 export {
   computeHunks,

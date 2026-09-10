@@ -3,10 +3,8 @@ import type { TagRow } from '@apis/tags-api'
 import type { ProjectSelection } from './ProjectFileTree'
 import { SKILL_ENTRY_FILENAME } from '@agent/proto'
 import { KbDocTagsBar } from '@components/kb/KbDocTagsBar'
-import { KbSourceEditor } from '@components/kb/KbSourceEditor'
-import { SkillStore } from '@stores/skill-store'
-import { Sparkles } from 'lucide-react'
-import { useState } from 'react'
+import { BookMarked, Sparkles } from 'lucide-react'
+import { VersionTextWorkbench } from './VersionTextWorkbench'
 
 interface ProjectPaneProps {
   selection: ProjectSelection | null
@@ -17,11 +15,17 @@ interface ProjectPaneProps {
   docTagIds?: string[]
   taskTagIds?: string[]
   allTags: TagRow[]
+  isKbRoot?: boolean
+  enclosingKbDirId?: string | null
+  onOpenKb: (dirId: string) => void
+  onOpenDoc: (docId: string) => void
   onChangeSkillTags: (skillId: string, tagIds: string[]) => Promise<void>
   onChangeDocTags: (docId: string, tagIds: string[]) => Promise<void>
   onChangeTaskTags: (taskId: string, tagIds: string[]) => void
   onMarkSkill: (dirId: string) => Promise<void>
   onUnmarkSkill: (skillId: string) => Promise<void>
+  onMarkKb: (dirId: string) => Promise<void>
+  onUnmarkKb: (dirId: string) => Promise<void>
 }
 
 export function ProjectPane({
@@ -33,20 +37,56 @@ export function ProjectPane({
   docTagIds,
   taskTagIds,
   allTags,
+  isKbRoot = false,
+  enclosingKbDirId = null,
+  onOpenKb,
+  onOpenDoc,
   onChangeSkillTags,
   onChangeDocTags,
   onChangeTaskTags,
   onMarkSkill,
   onUnmarkSkill,
+  onMarkKb,
+  onUnmarkKb,
 }: ProjectPaneProps) {
   if (!selection)
-    return <p className="p-4 text-sm text-muted-foreground">选择左侧项目与树节点</p>
+    return <p className="p-4 text-sm text-muted-foreground">选择左侧树节点</p>
 
   if (selection.kind === 'folder') {
+    const inKb = enclosingKbDirId != null
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
         <h3 className="text-sm font-medium">{folderName}</h3>
-        {skill
+        {isKbRoot && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent"
+              onClick={() => onOpenKb(selection.id)}
+            >
+              <BookMarked className="size-3" />
+              进入知识库
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent"
+              onClick={() => void onUnmarkKb(selection.id)}
+            >
+              卸标知识库
+            </button>
+          </div>
+        )}
+        {inKb && !isKbRoot && (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 self-start rounded-md border border-border px-2 py-1 text-xs hover:bg-accent"
+            onClick={() => onOpenKb(enclosingKbDirId)}
+          >
+            <BookMarked className="size-3" />
+            进入知识库
+          </button>
+        )}
+        {!inKb && skill
           ? (
               <>
                 <p className="text-xs text-muted-foreground">
@@ -67,29 +107,41 @@ export function ProjectPane({
                 </button>
               </>
             )
-          : folderKind === 'dir'
-            ? (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 self-start rounded-md border border-border px-2 py-1 text-xs hover:bg-accent"
-                  onClick={() => void onMarkSkill(selection.id)}
-                >
-                  <Sparkles className="size-3" />
-                  {`升级为 Skill（写入 ${SKILL_ENTRY_FILENAME}）`}
-                </button>
-              )
-            : (
-                <p className="text-xs text-muted-foreground">
-                  在项目里新建子文件夹后，才能升级为 Skill
-                </p>
-              )}
+          : !inKb && folderKind === 'dir'
+              ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent"
+                      onClick={() => void onMarkSkill(selection.id)}
+                    >
+                      <Sparkles className="size-3" />
+                      {`升级为 Skill（写入 ${SKILL_ENTRY_FILENAME}）`}
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent"
+                      onClick={() => void onMarkKb(selection.id)}
+                    >
+                      <BookMarked className="size-3" />
+                      初始化知识库
+                    </button>
+                  </div>
+                )
+              : !inKb
+                  ? (
+                      <p className="text-xs text-muted-foreground">
+                        选择子文件夹后，可升级为 Skill 或初始化知识库
+                      </p>
+                    )
+                  : null}
       </div>
     )
   }
 
   if (selection.kind === 'text' && text) {
     return (
-      <VersionTextEditor
+      <VersionTextWorkbench
         key={text.id}
         text={text}
         skill={skill}
@@ -102,7 +154,13 @@ export function ProjectPane({
   if (selection.kind === 'doc') {
     return (
       <div className="space-y-3 p-4">
-        <p className="text-sm">知识库文档（正文请去知识库页）</p>
+        <button
+          type="button"
+          className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent"
+          onClick={() => onOpenDoc(selection.id)}
+        >
+          打开知识库文档
+        </button>
         <KbDocTagsBar
           tagIds={docTagIds ?? []}
           allTags={allTags}
@@ -126,51 +184,4 @@ export function ProjectPane({
   }
 
   return <p className="p-4 text-sm text-muted-foreground">节点不可用</p>
-}
-
-function VersionTextEditor({
-  text,
-  skill,
-  allTags,
-  onChangeSkillTags,
-}: {
-  text: VersionTextRow
-  skill?: SkillRow | null
-  allTags: TagRow[]
-  onChangeSkillTags: (skillId: string, tagIds: string[]) => Promise<void>
-}) {
-  const [draft, setDraft] = useState(text.content)
-  const [saving, setSaving] = useState(false)
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <span className="truncate text-xs text-muted-foreground">{text.filename}</span>
-        <button
-          type="button"
-          disabled={saving || draft === text.content}
-          className="rounded-md bg-sky-600 px-2 py-1 text-xs text-white disabled:opacity-40"
-          onClick={() => {
-            setSaving(true)
-            void SkillStore.upsertText({
-              dirId: text.mountDirId,
-              filename: text.filename,
-              content: draft,
-            }).finally(() => setSaving(false))
-          }}
-        >
-          保存
-        </button>
-      </div>
-      {skill && (
-        <div className="border-b border-border px-3 py-2">
-          <KbDocTagsBar
-            tagIds={skill.tagIds ?? []}
-            allTags={allTags}
-            onChangeTagIds={ids => onChangeSkillTags(skill.id, ids)}
-          />
-        </div>
-      )}
-      <KbSourceEditor value={draft} onChange={setDraft} docId={text.id} />
-    </div>
-  )
 }

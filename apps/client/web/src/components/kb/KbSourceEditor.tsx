@@ -9,10 +9,11 @@ interface KbSourceEditorProps {
   value: string
   onChange: (value: string) => void
   docId: string
+  readOnly?: boolean
 }
 
 /** 源码编辑：CodeMirror + 侧栏 TOC */
-export function KbSourceEditor({ value, onChange, docId }: KbSourceEditorProps) {
+export function KbSourceEditor({ value, onChange, docId, readOnly = false }: KbSourceEditorProps) {
   const editorRef = useRef<KbMarkdownEditorHandle>(null)
 
   const { toc } = renderMarkdown(value)
@@ -26,10 +27,11 @@ export function KbSourceEditor({ value, onChange, docId }: KbSourceEditorProps) 
     <div className="flex min-h-0 flex-1 gap-0 overflow-hidden">
       <KbMarkdownEditor
         ref={editorRef}
-        key={docId}
+        key={`${docId}:${readOnly ? 'ro' : 'rw'}`}
         docId={docId}
         value={value}
         onChange={onChange}
+        readOnly={readOnly}
       />
       {hasToc && (
         <KbMarkdownToc

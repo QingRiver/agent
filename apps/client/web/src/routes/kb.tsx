@@ -6,9 +6,12 @@ import { KbSidebar } from '@components/kb/KbSidebar'
 import { KbSourceChatPanel } from '@components/kb/KbSourceChatPanel'
 import { KbSync } from '@components/kb/KbSync'
 import { KbLayout } from '@layouts/KbLayout'
+import { DirStore } from '@stores/dir-store'
 import { KbStore } from '@stores/kb-store'
-import { createFileRoute } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { useAtomValue } from 'jotai'
+import { ArrowLeft } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 
 const LS_SIDEBAR_COLLAPSED = 'kb.sidebarCollapsed'
@@ -16,6 +19,7 @@ const LS_SIDEBAR_COLLAPSED = 'kb.sidebarCollapsed'
 const kbSearchSchema = z.object({
   doc: z.string().optional(),
   chunk: z.string().optional(),
+  kb: z.string().optional(),
 })
 
 function readSidebarCollapsed(): boolean {
@@ -43,7 +47,18 @@ function KbPage() {
   const [recallOpen, setRecallOpen] = useState(false)
   const [sourceMode, setSourceMode] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
-  const { doc } = Route.useSearch()
+  const { doc, kb } = Route.useSearch()
+  const dirsById = useAtomValue(DirStore.dirsByIdAtom)
+
+  const projectId = useMemo(
+    () => (kb ? DirStore.projectOf(dirsById, kb) : null),
+    [dirsById, kb],
+  )
+
+  useEffect(() => {
+    if (kb)
+      KbStore.setWorkingDirId(kb)
+  }, [kb])
 
   useEffect(() => {
     let cancelled = false
@@ -78,11 +93,37 @@ function KbPage() {
       <KbSync />
       <DirSync />
       <TagSync />
+      {kb && (
+        <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2">
+          {projectId
+            ? (
+                <Link
+                  to="/projects/$id"
+                  params={{ id: projectId }}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <ArrowLeft className="size-4" />
+                  返回项目
+                </Link>
+              )
+            : (
+                <Link
+                  to="/projects"
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <ArrowLeft className="size-4" />
+                  项目列表
+                </Link>
+              )}
+          <span className="text-sm text-muted-foreground">知识库</span>
+        </div>
+      )}
       <KbLayout
         sidebar={(
           <KbSidebar
             recallOpen={recallOpen}
             onToggleRecall={() => setRecallOpen(v => !v)}
+            focusKbDirId={kb}
           />
         )}
         rightRail={rightRail}

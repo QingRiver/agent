@@ -33,6 +33,7 @@ import {
   gtdTaskTags,
   tags,
 } from '../db/schema'
+import { findEnclosingKbDirId } from '../service/kb'
 import { findEnclosingSkillDirId, SkillConflictError } from '../service/skill'
 
 /** ISO 字符串 → Date（drizzle timestamptz mode:'date' 期望 Date 对象） */
@@ -368,6 +369,9 @@ export async function applyPushToPg(userId: string, req: PushRequest): Promise<P
         const enclosed = await findEnclosingSkillDirId(userId, mount, tx)
         if (enclosed)
           throw new SkillConflictError('skill 子树禁止挂载 kb / task')
+        const kbEnclosed = await findEnclosingKbDirId(userId, mount)
+        if (kbEnclosed)
+          throw new SkillConflictError('知识库子树禁止挂载 task')
       }
     }
 

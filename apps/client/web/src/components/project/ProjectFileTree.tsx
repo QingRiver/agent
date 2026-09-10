@@ -2,6 +2,7 @@ import type { DragEvent, FormEvent, KeyboardEvent } from 'react'
 import type { ProjectTreeNode } from './projectTree'
 import { cn } from '@lib/utils'
 import {
+  BookMarked,
   ChevronDown,
   ChevronRight,
   FileText,
@@ -46,15 +47,22 @@ interface ProjectFileTreeProps {
   root: Extract<ProjectTreeNode, { kind: 'folder' }>
   selected: ProjectSelection | null
   onSelect: (sel: ProjectSelection) => void
+  kbDirIds: Map<string, unknown>
+  enclosingKbOf: (dirId: string) => string | null
+  onOpenKb: (dirId: string) => void
+  onOpenDoc: (docId: string) => void
   onCreateFolder: (parentId: string, name: string) => Promise<void>
   onRenameFolder: (id: string, name: string) => Promise<void>
   onDeleteFolder: (id: string) => Promise<void>
   onMoveFolder: (id: string, parentId: string) => Promise<void>
   onCreateText: (dirId: string, filename: string) => Promise<void>
+  onCreateDoc: (dirId: string, name: string) => Promise<void>
   onDeleteText: (id: string) => Promise<void>
   onMoveText: (id: string, dirId: string, filename: string) => Promise<void>
   onMarkSkill: (dirId: string) => Promise<void>
   onUnmarkSkill: (skillId: string) => Promise<void>
+  onMarkKb: (dirId: string) => Promise<void>
+  onUnmarkKb: (dirId: string) => Promise<void>
 }
 
 export function ProjectFileTree(props: ProjectFileTreeProps) {
@@ -102,6 +110,8 @@ export function ProjectFileTree(props: ProjectFileTreeProps) {
     }
     if (payload.dirId === targetDirId)
       return
+    if (props.enclosingKbOf(targetDirId))
+      return
     await props.onMoveText(payload.id, targetDirId, payload.filename)
   }
 
@@ -137,31 +147,47 @@ export function ProjectFileTree(props: ProjectFileTreeProps) {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2 text-sm">
+      <div
+        className={cn(
+          'min-h-0 flex-1 overflow-y-auto p-2 text-sm',
+          dropTarget === props.root.id && 'bg-sky-500/5 ring-1 ring-inset ring-sky-500/30',
+        )}
+        onDragOver={(e) => {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+          setDropTarget(props.root.id)
+        }}
+        onDragLeave={() => setDropTarget(null)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDropTarget(null)
+          const payload = parsePayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'))
+          if (payload)
+            void applyDrop(props.root.id, payload)
+        }}
+      >
         <div className="mb-1 flex items-center gap-1 px-1">
           <span className="flex-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             文件
           </span>
           <button
             type="button"
-            title="新建子文件夹"
+            title="新建文件夹"
             className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
             onClick={() => {
               setCreatingUnder(props.root.id)
               setDraft('新文件夹')
               setRenamingId(null)
               setCreatingFileUnder(null)
-              ensureOpen(props.root.id)
             }}
           >
             <FolderPlus className="size-3.5" />
           </button>
         </div>
 
-        <FolderBlock
+        <FolderChildren
           node={props.root}
-          depth={0}
-          isRoot
+          depth={-1}
           expanded={expanded}
           selected={props.selected}
           dropTarget={dropTarget}
@@ -188,7 +214,7 @@ export function ProjectFileTree(props: ProjectFileTreeProps) {
           }}
           onStartCreateFile={(id) => {
             setCreatingFileUnder(id)
-            setDraft('notes.md')
+            setDraft(props.enclosingKbOf(id) ? '未命名.md' : 'notes.md')
             setRenamingId(null)
             setCreatingUnder(null)
             ensureOpen(id)
@@ -209,7 +235,11 @@ export function ProjectFileTree(props: ProjectFileTreeProps) {
           onSubmitCreateFile={async (dirId) => {
             const name = draft.trim()
             setCreatingFileUnder(null)
-            if (name)
+            if (!name)
+              return
+            if (props.enclosingKbOf(dirId))
+              await props.onCreateDoc(dirId, name)
+            else
               await props.onCreateText(dirId, name)
           }}
           onCancelDraft={cancelDraft}
@@ -217,7 +247,18 @@ export function ProjectFileTree(props: ProjectFileTreeProps) {
           onDeleteText={props.onDeleteText}
           onMarkSkill={props.onMarkSkill}
           onUnmarkSkill={props.onUnmarkSkill}
+          onMarkKb={props.onMarkKb}
+          onUnmarkKb={props.onUnmarkKb}
+          kbDirIds={props.kbDirIds}
+          enclosingKbOf={props.enclosingKbOf}
+          onOpenKb={props.onOpenKb}
+          onOpenDoc={props.onOpenDoc}
         />
+        {props.root.children.length === 0 && creatingUnder !== props.root.id && (
+          <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+            暂无文件，点上方 + 新建文件夹
+          </p>
+        )}
       </div>
     </div>
   )
@@ -295,7 +336,6 @@ function NameDraft({
 function FolderBlock(p: {
   node: Extract<ProjectTreeNode, { kind: 'folder' }>
   depth: number
-  isRoot?: boolean
   expanded: Set<string>
   selected: ProjectSelection | null
   dropTarget: string | null
@@ -303,8 +343,12 @@ function FolderBlock(p: {
   creatingUnder: string | null
   creatingFileUnder: string | null
   draft: string
+  kbDirIds: Map<string, unknown>
+  enclosingKbOf: (dirId: string) => string | null
   onToggle: (id: string) => void
   onSelect: (sel: ProjectSelection) => void
+  onOpenKb: (dirId: string) => void
+  onOpenDoc: (docId: string) => void
   onDropTarget: (id: string | null) => void
   onApplyDrop: (targetDirId: string, payload: ProjectDragPayload) => Promise<void>
   onStartRename: (id: string, name: string) => void
@@ -319,11 +363,15 @@ function FolderBlock(p: {
   onDeleteText: (id: string) => Promise<void>
   onMarkSkill: (dirId: string) => Promise<void>
   onUnmarkSkill: (skillId: string) => Promise<void>
+  onMarkKb: (dirId: string) => Promise<void>
+  onUnmarkKb: (dirId: string) => Promise<void>
 }) {
   const { node, depth } = p
   const open = p.expanded.has(node.id)
   const active = p.selected?.kind === 'folder' && p.selected.id === node.id
   const over = p.dropTarget === node.id
+  const isKbRoot = p.kbDirIds.has(node.id)
+  const inKb = p.enclosingKbOf(node.id) != null
 
   function startDrag(e: DragEvent, payload: ProjectDragPayload) {
     const raw = JSON.stringify(payload)
@@ -359,8 +407,8 @@ function FolderBlock(p: {
           !over && (active ? 'bg-accent' : 'hover:bg-accent'),
         )}
         style={{ paddingLeft: 4 + depth * 12 }}
-        draggable={!p.isRoot}
-        onDragStart={e => !p.isRoot && startDrag(e, { kind: 'folder', id: node.id })}
+        draggable
+        onDragStart={e => startDrag(e, { kind: 'folder', id: node.id })}
         onDragOver={(e) => {
           e.preventDefault()
           e.stopPropagation()
@@ -380,6 +428,10 @@ function FolderBlock(p: {
           type="button"
           className="flex min-w-0 flex-1 items-center gap-1 px-1 py-1 text-left"
           onClick={() => {
+            if (isKbRoot) {
+              p.onOpenKb(node.id)
+              return
+            }
             p.onToggle(node.id)
             p.onSelect({ kind: 'folder', id: node.id })
           }}
@@ -387,13 +439,28 @@ function FolderBlock(p: {
           {open
             ? <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
             : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
-          {open
-            ? <FolderOpen className="size-3.5 shrink-0 text-amber-500/80" />
-            : <Folder className="size-3.5 shrink-0 text-amber-500/80" />}
-          <span className="truncate">{node.name}</span>
+          {isKbRoot
+            ? <BookMarked className="size-3.5 shrink-0 text-emerald-600" />
+            : node.skill
+              ? <Sparkles className="size-3.5 shrink-0 text-sky-600" />
+              : open
+                ? <FolderOpen className="size-3.5 shrink-0 text-amber-500/80" />
+                : <Folder className="size-3.5 shrink-0 text-amber-500/80" />}
+          <span className="min-w-0 flex-1 truncate">{node.name}</span>
+          {isKbRoot && (
+            <span
+              className="shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-300"
+              title="知识库"
+            >
+              KB
+            </span>
+          )}
           {node.skill && (
-            <span className="rounded bg-sky-500/15 px-1 py-0.5 text-[10px] text-sky-700 dark:text-sky-300">
-              {node.skill.code}
+            <span
+              className="shrink-0 rounded bg-sky-500/15 px-1 py-0.5 text-[10px] text-sky-700 dark:text-sky-300"
+              title={node.skill.code}
+            >
+              Skill
             </span>
           )}
         </button>
@@ -408,33 +475,55 @@ function FolderBlock(p: {
           </button>
           <button
             type="button"
-            title="新建文本"
+            title={inKb ? '新建 md 文档' : '新建文本'}
             className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={() => p.onStartCreateFile(node.id)}
           >
             <FileText className="size-3" />
           </button>
-          {node.skill
-            ? (
-                <button
-                  type="button"
-                  title="卸标 Skill"
-                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  onClick={() => void p.onUnmarkSkill(node.skill!.id)}
-                >
-                  <Sparkles className="size-3 text-sky-600" />
-                </button>
-              )
-            : !p.isRoot && (
-                <button
-                  type="button"
-                  title="升级为 Skill"
-                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  onClick={() => void p.onMarkSkill(node.id)}
-                >
-                  <Sparkles className="size-3" />
-                </button>
-              )}
+          {!inKb && (
+            node.skill
+              ? (
+                  <button
+                    type="button"
+                    title="卸标 Skill"
+                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={() => void p.onUnmarkSkill(node.skill!.id)}
+                  >
+                    <Sparkles className="size-3 text-sky-600" />
+                  </button>
+                )
+              : (
+                  <button
+                    type="button"
+                    title="升级为 Skill"
+                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={() => void p.onMarkSkill(node.id)}
+                  >
+                    <Sparkles className="size-3" />
+                  </button>
+                )
+          )}
+          {!inKb && !node.skill && (
+            <button
+              type="button"
+              title="初始化知识库"
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => void p.onMarkKb(node.id)}
+            >
+              <BookMarked className="size-3" />
+            </button>
+          )}
+          {isKbRoot && (
+            <button
+              type="button"
+              title="卸标知识库"
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => void p.onUnmarkKb(node.id)}
+            >
+              <BookMarked className="size-3 text-emerald-600" />
+            </button>
+          )}
           <button
             type="button"
             title="重命名"
@@ -443,16 +532,14 @@ function FolderBlock(p: {
           >
             <Pencil className="size-3" />
           </button>
-          {!p.isRoot && (
-            <button
-              type="button"
-              title="删除文件夹"
-              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
-              onClick={() => p.onRequestDelete(node.id)}
-            >
-              <Trash2 className="size-3" />
-            </button>
-          )}
+          <button
+            type="button"
+            title="删除文件夹"
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+            onClick={() => p.onRequestDelete(node.id)}
+          >
+            <Trash2 className="size-3" />
+          </button>
         </div>
       </div>
       {open && <FolderChildren {...p} />}
@@ -470,8 +557,12 @@ function FolderChildren(p: {
   creatingUnder: string | null
   creatingFileUnder: string | null
   draft: string
+  kbDirIds: Map<string, unknown>
+  enclosingKbOf: (dirId: string) => string | null
   onToggle: (id: string) => void
   onSelect: (sel: ProjectSelection) => void
+  onOpenKb: (dirId: string) => void
+  onOpenDoc: (docId: string) => void
   onDropTarget: (id: string | null) => void
   onApplyDrop: (targetDirId: string, payload: ProjectDragPayload) => Promise<void>
   onStartRename: (id: string, name: string) => void
@@ -486,6 +577,8 @@ function FolderChildren(p: {
   onDeleteText: (id: string) => Promise<void>
   onMarkSkill: (dirId: string) => Promise<void>
   onUnmarkSkill: (skillId: string) => Promise<void>
+  onMarkKb: (dirId: string) => Promise<void>
+  onUnmarkKb: (dirId: string) => Promise<void>
 }) {
   const { node, depth } = p
 
@@ -504,7 +597,7 @@ function FolderChildren(p: {
           onChange={p.onDraftChange}
           onSubmit={() => void p.onSubmitCreate(node.id)}
           onCancel={p.onCancelDraft}
-          depth={depth + 1}
+          depth={Math.max(0, depth + 1)}
           submitLabel="创建文件夹"
         />
       )}
@@ -514,8 +607,8 @@ function FolderChildren(p: {
           onChange={p.onDraftChange}
           onSubmit={() => void p.onSubmitCreateFile(node.id)}
           onCancel={p.onCancelDraft}
-          depth={depth + 1}
-          submitLabel="创建文件"
+          depth={Math.max(0, depth + 1)}
+          submitLabel={p.enclosingKbOf(node.id) ? '创建 md' : '创建文件'}
           icon="file"
         />
       )}
@@ -527,7 +620,6 @@ function FolderChildren(p: {
               {...p}
               node={child}
               depth={depth + 1}
-              isRoot={false}
             />
           )
         }
@@ -546,7 +638,12 @@ function FolderChildren(p: {
             <button
               type="button"
               className="flex min-w-0 flex-1 items-center gap-1 px-1 py-1 text-left"
-              onClick={() => p.onSelect({ kind: child.kind, id: child.id })}
+              onClick={() => {
+                if (child.kind === 'doc')
+                  p.onOpenDoc(child.id)
+                else
+                  p.onSelect({ kind: child.kind, id: child.id })
+              }}
             >
               {child.kind === 'task'
                 ? <ListTodo className="size-3.5 shrink-0 text-muted-foreground" />

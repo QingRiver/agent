@@ -1,3 +1,4 @@
+import type { VersionTextType } from '@agent/proto'
 import {
   canonicalSkillCode,
   formatSkillContext,
@@ -5,6 +6,7 @@ import {
   parseFrontmatter,
   SKILL_ENTRY_FILENAME,
   slugifySkillCode,
+  VERSION_TEXT_TYPE,
 } from '@agent/proto'
 import { and, eq, inArray } from 'drizzle-orm'
 import { invalidateAgentConfigCache } from '../agent/agentConfig/store'
@@ -41,7 +43,11 @@ export interface VersionTextDto {
   userId: string
   mountDirId: string
   filename: string
+  type: VersionTextType
+  version: number
   content: string
+  versionDesc: string | null
+  publishedAt: string | null
   updatedAt: string | null
 }
 
@@ -284,9 +290,29 @@ function toTextDto(row: typeof versionTexts.$inferSelect): VersionTextDto {
     userId: row.userId,
     mountDirId: row.mountDirId,
     filename: row.filename,
+    type: row.type as VersionTextType,
+    version: row.version,
     content: row.content,
+    versionDesc: row.versionDesc ?? null,
+    publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
     updatedAt: row.updatedAt ? row.updatedAt.toISOString() : null,
   }
+}
+
+/** 同 path 多行：优先最大 published(version>0)，否则 v0；仅 type=skill */
+function pickSkillFileContent(
+  rows: Array<typeof versionTexts.$inferSelect>,
+): string | null {
+  const skillRows = rows.filter(r => r.type === VERSION_TEXT_TYPE.SKILL)
+  if (skillRows.length === 0)
+    return null
+  const published = skillRows
+    .filter(r => r.version > 0)
+    .sort((a, b) => b.version - a.version)
+  if (published[0])
+    return published[0].content
+  const draft = skillRows.find(r => r.version === 0)
+  return draft?.content ?? null
 }
 
 export class SkillService {
@@ -395,14 +421,26 @@ export class SkillService {
     const texts = await db.select().from(versionTexts).where(and(
       eq(versionTexts.userId, userId),
       inArray(versionTexts.mountDirId, subtree),
+      eq(versionTexts.type, VERSION_TEXT_TYPE.SKILL),
     ))
+    const byKey = new Map<string, Array<typeof versionTexts.$inferSelect>>()
+    for (const t of texts) {
+      const key = `${t.mountDirId}\0${t.filename}`
+      const list = byKey.get(key) ?? []
+      list.push(t)
+      byKey.set(key, list)
+    }
     const dirById = new Map(all.map(d => [d.id, d]))
     const files: Record<string, string> = {}
-    for (const t of texts) {
-      const mount = dirById.get(t.mountDirId)
+    for (const [, rows] of byKey) {
+      const content = pickSkillFileContent(rows)
+      if (content == null)
+        continue
+      const sample = rows[0]!
+      const mount = dirById.get(sample.mountDirId)
       if (!mount)
         continue
-      files[relativeSkillPath(root.vdir, mount.vdir, t.filename)] = t.content
+      files[relativeSkillPath(root.vdir, mount.vdir, sample.filename)] = content
     }
     return files
   }
@@ -433,12 +471,14 @@ export class SkillService {
       const dir = dirById.get(s.dirId)
       if (!dir)
         continue
-      const [md] = await db.select().from(versionTexts).where(and(
+      const mdRows = await db.select().from(versionTexts).where(and(
         eq(versionTexts.userId, userId),
         eq(versionTexts.mountDirId, s.dirId),
         eq(versionTexts.filename, SKILL_ENTRY_FILENAME),
-      )).limit(1)
-      const fm = parseFrontmatter(md?.content ?? '')
+        eq(versionTexts.type, VERSION_TEXT_TYPE.SKILL),
+      ))
+      const mdContent = pickSkillFileContent(mdRows) ?? ''
+      const fm = parseFrontmatter(mdContent)
       const name = fm.name?.trim() || dir.name
       entries.push({
         name,
@@ -450,24 +490,79 @@ export class SkillService {
     return { skillText: formatSkillContext(entries), skillBindings: bindings }
   }
 
-  static async listVersionTexts(userId: string, mountDirId: string): Promise<VersionTextDto[]> {
+  static async listVersionTexts(
+    userId: string,
+    mountDirId: string,
+    type?: VersionTextType,
+  ): Promise<VersionTextDto[]> {
     await loadLiveDir(userId, mountDirId)
     const rows = await db.select().from(versionTexts).where(and(
       eq(versionTexts.userId, userId),
       eq(versionTexts.mountDirId, mountDirId),
+      eq(versionTexts.version, 0),
+      ...(type ? [eq(versionTexts.type, type)] : []),
     ))
     return rows.map(toTextDto)
   }
 
-  static async listAllVersionTexts(userId: string): Promise<VersionTextDto[]> {
-    const rows = await db.select().from(versionTexts).where(eq(versionTexts.userId, userId))
+  static async listAllVersionTexts(
+    userId: string,
+    type?: VersionTextType,
+  ): Promise<VersionTextDto[]> {
+    const rows = await db.select().from(versionTexts).where(and(
+      eq(versionTexts.userId, userId),
+      eq(versionTexts.version, 0),
+      ...(type ? [eq(versionTexts.type, type)] : []),
+    ))
     return rows.map(toTextDto)
+  }
+
+  static async listVersions(
+    userId: string,
+    mountDirId: string,
+    filename: string,
+  ): Promise<VersionTextDto[]> {
+    assertFilename(filename)
+    await loadLiveDir(userId, mountDirId)
+    const rows = await db.select().from(versionTexts).where(and(
+      eq(versionTexts.userId, userId),
+      eq(versionTexts.mountDirId, mountDirId),
+      eq(versionTexts.filename, filename),
+    ))
+    return rows
+      .slice()
+      .sort((a, b) => {
+        if (a.version === 0)
+          return -1
+        if (b.version === 0)
+          return 1
+        return b.version - a.version
+      })
+      .map(toTextDto)
+  }
+
+  static async getVersionText(
+    userId: string,
+    input: { dirId: string, filename: string, version: number },
+  ): Promise<VersionTextDto> {
+    assertFilename(input.filename)
+    await loadLiveDir(userId, input.dirId)
+    const [row] = await db.select().from(versionTexts).where(and(
+      eq(versionTexts.userId, userId),
+      eq(versionTexts.mountDirId, input.dirId),
+      eq(versionTexts.filename, input.filename),
+      eq(versionTexts.version, input.version),
+    )).limit(1)
+    if (!row)
+      throw new SkillConflictError('version_text 不存在或不可见')
+    return toTextDto(row)
   }
 
   static async upsertVersionText(userId: string, input: {
     dirId: string
     filename: string
     content: string
+    type?: VersionTextType
   }): Promise<VersionTextDto> {
     assertFilename(input.filename)
     await loadLiveDir(userId, input.dirId)
@@ -479,31 +574,77 @@ export class SkillService {
       eq(versionTexts.userId, userId),
       eq(versionTexts.mountDirId, input.dirId),
       eq(versionTexts.filename, input.filename),
+      eq(versionTexts.version, 0),
     )).limit(1)
     if (existing) {
+      if (input.type != null && input.type !== existing.type)
+        throw new SkillConflictError('禁止修改 version_text.type', 400)
       const [updated] = await db.update(versionTexts).set({
         content: input.content,
         updatedAt: ts,
       }).where(eq(versionTexts.id, existing.id)).returning()
-      if (input.filename === SKILL_ENTRY_FILENAME)
+      if (existing.type === VERSION_TEXT_TYPE.SKILL && input.filename === SKILL_ENTRY_FILENAME)
         await syncSkillCodeFromEntry(userId, input.dirId, input.content)
       return toTextDto(updated!)
     }
+    const type = input.type ?? VERSION_TEXT_TYPE.SKILL
     const id = crypto.randomUUID()
     await db.insert(versionTexts).values({
       id,
       userId,
       mountDirId: input.dirId,
       filename: input.filename,
+      type,
+      version: 0,
       content: input.content,
       updatedAt: ts,
     })
     const [row] = await db.select().from(versionTexts).where(eq(versionTexts.id, id)).limit(1)
-    if (input.filename === SKILL_ENTRY_FILENAME)
+    if (type === VERSION_TEXT_TYPE.SKILL && input.filename === SKILL_ENTRY_FILENAME)
       await syncSkillCodeFromEntry(userId, input.dirId, input.content)
     return toTextDto(row!)
   }
 
+  static async publishVersionText(userId: string, input: {
+    dirId: string
+    filename: string
+    versionDesc?: string
+  }): Promise<VersionTextDto> {
+    assertFilename(input.filename)
+    await loadLiveDir(userId, input.dirId)
+    const [draft] = await db.select().from(versionTexts).where(and(
+      eq(versionTexts.userId, userId),
+      eq(versionTexts.mountDirId, input.dirId),
+      eq(versionTexts.filename, input.filename),
+      eq(versionTexts.version, 0),
+    )).limit(1)
+    if (!draft)
+      throw new SkillConflictError('草稿不存在，无法提交版本')
+    const published = await db.select({ version: versionTexts.version }).from(versionTexts).where(and(
+      eq(versionTexts.userId, userId),
+      eq(versionTexts.mountDirId, input.dirId),
+      eq(versionTexts.filename, input.filename),
+    ))
+    const next = Math.max(0, ...published.map(r => r.version)) + 1
+    const id = crypto.randomUUID()
+    const ts = now()
+    await db.insert(versionTexts).values({
+      id,
+      userId,
+      mountDirId: input.dirId,
+      filename: input.filename,
+      type: draft.type,
+      version: next,
+      content: draft.content,
+      versionDesc: input.versionDesc?.trim() || null,
+      publishedAt: ts,
+      updatedAt: ts,
+    })
+    const [row] = await db.select().from(versionTexts).where(eq(versionTexts.id, id)).limit(1)
+    return toTextDto(row!)
+  }
+
+  /** 删逻辑文件：该 path 下全部 version */
   static async deleteVersionText(userId: string, id: string): Promise<void> {
     const [row] = await db.select().from(versionTexts).where(and(
       eq(versionTexts.id, id),
@@ -511,7 +652,11 @@ export class SkillService {
     )).limit(1)
     if (!row)
       throw new SkillConflictError('version_text 不存在或不可见')
-    await db.delete(versionTexts).where(eq(versionTexts.id, id))
+    await db.delete(versionTexts).where(and(
+      eq(versionTexts.userId, userId),
+      eq(versionTexts.mountDirId, row.mountDirId),
+      eq(versionTexts.filename, row.filename),
+    ))
   }
 
   static async hasVersionTextMount(userId: string, dirId: string, tx?: DbOrTx): Promise<boolean> {

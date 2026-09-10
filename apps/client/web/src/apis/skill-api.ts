@@ -1,9 +1,13 @@
+import type { VersionTextType } from '@agent/proto'
 import type { InferResponseType } from 'hono/client'
+import { VERSION_TEXT_TYPE } from '@agent/proto'
 import { api, successData } from './api-client'
 
 type Skills = typeof api.skills
 export type SkillRow = InferResponseType<Skills['list']['$post'], 200>['skills'][number]
 export type VersionTextRow = InferResponseType<typeof api['version-texts']['list']['$post'], 200>['versionTexts'][number]
+
+export { VERSION_TEXT_TYPE, type VersionTextType }
 
 export class SkillApi {
   static async list(): Promise<SkillRow[]> {
@@ -26,18 +30,50 @@ export class SkillApi {
     return (await successData(res)).skill
   }
 
-  static async listVersionTexts(dirId: string): Promise<VersionTextRow[]> {
-    const res = await api['version-texts'].list.$post({ json: { dirId } })
+  static async listVersionTexts(dirId: string, type?: VersionTextType): Promise<VersionTextRow[]> {
+    const res = await api['version-texts'].list.$post({
+      json: { dirId, ...(type ? { type } : {}) },
+    })
     return (await successData(res)).versionTexts
   }
 
-  static async listAllVersionTexts(): Promise<VersionTextRow[]> {
-    const res = await api['version-texts']['list-all'].$post({ json: {} })
+  static async listAllVersionTexts(type?: VersionTextType): Promise<VersionTextRow[]> {
+    const res = await api['version-texts']['list-all'].$post({
+      json: type ? { type } : {},
+    })
     return (await successData(res)).versionTexts
   }
 
-  static async upsertVersionText(body: { dirId: string, filename: string, content: string }): Promise<VersionTextRow> {
+  static async listVersions(dirId: string, filename: string): Promise<VersionTextRow[]> {
+    const res = await api['version-texts']['list-versions'].$post({
+      json: { dirId, filename },
+    })
+    return (await successData(res)).versionTexts
+  }
+
+  static async getVersion(dirId: string, filename: string, version: number): Promise<VersionTextRow> {
+    const res = await api['version-texts'].get.$post({
+      json: { dirId, filename, version },
+    })
+    return (await successData(res)).versionText
+  }
+
+  static async upsertVersionText(body: {
+    dirId: string
+    filename: string
+    content: string
+    type?: VersionTextType
+  }): Promise<VersionTextRow> {
     const res = await api['version-texts'].upsert.$post({ json: body })
+    return (await successData(res)).versionText
+  }
+
+  static async publishVersionText(body: {
+    dirId: string
+    filename: string
+    versionDesc?: string
+  }): Promise<VersionTextRow> {
+    const res = await api['version-texts'].publish.$post({ json: body })
     return (await successData(res)).versionText
   }
 

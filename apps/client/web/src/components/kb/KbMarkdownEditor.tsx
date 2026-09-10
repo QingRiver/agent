@@ -59,6 +59,8 @@ interface KbMarkdownEditorProps {
   onChange: (value: string) => void
   /** 换文档时由父组件 key=docId remount，本组件只在挂载时读一次初始正文 */
   docId: string
+  /** 只读预览 / 历史版本 */
+  readOnly?: boolean
   ref?: Ref<KbMarkdownEditorHandle>
 }
 
@@ -66,7 +68,7 @@ export interface KbMarkdownEditorHandle {
   scrollToHeading: (headingText: string) => void
 }
 
-export function KbMarkdownEditor({ value, onChange, docId, ref }: KbMarkdownEditorProps) {
+export function KbMarkdownEditor({ value, onChange, docId, readOnly = false, ref }: KbMarkdownEditorProps) {
   const mountRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const [initialDoc] = useState(value)
@@ -109,6 +111,8 @@ export function KbMarkdownEditor({ value, onChange, docId, ref }: KbMarkdownEdit
           EditorView.lineWrapping,
           markdown(),
           createEditorTheme(isDark),
+          EditorState.readOnly.of(readOnly),
+          EditorView.editable.of(!readOnly),
           EditorView.updateListener.of((update) => {
             if (update.docChanged)
               emitChange(update.state.doc.toString())
@@ -123,7 +127,7 @@ export function KbMarkdownEditor({ value, onChange, docId, ref }: KbMarkdownEdit
       viewRef.current = null
       view.destroy()
     }
-  }, [docId, initialDoc, isDark])
+  }, [docId, initialDoc, isDark, readOnly])
 
   useEffect(() => {
     const view = viewRef.current

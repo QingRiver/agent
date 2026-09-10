@@ -122,4 +122,51 @@ describe('skillService e2e', () => {
     const listed = await SkillService.list(USER_ID)
     expect(listed.find(s => s.id === skill.id)?.code).toBe('bark')
   })
+
+  it('publish 生成不可变版本；walkFiles 读最新 published，无发布则回退草稿', async () => {
+    const project = await ProjectService.createProject(USER_ID, { name: 'ver-proj' })
+    const root = await ProjectService.createDir(USER_ID, { parentId: project.id, name: 'ver-skill' })
+    await SkillService.create(USER_ID, { dirId: root.id, code: 'ver_skill' })
+
+    await SkillService.upsertVersionText(USER_ID, {
+      dirId: root.id,
+      filename: 'SKILL.md',
+      content: '---\nname: ver_skill\ndescription: d0\n---\ndraft-0\n',
+    })
+    const beforePublish = await SkillService.walkFiles(USER_ID, 'ver_skill')
+    expect(beforePublish).not.toBeNull()
+    expect(beforePublish!['SKILL.md']).toContain('draft-0')
+
+    const v1 = await SkillService.publishVersionText(USER_ID, {
+      dirId: root.id,
+      filename: 'SKILL.md',
+      versionDesc: 'first',
+    })
+    expect(v1.version).toBe(1)
+    expect(v1.versionDesc).toBe('first')
+    expect(v1.content).toContain('draft-0')
+
+    await SkillService.upsertVersionText(USER_ID, {
+      dirId: root.id,
+      filename: 'SKILL.md',
+      content: '---\nname: ver_skill\ndescription: d1\n---\ndraft-1\n',
+    })
+    const afterDraftEdit = await SkillService.walkFiles(USER_ID, 'ver_skill')
+    expect(afterDraftEdit).not.toBeNull()
+    expect(afterDraftEdit!['SKILL.md']).toContain('draft-0')
+    expect(afterDraftEdit!['SKILL.md']).not.toContain('draft-1')
+
+    const v2 = await SkillService.publishVersionText(USER_ID, {
+      dirId: root.id,
+      filename: 'SKILL.md',
+      versionDesc: 'second',
+    })
+    expect(v2.version).toBe(2)
+    const afterV2 = await SkillService.walkFiles(USER_ID, 'ver_skill')
+    expect(afterV2).not.toBeNull()
+    expect(afterV2!['SKILL.md']).toContain('draft-1')
+
+    const versions = await SkillService.listVersions(USER_ID, root.id, 'SKILL.md')
+    expect(versions.map(v => v.version)).toEqual([0, 2, 1])
+  })
 })
