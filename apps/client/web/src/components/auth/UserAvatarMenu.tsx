@@ -74,7 +74,7 @@ export function UserAvatarMenu() {
           开发
         </DropdownMenuLabel>
         <DropdownMenuItem asChild>
-          <Link to="/" className="flex cursor-pointer items-center gap-2">
+          <Link to="/chat" className="flex cursor-pointer items-center gap-2">
             <MessageSquare className="h-4 w-4" />
             Chat
           </Link>

@@ -20,10 +20,16 @@ function RootLayout() {
           <header className="border-b border-border px-6 py-4">
             <nav className="mx-auto flex max-w-4xl items-center gap-4">
               <Link
-                to="/projects"
+                to="/"
                 className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
               >
-                项目
+                Home
+              </Link>
+              <Link
+                to="/resources"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
+              >
+                资源
               </Link>
               <Link
                 to="/gtd"

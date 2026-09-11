@@ -11,11 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TextEditorRouteImport } from './routes/text-editor'
 import { Route as RscRouteImport } from './routes/rsc'
+import { Route as ResourcesRouteImport } from './routes/resources'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as KbRouteImport } from './routes/kb'
 import { Route as GtdRouteImport } from './routes/gtd'
+import { Route as ChatRouteImport } from './routes/chat'
 import { Route as AgentLabRouteImport } from './routes/agent-lab'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
@@ -30,6 +32,11 @@ const TextEditorRoute = TextEditorRouteImport.update({
 const RscRoute = RscRouteImport.update({
   id: '/rsc',
   path: '/rsc',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResourcesRoute = ResourcesRouteImport.update({
+  id: '/resources',
+  path: '/resources',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RegisterRoute = RegisterRouteImport.update({
@@ -55,6 +62,11 @@ const KbRoute = KbRouteImport.update({
 const GtdRoute = GtdRouteImport.update({
   id: '/gtd',
   path: '/gtd',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChatRoute = ChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgentLabRoute = AgentLabRouteImport.update({
@@ -86,11 +98,13 @@ const ProjectsIdRoute = ProjectsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent-lab': typeof AgentLabRoute
+  '/chat': typeof ChatRoute
   '/gtd': typeof GtdRoute
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
   '/projects': typeof ProjectsRouteWithChildren
   '/register': typeof RegisterRoute
+  '/resources': typeof ResourcesRoute
   '/rsc': typeof RscRoute
   '/text-editor': typeof TextEditorRoute
   '/projects/$id': typeof ProjectsIdRoute
@@ -100,10 +114,12 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agent-lab': typeof AgentLabRoute
+  '/chat': typeof ChatRoute
   '/gtd': typeof GtdRoute
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/resources': typeof ResourcesRoute
   '/rsc': typeof RscRoute
   '/text-editor': typeof TextEditorRoute
   '/projects/$id': typeof ProjectsIdRoute
@@ -114,11 +130,13 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agent-lab': typeof AgentLabRoute
+  '/chat': typeof ChatRoute
   '/gtd': typeof GtdRoute
   '/kb': typeof KbRoute
   '/login': typeof LoginRoute
   '/projects': typeof ProjectsRouteWithChildren
   '/register': typeof RegisterRoute
+  '/resources': typeof ResourcesRoute
   '/rsc': typeof RscRoute
   '/text-editor': typeof TextEditorRoute
   '/projects/$id': typeof ProjectsIdRoute
@@ -130,11 +148,13 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/agent-lab'
+    | '/chat'
     | '/gtd'
     | '/kb'
     | '/login'
     | '/projects'
     | '/register'
+    | '/resources'
     | '/rsc'
     | '/text-editor'
     | '/projects/$id'
@@ -144,10 +164,12 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/agent-lab'
+    | '/chat'
     | '/gtd'
     | '/kb'
     | '/login'
     | '/register'
+    | '/resources'
     | '/rsc'
     | '/text-editor'
     | '/projects/$id'
@@ -157,11 +179,13 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/agent-lab'
+    | '/chat'
     | '/gtd'
     | '/kb'
     | '/login'
     | '/projects'
     | '/register'
+    | '/resources'
     | '/rsc'
     | '/text-editor'
     | '/projects/$id'
@@ -172,11 +196,13 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentLabRoute: typeof AgentLabRoute
+  ChatRoute: typeof ChatRoute
   GtdRoute: typeof GtdRoute
   KbRoute: typeof KbRoute
   LoginRoute: typeof LoginRoute
   ProjectsRoute: typeof ProjectsRouteWithChildren
   RegisterRoute: typeof RegisterRoute
+  ResourcesRoute: typeof ResourcesRoute
   RscRoute: typeof RscRoute
   TextEditorRoute: typeof TextEditorRoute
   SettingsThemeRoute: typeof SettingsThemeRoute
@@ -196,6 +222,13 @@ declare module '@tanstack/react-router' {
       path: '/rsc'
       fullPath: '/rsc'
       preLoaderRoute: typeof RscRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/resources': {
+      id: '/resources'
+      path: '/resources'
+      fullPath: '/resources'
+      preLoaderRoute: typeof ResourcesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/register': {
@@ -231,6 +264,13 @@ declare module '@tanstack/react-router' {
       path: '/gtd'
       fullPath: '/gtd'
       preLoaderRoute: typeof GtdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chat': {
+      id: '/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof ChatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agent-lab': {
@@ -288,11 +328,13 @@ const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentLabRoute: AgentLabRoute,
+  ChatRoute: ChatRoute,
   GtdRoute: GtdRoute,
   KbRoute: KbRoute,
   LoginRoute: LoginRoute,
   ProjectsRoute: ProjectsRouteWithChildren,
   RegisterRoute: RegisterRoute,
+  ResourcesRoute: ResourcesRoute,
   RscRoute: RscRoute,
   TextEditorRoute: TextEditorRoute,
   SettingsThemeRoute: SettingsThemeRoute,

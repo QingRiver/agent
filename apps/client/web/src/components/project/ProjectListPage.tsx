@@ -1,6 +1,7 @@
 import type { DirDto } from '@apis/dir-api'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
+import { cn } from '@lib/utils'
 import { DirStore } from '@stores/dir-store'
 import { Link } from '@tanstack/react-router'
 import { useAtomValue } from 'jotai'
@@ -11,8 +12,9 @@ import { projectRoots } from './projectTree'
 
 /**
  * 项目列表：新建 / 重命名 / 删除；点击进入详情。
+ * embedded：嵌入资源库 Tab，不包整页壳。
  */
-export function ProjectListPage() {
+export function ProjectListPage({ embedded = false }: { embedded?: boolean } = {}) {
   const dirs = useAtomValue(DirStore.dirsAtom)
   const projects = useMemo(() => projectRoots(dirs), [dirs])
   const [createOpen, setCreateOpen] = useState(false)
@@ -62,23 +64,34 @@ export function ProjectListPage() {
       setRenamingId(null)
   }
 
-  return (
-    <div className="mx-auto flex h-[calc(100vh-65px)] w-full max-w-3xl flex-col px-6 py-6">
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">项目</h1>
-          <p className="mt-1 text-sm text-muted-foreground">管理项目根目录，进入后编辑文件树与内容</p>
-        </div>
-        <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
+  const body = (
+    <>
+      <div className={cn('flex items-start justify-between gap-4', embedded ? 'px-4 py-3' : 'mb-4')}>
+        {!embedded && (
+          <div>
+            <h1 className="text-lg font-semibold text-foreground">项目</h1>
+            <p className="mt-1 text-sm text-muted-foreground">管理项目根目录，进入后编辑文件树与内容</p>
+          </div>
+        )}
+        {embedded && (
+          <p className="text-sm text-muted-foreground">管理项目根目录，进入后编辑文件树与内容</p>
+        )}
+        <Button type="button" size="sm" className="shrink-0" onClick={() => setCreateOpen(true)}>
           <Plus className="size-4" />
           新建项目
         </Button>
       </div>
 
-      {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
+      {error && (
+        <p className={cn('text-sm text-destructive', embedded ? 'px-4 pb-2' : 'mb-3')}>{error}</p>
+      )}
 
       {pendingDelete && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm">
+        <div className={cn(
+          'flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm',
+          embedded ? 'mx-4 mb-3' : 'mb-3',
+        )}
+        >
           <span className="text-destructive">
             确定删除项目「
             {pendingDelete.name}
@@ -105,7 +118,11 @@ export function ProjectListPage() {
         </div>
       )}
 
-      <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-lg border border-border bg-card p-2">
+      <ul className={cn(
+        'min-h-0 flex-1 space-y-1 overflow-y-auto',
+        embedded ? 'px-2 pb-2' : 'rounded-lg border border-border bg-card p-2',
+      )}
+      >
         {projects.map((p) => {
           const renaming = renamingId === p.id
           return (
@@ -176,6 +193,20 @@ export function ProjectListPage() {
       </ul>
 
       <NewProjectDialog open={createOpen} onClose={() => setCreateOpen(false)} />
+    </>
+  )
+
+  if (embedded) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {body}
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto flex h-[calc(100vh-65px)] w-full max-w-3xl flex-col px-6 py-6">
+      {body}
     </div>
   )
 }

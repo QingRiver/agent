@@ -16,12 +16,16 @@ import { buildProjectTree } from './projectTree'
 
 interface ProjectWorkspaceProps {
   projectId: string
+  /** 资源库深链：选中 version_text */
+  initialTextId?: string
+  /** 资源库深链：选中文件夹（如 skill 根） */
+  initialDirId?: string
 }
 
 /**
  * 项目详情工作区：左文件树 + 右展示（原 ProjectManager 中/右栏）。
  */
-export function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
+export function ProjectWorkspace({ projectId, initialTextId, initialDirId }: ProjectWorkspaceProps) {
   const { user } = useAuth()
   const userId = user?.id
   const navigate = useNavigate()
@@ -34,7 +38,13 @@ export function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
   const kbsByDirId = useAtomValue(KbStore.kbsByDirIdAtom)
   const allTags = useAtomValue(TagsStore.tagsAtom)
   const rowStore = useAtomValue(GtdStore.rowStoreAtom)
-  const [selected, setSelected] = useState<ProjectSelection | null>(null)
+  const [selected, setSelected] = useState<ProjectSelection | null>(() => {
+    if (initialTextId)
+      return { kind: 'text', id: initialTextId }
+    if (initialDirId)
+      return { kind: 'folder', id: initialDirId }
+    return null
+  })
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {

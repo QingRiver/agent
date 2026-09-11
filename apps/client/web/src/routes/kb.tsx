@@ -108,11 +108,12 @@ function KbPage() {
               )
             : (
                 <Link
-                  to="/projects"
+                  to="/resources"
+                  search={{ tab: 'project' }}
                   className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   <ArrowLeft className="size-4" />
-                  项目列表
+                  资源
                 </Link>
               )}
           <span className="text-sm text-muted-foreground">知识库</span>
