@@ -14,7 +14,7 @@ function resolveModel(model?: string): string {
   return model ?? process.env.OPENAI_MODEL_MINI ?? env.OPENAI_MODEL
 }
 
-/** 直接调用 OpenAI 兼容 API，不经过 LangChain，避免图内 streamEvents 泄漏到前端 */
+/** 直接调用 OpenAI 兼容 API，不经过 LangChain，避免图内 messages 流把这段正文打到前端 */
 export async function chatCompletionText(options: ChatCompletionOptions): Promise<string> {
   const baseUrl = env.OPENAI_BASE_URL.replace(/\/$/, '')
   const response = await fetch(`${baseUrl}/v1/chat/completions`, {

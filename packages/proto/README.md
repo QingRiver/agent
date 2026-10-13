@@ -1,12 +1,12 @@
 # @agent/proto
 
-跨层**中性契约**：HITL 中断/恢复、Writer hunk/summary。不绑定 LangGraph、Copilot 或 CLI 实现。
+跨层**中性契约**：HITL 中断/恢复、Writer hunk/summary。不绑定 LangGraph 或 CLI 实现。
 
 ## 导出概览
 
 | 领域 | 典型导出 |
 |------|----------|
-| HITL | `InterruptRequest` / `InterruptResponse`、`PendingInterrupt`、`ThreadState`、`toResponse` |
+| HITL | `InterruptRequest` / `InterruptResponse`、`InterruptRequestValue`、`toResponse` |
 | Writer | `WRITER_CHANGE_SUMMARIES_EVENT`、`computeHunks`、`Hunk`、`WriterChangeSummary*` |
 
 > KB 引文已改为答案内 Markdown 链接（如 `[n](/kb?path=…&chunk=…)`）；不再在本包导出 `KbCitation*` / 自定义事件。
@@ -19,12 +19,12 @@
 ## 使用
 
 ```ts
-import type { InterruptRequest, PendingInterrupt } from '@agent/proto'
+import type { InterruptRequest } from '@agent/proto'
 import { computeHunks } from '@agent/proto'
 ```
 
 - **Client**：HITL 审批卡、文本编辑器 session（避免直接依赖 `@agent/graph`）
-- **Server shared / Graph / CLI**：会话 `threadState`、interrupt 映射
+- **Server shared / Graph / CLI**：interrupt 映射
 
 ## 常用命令
 

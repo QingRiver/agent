@@ -2,7 +2,7 @@ import type { AIMessage } from '@langchain/core/messages'
 import { randomUUID } from 'node:crypto'
 
 /**
- * DeepSeek-v4-flash 在 streamEvents 模式下被 langchain 错置进 content 的 tool_call 块。
+ * DeepSeek-v4-flash 在 graph.stream 的 messages 模式下被 langchain 错置进 content 的 tool_call 块。
  * 特征：type 标为 "text"，但同时带 name/args/id。
  */
 interface MisplacedToolCallPart {

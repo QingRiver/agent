@@ -22,23 +22,23 @@ test('dev HITL：浏览器完成 4 步中断并批准执行', async ({ page }) =
   await page.fill('#password', PASSWORD)
   await page.click('button[type=submit]')
   await page.waitForURL(/\/$/, { timeout: 15_000 })
+  await page.goto('/chat')
 
-  await page.getByText('新建对话').click()
+  await page.getByRole('button', { name: '新建对话' }).click()
   await page.getByText('开发演示', { exact: false }).click()
   await page.getByRole('button', { name: '创建' }).click()
 
   const chatInput = page.locator('textarea').first()
   await expect(chatInput).toBeVisible({ timeout: 15_000 })
-  await expect(page.getByTestId('copilot-send-button')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('button', { name: '发送' })).toBeVisible({ timeout: 15_000 })
 
-  // 受控 textarea：fill 后点发送（比 Enter 更稳，避免 React value 未同步）
   await chatInput.click()
   await chatInput.fill(USER_INPUT)
   const runWait = page.waitForResponse(
-    r => r.url().includes('/copilotkit/agent/dev/run') && r.request().method() === 'POST',
+    r => r.url().includes('/graphs/dev/stream') && r.request().method() === 'POST',
     { timeout: 30_000 },
   )
-  await page.getByTestId('copilot-send-button').click()
+  await page.getByRole('button', { name: '发送' }).click()
   await runWait
 
   // 澄清：选 HITL 审批演示

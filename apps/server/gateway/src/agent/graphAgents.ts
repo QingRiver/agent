@@ -1,245 +1,101 @@
-import type { RunAgentInput } from '@ag-ui/core'
 import type { GraphsName } from '@agent/graph'
-import type { AguiTransformerGraphApp, StreamGraphAguiOptions } from './streamGraphAguiEvents'
 import { env } from '@agent/env'
 import {
-  aguiTransformerFactory,
-  clampMaxSteps,
   Graphs,
-  REACT_AGENT_MAX_STEPS_DEFAULT,
-  readReactAgentForwardedProps,
-  resolveResumeFromRunAgentInput,
   sanitizeKbId,
-  sanitizeUserPrompt,
   setSkillFileLoader,
 } from '@agent/graph'
 import { HumanMessage } from '@langchain/core/messages'
 import { Command } from '@langchain/langgraph'
-import { getRequestContext } from '../context/requestContext'
 import { getCheckpointer } from '../db/checkpointer'
 import { SkillService } from '../service/skill'
-import { buildMessagesInput, extractLastUserMessage } from './extractLastUserMessage'
-import { GraphTransformerAguiAgent } from './graphTransformerAguiAgent'
-import { attachResolveAgentConfigMiddleware } from './middleware/resolveAgentConfig'
-import { streamGraphAguiEvents } from './streamGraphAguiEvents'
+import { lastHumanText } from './langgraphWire'
+import { resolveReactAgentRun } from './middleware/resolveAgentConfig'
 
 setSkillFileLoader(async ({ userId, skillCode }) => SkillService.walkFiles(userId, skillCode))
 
-interface GraphAgentDefinition {
-  description: string
-  resolveStreamInput: (input: RunAgentInput) => unknown
-  resolveConfigurable?: (input: RunAgentInput) => Record<string, unknown>
-  resolveRecursionLimit?: (input: RunAgentInput) => number | undefined
+export interface GraphInvokeRequest {
+  messages: ReadonlyArray<{ type?: string, content?: unknown }>
+  command?: { resume: unknown }
+  configurable?: Record<string, unknown>
 }
 
-const GRAPH_AGENT_DEFINITIONS = {
-  claudeAgent: {
-    description: 'Claude Agent SDK + LangGraph checkpoint + AG-UI',
-    resolveStreamInput: input => buildMessagesInput(extractLastUserMessage(input, {
-      defaultMessage: '你好，请简要介绍这个仓库的结构。',
-    })),
-  },
-  reactAgent: {
-    description: '通用 ReAct（可配 prompt + ask_* + kb_search，Lab 试验台）',
-    resolveStreamInput: (input) => {
-      const resume = resolveResumeFromRunAgentInput(input)
-      if (resume != null)
-        return new Command({ resume })
-      const userText = extractLastUserMessage(input, {
-        defaultMessage: '你好',
-      })
-      return buildMessagesInput(userText)
+interface CompiledGraphApp {
+  stream: (
+    input: unknown,
+    options: {
+      streamMode: ['messages', 'updates', 'custom']
+      configurable?: Record<string, unknown>
+      recursionLimit?: number
     },
-    resolveConfigurable: (input) => {
-      const forwarded = readReactAgentForwardedProps(input)
-      const userId = getRequestContext()?.userId
-      return {
-        userPrompt: sanitizeUserPrompt(forwarded.userPrompt),
-        kbId: sanitizeKbId(forwarded.kbId, env.KB_COLLECTION),
-        ...(userId ? { userId } : {}),
-        ...(forwarded.skillText ? { skillText: forwarded.skillText } : {}),
-        ...(forwarded.skillBindings?.length ? { skillBindings: forwarded.skillBindings } : {}),
-      }
-    },
-    /** 唯一环控：配置 maxSteps ≡ LangGraph recursionLimit（节点转移上限） */
-    resolveRecursionLimit: (input) => {
-      const forwarded = readReactAgentForwardedProps(input)
-      return clampMaxSteps(forwarded.maxSteps ?? REACT_AGENT_MAX_STEPS_DEFAULT)
-    },
-  },
-  dev: {
-    description: '开发演示：澄清分流 → 天气 / 订单 ReAct / HITL approval',
-    resolveStreamInput: (input) => {
-      const resume = resolveResumeFromRunAgentInput(input)
-      if (resume != null)
-        return new Command({ resume })
-      const userText = extractLastUserMessage(input, {
-        stateKeys: ['input', 'message'],
-        defaultMessage: '开始演示',
-      })
-      return {
-        input: userText,
-        messages: [new HumanMessage(userText)],
-      }
-    },
-  },
-  tushare: {
-    description: 'A股个股分析（Tushare MCP + ask_human 中断）',
-    resolveStreamInput: (input) => {
-      // ask_human 续接：resolve_stock / ask_* 工具内 interrupt 后，恢复值经 Command({resume}) 回灌
-      const resume = resolveResumeFromRunAgentInput(input)
-      if (resume != null)
-        return new Command({ resume })
-      const userText = extractLastUserMessage(input, {
-        defaultMessage: '分析平安银行最近走势',
-      })
-      return buildMessagesInput(userText)
-    },
-  },
-  ha: {
-    description: 'Home Assistant（官方 MCP + ask_human 中断）',
-    resolveStreamInput: (input) => {
-      const resume = resolveResumeFromRunAgentInput(input)
-      if (resume != null)
-        return new Command({ resume })
-      const userText = extractLastUserMessage(input, {
-        defaultMessage: '客厅灯现在是什么状态？',
-      })
-      return buildMessagesInput(userText)
-    },
-  },
-  editor: {
-    description: '文本编辑器（editorPath=job 润色/⌘K；chat 为 Ask/Write 对话）',
-    resolveStreamInput: (input) => {
-      const userText = extractLastUserMessage(input, {
-        stateKeys: ['originalMarkdown'],
-        defaultMessage: '',
-      })
-      if (userText.trim())
-        return buildMessagesInput(userText)
-      return { messages: [] }
-    },
-    resolveConfigurable: (input) => {
-      const forwarded = input.forwardedProps as { editorPath?: unknown } | undefined
-      const editorPath = forwarded?.editorPath === 'job' ? 'job' as const : 'chat' as const
-      const state = input.state as {
-        writerMode?: unknown
-        editCase?: unknown
-        polishInstruction?: unknown
-        documentBaseline?: unknown
-        focuses?: unknown
-        forceIntent?: unknown
-      } | undefined
+  ) => Promise<AsyncIterable<unknown>>
+  getState: (config: { configurable: { thread_id: string } }) => Promise<unknown>
+}
 
-      const forceIntent = state?.forceIntent === 'ask' || state?.forceIntent === 'write'
-        ? state.forceIntent
-        : undefined
-      const polishInstruction = typeof state?.polishInstruction === 'string'
-        ? state.polishInstruction
-        : undefined
-      const documentBaseline = typeof state?.documentBaseline === 'string'
-        ? state.documentBaseline
-        : undefined
+const GRAPH_DESCRIPTIONS: Record<GraphsName, string> = {
+  reactAgent: '通用 ReAct（可配 prompt + ask_* + kb_search，Lab 试验台）',
+  dev: '开发演示：澄清分流 → 天气 / 订单 ReAct / HITL approval',
+  tushare: 'A股个股分析（Tushare MCP + ask_human 中断）',
+  ha: 'Home Assistant（官方 MCP + ask_human 中断）',
+  editor: '文本编辑器（editorPath=job 润色/⌘K；chat 为 Ask/Write 对话）',
+  kb: '知识库 RAG（混合召回 + rerank + 引文溯源）',
+}
 
-      if (editorPath === 'chat') {
-        return {
-          editorPath,
-          reasoning: true,
-          editCase: 'document' as const,
-          writerMode: 'polish' as const,
-          ...(forceIntent ? { forceIntent } : {}),
-          ...(documentBaseline ? { documentBaseline } : {}),
-          ...(polishInstruction ? { polishInstruction } : {}),
-          ...(Array.isArray(state?.focuses) ? { focuses: state.focuses } : {}),
-        }
-      }
-
-      const editCase = state?.editCase === 'inline' || state?.editCase === 'document'
-        ? state.editCase
-        : state?.writerMode === 'inline' ? 'inline' : 'document'
-      return {
-        editorPath,
-        reasoning: false,
-        editCase,
-        writerMode: editCase === 'inline' ? 'inline' : 'polish',
-        ...(polishInstruction ? { polishInstruction } : {}),
-        ...(documentBaseline ? { documentBaseline } : {}),
-        ...(Array.isArray(state?.focuses) ? { focuses: state.focuses } : {}),
-      }
-    },
-  },
-  kb: {
-    description: '知识库 RAG（混合召回 + rerank + 引文溯源）',
-    resolveStreamInput: input => buildMessagesInput(extractLastUserMessage(input, {
-      stateKeys: ['message'],
-      defaultMessage: '知识库中有哪些退款政策？',
-    })),
-    resolveConfigurable: (input) => {
-      const forwarded = input.forwardedProps as { kbId?: unknown } | undefined
-      const raw = forwarded?.kbId
-      const kbId = typeof raw === 'string' && raw.trim()
-        ? raw.trim()
-        : env.KB_COLLECTION
-      return { kbId }
-    },
-  },
-} as const satisfies Record<GraphsName, GraphAgentDefinition>
+const DEFAULT_USER_TEXT: Record<GraphsName, string> = {
+  reactAgent: '你好',
+  dev: '开始演示',
+  tushare: '分析平安银行最近走势',
+  ha: '客厅灯现在是什么状态？',
+  editor: '',
+  kb: '知识库中有哪些退款政策？',
+}
 
 export function listGraphAgentCatalog(): { name: GraphsName, description: string }[] {
   return (Object.keys(Graphs) as GraphsName[]).map(name => ({
     name,
-    description: GRAPH_AGENT_DEFINITIONS[name].description,
+    description: GRAPH_DESCRIPTIONS[name],
   }))
 }
 
-const aguiCache = new Map<GraphsName, AguiTransformerGraphApp>()
+const graphCache = new Map<GraphsName, CompiledGraphApp>()
 
-export function getAguiGraphApp(name: GraphsName): AguiTransformerGraphApp {
-  const cached = aguiCache.get(name)
+export function getGraphApp(name: GraphsName): CompiledGraphApp {
+  const cached = graphCache.get(name)
   if (cached)
     return cached
 
   const compiled = Graphs[name].compile({
     checkpointer: getCheckpointer(),
-    transformers: [aguiTransformerFactory],
-  }) as AguiTransformerGraphApp
+  }) as unknown as CompiledGraphApp
 
-  aguiCache.set(name, compiled)
+  graphCache.set(name, compiled)
   return compiled
 }
 
-function createGraphAgent(name: GraphsName): GraphTransformerAguiAgent {
-  const definition = GRAPH_AGENT_DEFINITIONS[name]
-  const agent = new GraphTransformerAguiAgent(
-    { agentId: name, description: definition.description },
-    input => streamGraphAguiEvents(
-      input,
-      getAguiGraphApp(name),
-      getGraphAgentStreamOptions(name),
-      name,
-    ),
-  )
-  if (name === 'reactAgent')
-    attachResolveAgentConfigMiddleware(agent)
-  return agent
+export function resolveGraphInput(name: GraphsName, request: GraphInvokeRequest): unknown {
+  if (request.command != null)
+    return new Command({ resume: request.command.resume })
+
+  const userText = lastHumanText(request.messages, DEFAULT_USER_TEXT[name])
+  if (name === 'editor' && !userText.trim())
+    return { messages: [] }
+  if (name === 'dev') {
+    return {
+      input: userText,
+      messages: [new HumanMessage(userText)],
+    }
+  }
+  return { messages: [new HumanMessage(userText)] }
 }
 
-export const copilotAgents = Object.fromEntries(
-  (Object.keys(Graphs) as GraphsName[]).map(name => [name, createGraphAgent(name)]),
-) as Record<GraphsName, GraphTransformerAguiAgent>
-
-/** 供薄 SSE 旁路复用与 createGraphAgent 相同的 resolve* 选项 */
-export function getGraphAgentStreamOptions(name: GraphsName): StreamGraphAguiOptions {
-  const definition = GRAPH_AGENT_DEFINITIONS[name]
-  const resolveConfigurable = 'resolveConfigurable' in definition
-    ? definition.resolveConfigurable
-    : undefined
-  const resolveRecursionLimit = 'resolveRecursionLimit' in definition
-    ? definition.resolveRecursionLimit
-    : undefined
-  return {
-    resolveStreamInput: definition.resolveStreamInput,
-    ...(resolveConfigurable ? { resolveConfigurable } : {}),
-    ...(resolveRecursionLimit ? { resolveRecursionLimit } : {}),
-  }
+export async function resolveGraphRunOptions(
+  name: GraphsName,
+  userId: string | undefined,
+  configurable: Record<string, unknown> | undefined,
+): Promise<{ configurable: Record<string, unknown>, recursionLimit?: number }> {
+  if (name === 'reactAgent')
+    return resolveReactAgentRun(userId, configurable)
+  if (name === 'kb')
+    return { configurable: { kbId: sanitizeKbId(configurable?.kbId, env.KB_COLLECTION) } }
+  return { configurable: { ...(configurable ?? {}) } }
 }

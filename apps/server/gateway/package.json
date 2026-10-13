@@ -19,9 +19,6 @@
     "cert": "mkdir -p certificates && mkcert -key-file certificates/localhost-key.pem -cert-file certificates/localhost.pem localhost 127.0.0.1 ::1"
   },
   "dependencies": {
-    "@ag-ui/client": "catalog:",
-    "@ag-ui/core": "catalog:",
-    "@agent/claude": "workspace:*",
     "@agent/e2e": "workspace:*",
     "@agent/env": "workspace:*",
     "@agent/graph": "workspace:*",
@@ -29,7 +26,6 @@
     "@agent/kb": "workspace:*",
     "@agent/project": "workspace:*",
     "@agent/proto": "workspace:*",
-    "@copilotkit/runtime": "catalog:",
     "@hono/node-server": "catalog:",
     "@hono/zod-validator": "catalog:",
     "@langchain/core": "catalog:",
@@ -43,7 +39,6 @@
     "jszip": "catalog:",
     "pg": "catalog:",
     "radash": "catalog:",
-    "rxjs": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

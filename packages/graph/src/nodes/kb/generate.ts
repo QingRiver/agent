@@ -85,7 +85,7 @@ export async function kbGenerateNode(
     }
   }
 
-  // 流式已发出模型原文；落盘时把残留裸 [n] 收成链接（不改 AG-UI 已发出的 delta）
+  // 流式已发出模型原文；落盘时把残留裸 [n] 收成链接。同 id 的消息通道不会再改已流出的字。
   const markdown = answerWithMarkdownLinks(answer, validation.citations)
   const messageId = (response as AIMessage).id
   return {

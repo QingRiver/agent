@@ -1,119 +1,63 @@
 import type { AIMessage, BaseMessage } from '@langchain/core/messages'
-import type { AguiMappedEvent } from '../stream/index'
 import { randomUUID } from 'node:crypto'
-import { EventType } from '@ag-ui/core'
 import { HumanMessage } from '@langchain/core/messages'
 import { Command, MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it } from 'vitest'
-import { aguiTransformerFactory, buildInterruptFinalizeEvents } from '../stream/index'
 import { getAIMessageContent } from '../utils/index'
 import { devGraph } from './dev'
 
-describe('devGraph hitlDemo + AguiTransformer', () => {
+describe('devGraph hitlDemo', () => {
   const app = devGraph.compile({
     checkpointer: new MemorySaver(),
-    transformers: [aguiTransformerFactory],
   })
 
-  /** 对齐 server `streamGraphAguiEvents`：aguiEvents 结束后按 stream.interrupted 补发收尾。 */
-  async function streamUntilInterrupt(
-    input: Parameters<typeof app.streamEvents>[0],
-    threadId: string,
-    runId: string,
-  ) {
-    const stream = await app.streamEvents(
-      input,
-      { version: 'v3', configurable: { thread_id: threadId } },
-    )
-
-    async function drainProtocol() {
-      for await (const _ of stream) { /* drain protocol */ }
+  async function nextInterrupt(input: Parameters<typeof app.stream>[0], threadId: string) {
+    const stream = await app.stream(input, {
+      streamMode: 'updates',
+      configurable: { thread_id: threadId },
+    })
+    for await (const _chunk of stream) {
+      // 跑完这一轮；中断挂在 checkpoint tasks 上
     }
-
-    const protocolDone = drainProtocol()
-    const events: AguiMappedEvent[] = await Array.fromAsync(stream.extensions.aguiEvents)
-    await protocolDone
-
-    if (!events.some(e => e.type === EventType.RUN_FINISHED)) {
-      if (stream.interrupted && stream.interrupts.length > 0) {
-        const snapshot = await stream.output
-        events.push(...buildInterruptFinalizeEvents({
-          threadId,
-          runId,
-          interrupts: stream.interrupts,
-          snapshot: snapshot as Record<string, unknown>,
-        }) as AguiMappedEvent[])
-      }
+    const snapshot = await app.getState({ configurable: { thread_id: threadId } })
+    for (const task of snapshot.tasks ?? []) {
+      const interrupt = task.interrupts?.[0]
+      if (interrupt != null && typeof interrupt === 'object' && 'value' in interrupt)
+        return interrupt.value as { type?: string, message?: string, details?: string }
     }
-
-    const runFinished = events.find(
-      (e): e is Extract<typeof e, { type: typeof EventType.RUN_FINISHED }> =>
-        e.type === EventType.RUN_FINISHED,
-    )
-    const interrupt = runFinished?.outcome?.type === 'interrupt'
-      ? runFinished.outcome.interrupts[0]
-      : undefined
-    return { interrupt, runFinished, events }
+    return undefined
   }
 
   it('澄清选 hitlDemo 后串联 input → select → multiSelect → approval', async () => {
     const threadId = `dev-hitl-${randomUUID()}`
     const userInput = '向账户 0x123 转账 100 ETH'
 
-    const clarify = await streamUntilInterrupt(
+    const clarify = await nextInterrupt(
       { input: userInput, messages: [new HumanMessage(userInput)] },
       threadId,
-      'r0',
     )
-    expect(clarify.interrupt?.metadata).toMatchObject({ type: 'select' })
+    expect(clarify).toMatchObject({ type: 'select' })
 
-    const step1 = await streamUntilInterrupt(
-      new Command({ resume: { value: 'hitlDemo' } }),
-      threadId,
-      'r1',
-    )
-    expect(step1.interrupt?.metadata).toMatchObject({ type: 'input' })
-    expect(step1.runFinished).toMatchObject({
-      outcome: { type: 'interrupt' },
-    })
+    const step1 = await nextInterrupt(new Command({ resume: { value: 'hitlDemo' } }), threadId)
+    expect(step1).toMatchObject({ type: 'input' })
 
-    const step2 = await streamUntilInterrupt(
-      new Command({ resume: { value: '季度资金归集' } }),
-      threadId,
-      'r2',
-    )
-    expect(step2.interrupt?.metadata).toMatchObject({ type: 'select' })
+    const step2 = await nextInterrupt(new Command({ resume: { value: '季度资金归集' } }), threadId)
+    expect(step2).toMatchObject({ type: 'select' })
 
-    const step3 = await streamUntilInterrupt(
-      new Command({ resume: { value: 'high' } }),
-      threadId,
-      'r3',
-    )
-    expect(step3.interrupt?.metadata).toMatchObject({ type: 'multiSelect' })
+    const step3 = await nextInterrupt(new Command({ resume: { value: 'high' } }), threadId)
+    expect(step3).toMatchObject({ type: 'multiSelect' })
 
-    const step4 = await streamUntilInterrupt(
+    const step4 = await nextInterrupt(
       new Command({ resume: { values: ['audit', 'notify'] } }),
       threadId,
-      'r4',
     )
-    expect(step4.interrupt?.metadata).toMatchObject({
+    expect(step4).toMatchObject({
       type: 'approval',
       message: expect.stringContaining('请确认'),
       details: expect.stringContaining('季度资金归集'),
     })
 
-    const step5 = await streamUntilInterrupt(
-      new Command({ resume: { approved: true } }),
-      threadId,
-      'r5',
-    )
-    const interruptFinished = step5.events.find(
-      (e): e is Extract<typeof e, { type: typeof EventType.RUN_FINISHED }> =>
-        e.type === EventType.RUN_FINISHED
-        && 'outcome' in e
-        && e.outcome?.type === 'interrupt',
-    )
-    expect(interruptFinished).toBeUndefined()
+    expect(await nextInterrupt(new Command({ resume: { approved: true } }), threadId)).toBeUndefined()
 
     const snapshot = await app.getState({ configurable: { thread_id: threadId } })
     const messages = snapshot.values.messages as BaseMessage[]
@@ -137,26 +81,18 @@ describe('devGraph hitlDemo + AguiTransformer', () => {
     const threadId = `dev-hitl-reject-${randomUUID()}`
     const userInput = '删除生产数据'
 
-    await streamUntilInterrupt(
+    await nextInterrupt(
       { input: userInput, messages: [new HumanMessage(userInput)] },
       threadId,
-      'r0',
     )
-    await streamUntilInterrupt(new Command({ resume: { value: 'hitlDemo' } }), threadId, 'r1')
-    await streamUntilInterrupt(new Command({ resume: { value: '误操作恢复' } }), threadId, 'r2')
-    await streamUntilInterrupt(new Command({ resume: { value: 'low' } }), threadId, 'r3')
-    await streamUntilInterrupt(new Command({ resume: { values: [] } }), threadId, 'r4')
+    await nextInterrupt(new Command({ resume: { value: 'hitlDemo' } }), threadId)
+    await nextInterrupt(new Command({ resume: { value: '误操作恢复' } }), threadId)
+    await nextInterrupt(new Command({ resume: { value: 'low' } }), threadId)
+    await nextInterrupt(new Command({ resume: { values: [] } }), threadId)
 
-    const final = await streamUntilInterrupt(
+    expect(await nextInterrupt(
       new Command({ resume: { approved: false, reason: '风险过高' } }),
       threadId,
-      'r5',
-    )
-    expect(final.events.find(
-      (e): e is Extract<typeof e, { type: typeof EventType.RUN_FINISHED }> =>
-        e.type === EventType.RUN_FINISHED
-        && 'outcome' in e
-        && e.outcome?.type === 'interrupt',
     )).toBeUndefined()
 
     const snapshot = await app.getState({ configurable: { thread_id: threadId } })

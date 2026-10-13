@@ -12,13 +12,13 @@ src/
   support/      共用原语：跨 flow 复用的机械操作（无业务断言）
     assert.ts     fail() — 断言失败即 exit 1
     thread.ts     createThread(token, agentId)
-    sse.ts        drainSse() + runAgentRun() — 统一 SSE 读流 + RUN_ERROR 兜底
+    sse.ts        drainSse() + runAgentRun() + fetchGraphState() — POST /graphs/:name/stream，GET /graphs/:name/state
   flows/        场景层：真实 HTTP/SSE 端到端 flow（业务断言在此）
     hitl-agent.ts 4 步 interrupt + resume，校验「已批准执行」
     kb-agent.ts   单轮 RAG，echo SSE
     tags.ts       KB + GTD + shared tags CRUD/删除全流程
     index.ts      FLOWS 注册表 + runFlow(name)
-  ui/          Playwright 浏览器层：驱动真实前端 UI 验证 AG-UI 交互（错误条渲染/展开等）
+  ui/          Playwright 浏览器层：驱动真实前端（assistant-ui 直连 /graphs/:name/stream）
     kb-error.spec.ts  停 qdrant 后断言可展开错误条出现
   runner.ts     CLI 入口：tsx src/runner.ts <flow>
   index.ts      公共导出
@@ -86,10 +86,10 @@ SSE 原始流：
 ```ts
 import { signInE2E, e2eHeaders, E2E_BASE_URL } from '@agent/e2e'
 const token = await signInE2E()
-await fetch(`${E2E_BASE_URL}/copilotkit/agent/hitl/run`, {
+await fetch(`${E2E_BASE_URL}/graphs/dev/stream`, {
   method: 'POST',
   headers: e2eHeaders(token, { Accept: 'text/event-stream', 'Content-Type': 'application/json' }),
-  body: JSON.stringify({ threadId, runId, /* ... */ }),
+  body: JSON.stringify({ threadId, messages: [{ type: 'human', content: '你好' }] }),
 })
 ```
 

@@ -1,4 +1,3 @@
-import type { Message } from '@ag-ui/core'
 import { GraphsNameSchema } from '@agent/graph'
 import { z } from 'zod'
 
@@ -9,9 +8,6 @@ export { GraphsNameSchema } from '@agent/graph'
 export {
   type ApprovalDecision,
   ApprovalDecisionSchema,
-  type PendingInterrupt,
-  PendingInterruptSchema,
-  type ThreadState,
 } from '@agent/proto'
 
 export const ConversationIdSchema = z.uuid()
@@ -27,9 +23,6 @@ export const CreateConversationRequestSchema = z.object({
   agentId: GraphsNameSchema,
 })
 export type CreateConversationRequest = z.infer<typeof CreateConversationRequestSchema>
-
-/** AG-UI `Message`（checkpoint hydrate / connect snapshot 共用） */
-export type AgUiMessage = Message
 
 export const ConversationThreadSchema = z.object({
   id: ConversationIdSchema,

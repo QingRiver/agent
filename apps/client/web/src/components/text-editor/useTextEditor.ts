@@ -1,4 +1,3 @@
-import type { AgentErrorInfo } from '@components/copilot/AgentErrorBanner'
 import type { RefObject } from 'react'
 import type { EditorQuote } from './editor-quotes'
 import type { EditorWriteProposal } from './EditorChatPanel'
@@ -22,7 +21,7 @@ export interface UseTextEditorResult {
   mountRef: RefObject<HTMLDivElement | null>
   polishing: boolean
   suggestions: Suggestion[]
-  agentError: AgentErrorInfo | null
+  agentError: string | null
   inlineEdit: InlineEditState | null
   inlinePrompt: InlinePromptState | null
   pendingQuotes: EditorQuote[]
@@ -52,7 +51,7 @@ export function useTextEditor(): UseTextEditorResult {
 
   const [polishing, setPolishing] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
-  const [agentError, setAgentError] = useState<AgentErrorInfo | null>(null)
+  const [agentError, setAgentError] = useState<string | null>(null)
   const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null)
   const [inlinePrompt, setInlinePrompt] = useState<InlinePromptState | null>(null)
   const [pendingQuotes, setPendingQuotes] = useState<EditorQuote[]>([])

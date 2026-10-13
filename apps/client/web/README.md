@@ -7,7 +7,7 @@ Vite + React + TanStack Router 前端：登录后的多 Agent 会话聊天、人
 - React 19、Vite 8、TypeScript
 - TanStack Router、Jotai
 - Tailwind CSS 4、Radix UI
-- `@copilotkit/react-core`（CopilotKit v2）
+- `@assistant-ui/react`、`@assistant-ui/react-langgraph`
 - CodeMirror 6 + Yjs（文本编辑器协同）
 
 ## 前置条件
@@ -32,7 +32,7 @@ pnpm dev                        # server + client 并行
 | 开发地址 | `https://localhost:5173` |
 | REST API | `/api/*` → `https://localhost:3000/*` |
 | 认证 | `/api/auth/*` → server `/api/auth/*` |
-| CopilotKit | `/api/copilotkit/*` → server `/copilotkit/*` |
+| 图流 | `/api/graphs/:name/stream`、`/api/graphs/:name/state` |
 
 代理配置见 [vite.config.ts](vite.config.ts)。web 与 gateway 共用 `apps/server/gateway/certificates/` 下的 mkcert 证书。
 
@@ -42,7 +42,8 @@ pnpm dev                        # server + client 并行
 |------|------|
 | `/login` | 登录（公开页） |
 | `/register` | 注册（公开页） |
-| `/` | 会话列表 + CopilotChat（需登录） |
+| `/` | 首页（需登录） |
+| `/chat` | 会话列表 + assistant-ui 聊天 |
 | `/kb` | 知识库：文件树、Markdown 编辑、导入、召回调试 |
 | `/text-editor` | AI 文本润色编辑器（`editor` Agent） |
 | `/rsc` | RSC 演示：Suspense + use() 解码 gateway 透传的 Flight 流 |
@@ -59,14 +60,12 @@ pnpm dev                        # server + client 并行
 
 | 数据 | 来源 |
 |------|------|
-| 聊天消息 UI | CopilotKit `connect` → `MESSAGES_SNAPSHOT`（server checkpoint hydrate） |
-| HITL 挂起审批 | CopilotKit `agent.pendingInterrupts`（live run 或 `CheckpointConnectRunner` 重放 AG-UI 事件） |
+| 聊天消息 | `POST /graphs/:name/stream` 的 `messages`，刷新用 `GET /graphs/:name/state` |
+| HITL 挂起审批 | 同一条流的 `updates.__interrupt__`，卡片经 `command.resume` 续跑 |
 | 会话列表 / 当前 thread | `GET /conversations/list`、`conversation-store` |
-| Agent 错误 | CopilotKit 流 + `AgentErrorBanner` |
+| 编辑器错误 | 图流 `event: "error"` 的 `message`，`AgentErrorBanner` 只显示这一句 |
 
-HITL 图（`reactAgent`、`tushare`、`dev` 等）在挂起时由 `CopilotChatShell hitl` 内建的 `AgentInterruptUi` 渲染审批卡片（View 来自 `@agent/ui` 的 `InterruptCard`）；`useAgentInterruptResume` 经 `runAgent({ resume })` 发送恢复。非中断展示卡（如 `weather_current`）由同 Shell 内的 `AgentDynamicUi` 经 `useComponent` 内联渲染。
-
-聊天 UI **不**用 `GET /conversations/messages` 返回的 `messages` 字段渲染。会话 HTTP 的 `threadState.pendingInterrupt` 仍可供服务端 / e2e 使用，**不再**驱动客户端 HITL UI。
+HITL 图（`reactAgent`、`tushare`、`dev` 等）挂起时由 `DevInterruptUi` 渲染 `@agent/ui` 的 `InterruptCard`。天气等工具卡挂在 assistant-ui 的 `MessagePrimitive.Parts`。
 
 ### 知识库
 
@@ -78,7 +77,7 @@ HITL 图（`reactAgent`、`tushare`、`dev` 等）在挂起时由 `CopilotChatSh
 | 导入 | `POST /kb/ingest/*` |
 | 召回调试 | `POST /kb/query`（`KbRecallPanel`） |
 
-`kb` Agent 对话时，`CopilotChatShell` 在 `runAgent` 时把 `kbId` prop 写入本轮 `forwardedProps`。
+`kb` 图的集合 id 由服务端从 `configurable.kbId` 读取，缺省用 `KB_COLLECTION`。Agent Lab 通过 `configurable` 传入。
 
 ### 文本编辑器
 
@@ -89,8 +88,9 @@ HITL 图（`reactAgent`、`tushare`、`dev` 等）在挂起时由 `CopilotChatSh
 ```text
 src/
 ├── routes/                 # TanStack Router 文件路由
-│   ├── __root.tsx          # 顶栏、AuthProvider、CopilotKit、RequireAuth
-│   ├── index.tsx           # 会话聊天
+│   ├── __root.tsx          # 顶栏、AuthProvider、RequireAuth
+│   ├── index.tsx           # 首页
+│   ├── chat.tsx            # 会话聊天
 │   ├── kb.tsx              # 知识库页
 │   ├── text-editor.tsx     # 文本润色编辑器
 │   ├── login.tsx
@@ -109,8 +109,7 @@ src/
 ├── components/
 │   ├── auth/               # RequireAuth、UserAvatarMenu
 │   ├── conversation/       # 侧边栏、新建对话、ConversationSync
-│   ├── copilot/            # CopilotChatShell、AgentDynamicUi（useComponent）、CopilotKitAppProvider
-│   ├── hitl/               # AgentInterruptUi、resume hooks（卡片 View 在 @agent/ui）
+│   ├── assistant/          # assistant-ui runtime、线程、中断卡、天气卡
 │   ├── kb/                 # 文件树、编辑器、导入、标签、召回面板
 │   ├── text-editor/        # Yjs + CodeMirror 润色编辑器
 │   └── ui/                 # shadcn 风格基础组件

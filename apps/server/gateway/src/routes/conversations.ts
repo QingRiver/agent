@@ -22,11 +22,6 @@ export const conversationsRoutes = new Hono<AppEnv>()
     zValidator('query', ConversationIdRequestSchema),
     c => ConversationHandlers.detail(c, c.get('user')!, c.req.valid('query')),
   )
-  .get(
-    '/messages',
-    zValidator('query', ConversationIdRequestSchema),
-    c => ConversationHandlers.messages(c, c.get('user')!, c.req.valid('query')),
-  )
   .post(
     '/pin',
     zValidator('json', ConversationIdRequestSchema),

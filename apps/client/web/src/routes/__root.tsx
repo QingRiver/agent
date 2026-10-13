@@ -1,7 +1,6 @@
 import { RequireAuth } from '@components/auth/RequireAuth'
 import { UserAvatarMenu } from '@components/auth/UserAvatarMenu'
 import { ConversationSync } from '@components/conversation/ConversationSync'
-import { CopilotKitAppProvider } from '@components/copilot/CopilotKitAppProvider'
 import { ThemeSync } from '@components/theme/ThemeSync'
 import { AuthProvider } from '@contexts/AuthContext'
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
@@ -14,45 +13,43 @@ function RootLayout() {
   return (
     <AuthProvider>
       <ThemeSync />
-      <CopilotKitAppProvider>
-        <ConversationSync />
-        <div className="min-h-screen bg-background text-foreground">
-          <header className="border-b border-border px-6 py-4">
-            <nav className="mx-auto flex max-w-4xl items-center gap-4">
-              <Link
-                to="/"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
-              >
-                Home
-              </Link>
-              <Link
-                to="/resources"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
-              >
-                资源
-              </Link>
-              <Link
-                to="/gtd"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
-              >
-                GTD
-              </Link>
-              <Link
-                to="/agent-lab"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
-              >
-                Agent Lab
-              </Link>
-              <div className="ml-auto">
-                <UserAvatarMenu />
-              </div>
-            </nav>
-          </header>
-          <RequireAuth>
-            <Outlet />
-          </RequireAuth>
-        </div>
-      </CopilotKitAppProvider>
+      <ConversationSync />
+      <div className="min-h-screen bg-background text-foreground">
+        <header className="border-b border-border px-6 py-4">
+          <nav className="mx-auto flex max-w-4xl items-center gap-4">
+            <Link
+              to="/"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
+            >
+              Home
+            </Link>
+            <Link
+              to="/resources"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
+            >
+              资源
+            </Link>
+            <Link
+              to="/gtd"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
+            >
+              GTD
+            </Link>
+            <Link
+              to="/agent-lab"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground [&.active]:text-primary"
+            >
+              Agent Lab
+            </Link>
+            <div className="ml-auto">
+              <UserAvatarMenu />
+            </div>
+          </nav>
+        </header>
+        <RequireAuth>
+          <Outlet />
+        </RequireAuth>
+      </div>
     </AuthProvider>
   )
 }

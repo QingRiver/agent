@@ -1,9 +1,5 @@
-import type { RunAgentInput } from '@ag-ui/core'
 import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
 import { z } from 'zod'
-
-/** CopilotKit `properties` / `RunAgentInput.forwardedProps` 上的 reactAgent 命名空间 */
-export const REACT_AGENT_FORWARDED_PROPS_KEY = 'reactAgent' as const
 
 /** 产品路径：只传配置 id；服务端 middleware 再装 RuntimeBundle */
 export const AGENT_CONFIG_ID_PROPS_KEY = 'agentConfigId' as const
@@ -58,7 +54,7 @@ export function composeReactAgentSystemPrompt(userPrompt: string, skillText?: st
   return parts.join('\n\n---\n\n')
 }
 
-/** 唯一环控配置：直接作为 streamEvents.recursionLimit */
+/** 唯一环控配置：直接作为 graph.stream 的 recursionLimit */
 export function clampMaxSteps(raw: unknown): number {
   const n = typeof raw === 'number' && Number.isFinite(raw)
     ? Math.trunc(raw)
@@ -82,8 +78,8 @@ export function sanitizeKbId(raw: unknown, fallback = 'kb_default'): string {
 }
 
 /**
- * 从 RunAgentInput.forwardedProps.reactAgent 读取运行配置（partial）。
- * 非法结构返回空对象；调用方用默认值，不再回退 input.state。
+ * 读取 reactAgent 运行配置（partial）。
+ * 非法结构返回空对象。
  */
 export interface ReactAgentSkillBinding {
   code: string
@@ -91,16 +87,16 @@ export interface ReactAgentSkillBinding {
   strategy: 'latest'
 }
 
-export interface ReactAgentForwardedExtras {
+export interface ReactAgentSkillExtras {
   skillText?: string
   skillBindings?: ReactAgentSkillBinding[]
 }
 
-function readSkillExtras(raw: unknown): ReactAgentForwardedExtras {
+function readSkillExtras(raw: unknown): ReactAgentSkillExtras {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw))
     return {}
   const rec = raw as Record<string, unknown>
-  const out: ReactAgentForwardedExtras = {}
+  const out: ReactAgentSkillExtras = {}
   if (typeof rec.skillText === 'string')
     out.skillText = rec.skillText
   if (Array.isArray(rec.skillBindings)) {
@@ -121,18 +117,14 @@ function readSkillExtras(raw: unknown): ReactAgentForwardedExtras {
   return out
 }
 
-export function readReactAgentForwardedProps(
-  input: Pick<RunAgentInput, 'forwardedProps'>,
-): Partial<ReactAgentRuntimeConfig> & ReactAgentForwardedExtras {
-  const props = input.forwardedProps
-  if (props == null || typeof props !== 'object' || Array.isArray(props))
-    return {}
-  const raw = (props as Record<string, unknown>)[REACT_AGENT_FORWARDED_PROPS_KEY]
+export function readReactAgentRuntimeConfig(
+  raw: unknown,
+): Partial<ReactAgentRuntimeConfig> & ReactAgentSkillExtras {
   const parsed = ReactAgentRuntimeConfigSchema.partial().safeParse(raw)
   const extras = readSkillExtras(raw)
   if (!parsed.success)
     return extras
-  const out: Partial<ReactAgentRuntimeConfig> & ReactAgentForwardedExtras = { ...extras }
+  const out: Partial<ReactAgentRuntimeConfig> & ReactAgentSkillExtras = { ...extras }
   if (parsed.data.userPrompt !== undefined)
     out.userPrompt = parsed.data.userPrompt
   if (parsed.data.kbId !== undefined)
@@ -142,16 +134,13 @@ export function readReactAgentForwardedProps(
   return out
 }
 
-/** 从 forwardedProps 读 agentConfigId；非法则 undefined */
-export function readAgentConfigId(
-  input: Pick<RunAgentInput, 'forwardedProps'>,
-): string | undefined {
-  const props = input.forwardedProps
-  if (props == null || typeof props !== 'object' || Array.isArray(props))
+/** 从运行参数读 agentConfigId；非法则 undefined */
+export function readAgentConfigId(raw: unknown): string | undefined {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw))
     return undefined
-  const raw = (props as Record<string, unknown>)[AGENT_CONFIG_ID_PROPS_KEY]
-  if (typeof raw !== 'string')
+  const idRaw = (raw as Record<string, unknown>)[AGENT_CONFIG_ID_PROPS_KEY]
+  if (typeof idRaw !== 'string')
     return undefined
-  const id = raw.trim()
+  const id = idRaw.trim()
   return id.length > 0 ? id.slice(0, 128) : undefined
 }

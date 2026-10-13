@@ -1,5 +1,5 @@
-import { AgentErrorBanner } from '@components/copilot/AgentErrorBanner'
 import { useEffect, useState } from 'react'
+import { AgentErrorBanner } from './AgentErrorBanner'
 import { EditorChatPanel } from './EditorChatPanel'
 import { InlineEditPrompt } from './InlineEditPrompt'
 import { useTextEditor } from './useTextEditor'
@@ -66,7 +66,7 @@ export function TextEditor() {
       </p>
 
       {agentError && (
-        <AgentErrorBanner error={agentError} onDismiss={dismissError} />
+        <AgentErrorBanner message={agentError} onDismiss={dismissError} />
       )}
 
       <div className="flex min-h-0 flex-1 gap-4">

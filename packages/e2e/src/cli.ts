@@ -28,7 +28,7 @@ e2e — 真实 HTTP/SSE 流程、集成测试与种子数据
   kb-pipeline       KB 内部管线 vitest（非 HTTP，需 infra up kb）
   tags             shared tags 真实 HTTP 全流程（需 pnpm dev + e2e auth）
   hitl             hitl 图 vitest（不需 server）
-  agent            kb agent CopilotKit SSE（需 pnpm dev + e2e seed）
+  agent            kb agent LangGraph SSE（需 pnpm dev + e2e seed）
   hitl-agent       hitl agent SSE 全链路（需 pnpm dev + e2e auth）
   ui               playwright 前端 UI（需 pnpm dev + e2e auth，驱动真实浏览器）
   clear-kb         清空知识库（需 postgres + qdrant）

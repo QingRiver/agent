@@ -1,7 +1,6 @@
-import { randomUUID } from 'node:crypto'
 import process from 'node:process'
-import { e2eFetch, signInE2E } from '../client'
-import { createThread, fail, runAgentRun } from '../support'
+import { signInE2E } from '../client'
+import { createThread, fail, fetchGraphState, runAgentRun } from '../support'
 
 /**
  * dev agent HITL 审批演示端到端：登录 → 建 thread → 澄清选 hitlDemo → 4 次 interrupt+resume。
@@ -22,16 +21,30 @@ const RESUME_BY_TYPE: Record<string, unknown> = {
 }
 const EXPECTED_TYPES = ['input', 'select', 'multiSelect', 'approval'] as const
 
-interface ThreadStateResponse {
-  messages: Array<{ role?: string, content?: string }>
-  threadState: { pendingInterrupt: { interruptId: string, type: string } | null }
+function interruptType(value: unknown): string | undefined {
+  if (value == null || typeof value !== 'object' || !('type' in value))
+    return undefined
+  const type = (value as { type?: unknown }).type
+  return typeof type === 'string' ? type : undefined
 }
 
-async function getThreadState(token: string, threadId: string): Promise<ThreadStateResponse> {
-  return e2eFetch<ThreadStateResponse>(
-    token,
-    `/conversations/messages?id=${encodeURIComponent(threadId)}`,
-  )
+function messageText(content: unknown): string {
+  if (typeof content === 'string')
+    return content
+  if (!Array.isArray(content))
+    return ''
+  return content.map((block) => {
+    if (typeof block === 'string')
+      return block
+    if (block != null && typeof block === 'object' && 'text' in block)
+      return String((block as { text?: unknown }).text ?? '')
+    return ''
+  }).join('')
+}
+
+async function pendingInterruptType(token: string, threadId: string): Promise<string | undefined> {
+  const state = await fetchGraphState(token, 'dev', threadId)
+  return interruptType(state.interrupts[0]?.value)
 }
 
 export async function runHitlAgentE2E(): Promise<void> {
@@ -40,46 +53,43 @@ export async function runHitlAgentE2E(): Promise<void> {
   console.log(`[e2e/hitl-agent] thread=${threadId} agent=dev`)
 
   await runAgentRun(token, 'dev', threadId, {
-    state: { input: USER_INPUT },
-    messages: [{ id: randomUUID(), role: 'user', content: USER_INPUT }],
+    messages: [{ type: 'human', content: USER_INPUT }],
   })
   console.log('[e2e/hitl-agent] initial run done')
 
   // 澄清 select → hitlDemo
   {
-    const { threadState } = await getThreadState(token, threadId)
-    const pending = threadState.pendingInterrupt
+    const pending = await pendingInterruptType(token, threadId)
     if (!pending)
-      fail('期望澄清 select 中断，但 pendingInterrupt 为空')
-    if (pending.type !== 'select')
-      fail(`澄清 interrupt type 期望 select，实际 ${pending.type}`)
+      fail('期望澄清 select 中断，但 checkpoint interrupts 为空')
+    if (pending !== 'select')
+      fail(`澄清 interrupt type 期望 select，实际 ${pending}`)
     await runAgentRun(token, 'dev', threadId, {
-      resume: [{ interruptId: pending.interruptId, status: 'resolved', payload: { value: 'hitlDemo' } }],
+      command: { resume: { value: 'hitlDemo' } },
     })
     console.log('[e2e/hitl-agent] resume (clarify→hitlDemo) done')
   }
 
   for (const [step, expected] of EXPECTED_TYPES.entries()) {
-    const { threadState } = await getThreadState(token, threadId)
-    const pending = threadState.pendingInterrupt
+    const pending = await pendingInterruptType(token, threadId)
     if (!pending)
-      fail(`第 ${step + 1} 步后期望挂起中断，但 pendingInterrupt 为空`)
-    if (pending.type !== expected)
-      fail(`第 ${step + 1} 步 interrupt type 期望 ${expected}，实际 ${pending.type}`)
+      fail(`第 ${step + 1} 步后期望挂起中断，但 checkpoint interrupts 为空`)
+    if (pending !== expected)
+      fail(`第 ${step + 1} 步 interrupt type 期望 ${expected}，实际 ${pending}`)
 
-    const payload = RESUME_BY_TYPE[pending.type] ?? fail(`未知 interrupt type: ${pending.type}`)
+    const payload = RESUME_BY_TYPE[pending] ?? fail(`未知 interrupt type: ${pending}`)
     await runAgentRun(token, 'dev', threadId, {
-      resume: [{ interruptId: pending.interruptId, status: 'resolved', payload }],
+      command: { resume: payload },
     })
-    console.log(`[e2e/hitl-agent] resume (${pending.type}) done`)
+    console.log(`[e2e/hitl-agent] resume (${pending}) done`)
   }
 
-  const final = await getThreadState(token, threadId)
-  if (final.threadState.pendingInterrupt)
-    fail('流程结束后仍有 pendingInterrupt')
+  const final = await fetchGraphState(token, 'dev', threadId)
+  if (final.interrupts.length > 0)
+    fail('流程结束后 checkpoint 仍有 interrupt')
 
-  const assistant = [...final.messages].reverse().find(m => m.role === 'assistant')
-  const content = typeof assistant?.content === 'string' ? assistant.content : ''
+  const assistant = [...final.messages].reverse().find(m => m.type === 'ai')
+  const content = messageText(assistant?.content)
   if (!content.includes('已批准执行'))
     fail(`最终助手回复未包含「已批准执行」: ${content.slice(0, 200)}`)
   if (!content.includes('季度资金归集'))

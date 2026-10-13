@@ -1,4 +1,5 @@
 import type { TagRow } from '@apis/tags-api'
+import type { ReactNode } from 'react'
 import { Badge } from '@components/ui/badge'
 import { Input } from '@components/ui/input'
 import { cn } from '@lib/utils'
@@ -32,7 +33,7 @@ export function ResourcesTable({
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">
-      <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
+      <table className="w-full min-w-160 border-collapse text-left text-sm">
         <thead className="sticky top-0 z-10 border-b border-border bg-background">
           <tr className="text-xs text-muted-foreground">
             <th className="px-4 py-2 font-medium">名称</th>
@@ -63,7 +64,7 @@ export function ResourcesTable({
                 tabIndex={clickable ? 0 : undefined}
                 role={clickable ? 'link' : undefined}
               >
-                <td className="max-w-[12rem] truncate px-4 py-2.5 font-medium text-foreground">
+                <td className="max-w-48 truncate px-4 py-2.5 font-medium text-foreground">
                   {row.name}
                 </td>
                 <td className="max-w-[20rem] truncate px-4 py-2.5 text-muted-foreground">
@@ -82,7 +83,7 @@ export function ResourcesTable({
                               <Badge
                                 key={id}
                                 variant="outline"
-                                className="max-w-[8rem] truncate"
+                                className="max-w-32 truncate"
                                 style={tag.color
                                   ? { borderColor: tag.color, color: tag.color }
                                   : undefined}
@@ -113,6 +114,7 @@ export function ResourcesToolbar({
   selectedTagIds,
   onToggleTag,
   showTagFilter,
+  action,
 }: {
   q: string
   onQChange: (q: string) => void
@@ -120,15 +122,19 @@ export function ResourcesToolbar({
   selectedTagIds: string[]
   onToggleTag: (tagId: string) => void
   showTagFilter: boolean
+  action?: ReactNode
 }) {
   return (
     <div className="flex shrink-0 flex-col gap-2 border-b border-border px-4 py-3">
-      <Input
-        value={q}
-        onChange={e => onQChange(e.target.value)}
-        placeholder="按名称搜索…"
-        className="max-w-sm"
-      />
+      <div className="flex items-center gap-2">
+        <Input
+          value={q}
+          onChange={e => onQChange(e.target.value)}
+          placeholder="按名称搜索…"
+          className="max-w-sm"
+        />
+        {action ? <div className="ml-auto shrink-0">{action}</div> : null}
+      </div>
       {showTagFilter && tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {tags.map((tag) => {

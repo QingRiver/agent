@@ -1,18 +1,15 @@
-import type { TextMessageContentEvent } from '@ag-ui/core'
-import type { AguiMappedEvent } from '../stream'
-import { randomUUID } from 'node:crypto'
-import { EventType } from '@ag-ui/core'
+import type { AIMessage as AIMessageType, BaseMessage } from '@langchain/core/messages'
 import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages'
 import { MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it, vi } from 'vitest'
-import { aguiTransformerFactory } from '../stream'
 import { KB_SEARCH_TOOL_NAME } from '../tools/kb'
+import { getAIMessageContent } from '../utils/index'
 import {
   clampMaxSteps,
   composeReactAgentSystemPrompt,
   DEFAULT_REACT_AGENT_USER_PROMPT,
   reactAgentGraph,
-  readReactAgentForwardedProps,
+  readReactAgentRuntimeConfig,
   sanitizeKbId,
   sanitizeUserPrompt,
 } from './reactAgent'
@@ -20,7 +17,7 @@ import {
 const { mockInvoke } = vi.hoisted(() => ({
   mockInvoke: vi.fn(async () => new AIMessage({
     id: 'react-final-1',
-    content: 'AG-UI 是事件映射层 [1](/kb?doc=doc-a&chunk=chunk-a)。',
+    content: '事件映射层 [1](/kb?doc=doc-a&chunk=chunk-a)。',
   })),
 }))
 
@@ -65,39 +62,27 @@ describe('reactAgent prompts / sanitizers', () => {
     expect(sanitizeKbId('', 'kb_default')).toBe('kb_default')
   })
 
-  it('readReactAgentForwardedProps prefers namespaced forwardedProps', () => {
-    expect(readReactAgentForwardedProps({
-      forwardedProps: {
-        reactAgent: {
-          userPrompt: 'from-props',
-          kbId: 'kb_lab',
-          maxSteps: 12,
-        },
-      },
+  it('readReactAgentRuntimeConfig reads a runtime config object', () => {
+    expect(readReactAgentRuntimeConfig({
+      userPrompt: 'from-props',
+      kbId: 'kb_lab',
+      maxSteps: 12,
     })).toEqual({
       userPrompt: 'from-props',
       kbId: 'kb_lab',
       maxSteps: 12,
     })
-    expect(readReactAgentForwardedProps({
-      forwardedProps: { command: { resume: true } },
-    })).toEqual({})
-    expect(readReactAgentForwardedProps({
-      forwardedProps: { reactAgent: { maxSteps: 9999 } },
-    })).toEqual({})
+    expect(readReactAgentRuntimeConfig({ command: { resume: true } })).toEqual({})
+    expect(readReactAgentRuntimeConfig({ maxSteps: 9999 })).toEqual({})
   })
 
-  it('readReactAgentForwardedProps keeps skillBindings extras', () => {
-    expect(readReactAgentForwardedProps({
-      forwardedProps: {
-        reactAgent: {
-          userPrompt: 'p',
-          kbId: 'kb',
-          maxSteps: 12,
-          skillText: '## 可用 Skill',
-          skillBindings: [{ code: 'bark', strategy: 'latest' }],
-        },
-      },
+  it('readReactAgentRuntimeConfig keeps skillBindings extras', () => {
+    expect(readReactAgentRuntimeConfig({
+      userPrompt: 'p',
+      kbId: 'kb',
+      maxSteps: 12,
+      skillText: '## 可用 Skill',
+      skillBindings: [{ code: 'bark', strategy: 'latest' }],
     })).toMatchObject({
       userPrompt: 'p',
       skillText: '## 可用 Skill',
@@ -106,31 +91,29 @@ describe('reactAgent prompts / sanitizers', () => {
   })
 })
 
-describe('reactAgent kb citation links in AG-UI stream', () => {
-  it('kb_search 之后终答流式推送标准 Markdown 链接', async () => {
+describe('reactAgent kb citation links', () => {
+  it('kb_search 之后终答带标准 Markdown 链接', async () => {
     const toolResult = [
       '找到 1 条相关片段：',
       '',
       '[1] 引用请写 `[1](/kb?doc=doc-a&chunk=chunk-a)`',
-      'AG-UI 负责 ProtocolEvent → AG-UI 事件映射。',
+      '检索结果说明。',
       '',
     ].join('\n')
 
     const app = reactAgentGraph.compile({
       checkpointer: new MemorySaver(),
-      transformers: [aguiTransformerFactory],
     })
-    const threadId = `react-${randomUUID()}`
-    const stream = await app.streamEvents(
+    const result = await app.invoke(
       {
         messages: [
-          new HumanMessage('解释一下 agui'),
+          new HumanMessage('解释一下检索'),
           new AIMessage({
             content: '',
             tool_calls: [{
               id: 'call_kb_1',
               name: KB_SEARCH_TOOL_NAME,
-              args: { query: 'agui' },
+              args: { query: '检索' },
             }],
           }),
           new ToolMessage({
@@ -141,26 +124,14 @@ describe('reactAgent kb citation links in AG-UI stream', () => {
         ],
       },
       {
-        version: 'v3',
-        configurable: { thread_id: threadId, kbId: 'kb_test' },
+        configurable: { thread_id: 'react-citation', kbId: 'kb_test' },
         recursionLimit: 8,
       },
     )
 
-    async function drainProtocol() {
-      for await (const _ of stream) { /* drain */ }
-    }
-
-    const protocolDone = drainProtocol()
-    const events = await Array.fromAsync(
-      stream.extensions.aguiEvents as AsyncIterable<AguiMappedEvent>,
-    )
-    await protocolDone
-
-    const text = events
-      .filter((e): e is TextMessageContentEvent => e.type === EventType.TEXT_MESSAGE_CONTENT)
-      .map(e => e.delta)
-      .join('')
+    const messages = (result as { messages: BaseMessage[] }).messages
+    const ai = [...messages].reverse().find(message => message.getType() === 'ai')
+    const text = ai ? getAIMessageContent(ai as AIMessageType) : ''
 
     expect(mockInvoke).toHaveBeenCalled()
     expect(text).toContain('[1](/kb?doc=doc-a&chunk=chunk-a)')

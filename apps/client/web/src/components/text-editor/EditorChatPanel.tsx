@@ -2,42 +2,21 @@ import type { WriterChangeSummary } from '@agent/proto'
 import type { EditorQuote } from './editor-quotes'
 import { WRITER_CHANGE_SUMMARIES_EVENT } from '@agent/proto'
 import { Conversation } from '@apis/conversation-api'
-import { CopilotChatShell } from '@components/copilot/CopilotChatShell'
-import { useAgent, useCopilotKit } from '@copilotkit/react-core/v2'
-import { runWithCleanup } from '@lib/runWithCleanup'
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { AssistantGraphRuntime } from '@components/assistant/AssistantGraphRuntime'
+import { AssistantThread } from '@components/assistant/AssistantThread'
+import { useEffect, useRef, useState } from 'react'
 import {
   hideEditorChatPolishedText,
+  isEditorChatInternalAssistantContent,
   setEditorChatSuppressDocumentDump,
 } from './editor-chat-message'
 import { filterFreshQuotes, formatQuotesForMessage } from './editor-quotes'
-import { EditorChatAssistantMessage } from './EditorChatAssistantMessage'
 import { EditorQuoteChips } from './EditorQuoteChips'
 
 export interface EditorWriteProposal {
   baseline: string
   polished: string
   changes: WriterChangeSummary[]
-}
-
-interface CustomEventLike {
-  type?: string
-  name?: string
-  value?: unknown
-}
-
-interface EditorChatAgent {
-  state?: Record<string, unknown> | null
-  setState: (state: Record<string, unknown>) => void
-  addMessage: (message: unknown) => void
-  subscribe?: (subscriber: {
-    onCustomEvent?: (ctx: { event: CustomEventLike }) => void
-    onEvent?: (ctx: { event: CustomEventLike }) => void
-  }) => { unsubscribe: () => void }
-}
-
-function writeAgentState(agent: EditorChatAgent, state: Record<string, unknown>) {
-  agent.setState(state)
 }
 
 function proposalFromCustomValue(value: unknown): EditorWriteProposal | null {
@@ -48,7 +27,7 @@ function proposalFromCustomValue(value: unknown): EditorWriteProposal | null {
   } | null
   if (typeof v?.polished !== 'string' || !v.polished.trim())
     return null
-  if (typeof v.baseline !== 'string')
+  if (typeof v?.baseline !== 'string')
     return null
   return {
     baseline: v.baseline,
@@ -58,19 +37,43 @@ function proposalFromCustomValue(value: unknown): EditorWriteProposal | null {
 }
 
 function ingestWriterCustomEvent(
-  event: CustomEventLike,
-  onProposal: (p: EditorWriteProposal) => void,
+  data: unknown,
+  onProposal: (proposal: EditorWriteProposal) => void,
 ) {
-  if (event.type && event.type !== 'CUSTOM')
-    return
+  const event = data as { name?: string, payload?: unknown }
   if (event.name !== WRITER_CHANGE_SUMMARIES_EVENT)
     return
-  const proposal = proposalFromCustomValue(event.value)
+  const proposal = proposalFromCustomValue(event.payload)
   if (proposal)
     onProposal(proposal)
 }
 
-/** 与 graph heuristicEditorIntent 对齐的粗判：write 时抑制全文气泡 */
+function lastHumanText(messages: readonly { type?: string, content?: unknown }[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (message?.type !== 'human' || typeof message.content !== 'string')
+      continue
+    const text = message.content.trim()
+    if (text)
+      return text
+  }
+  return ''
+}
+
+function rewriteLastHuman(
+  messages: readonly { type?: string, content?: unknown }[],
+  content: string,
+) {
+  const copy = messages.map(message => ({ ...message }))
+  for (let i = copy.length - 1; i >= 0; i--) {
+    if (copy[i]?.type === 'human') {
+      copy[i] = { ...copy[i], content }
+      break
+    }
+  }
+  return copy
+}
+
 function likelyWriteIntent(text: string): boolean {
   return /润色|改写|扩写|缩写|展开说明|展开一下|续写|纠错|改成|改为|生成修改|更正式|更口语|精简|压缩/.test(text.trim())
 }
@@ -99,45 +102,40 @@ export function EditorChatPanel({
   const [threadId, setThreadId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
-  const { agent: rawAgent } = useAgent({ agentId: 'editor' })
-  const agent = rawAgent as unknown as EditorChatAgent | null
-  const { copilotkit } = useCopilotKit()
   const proposalRef = useRef<EditorWriteProposal | null>(null)
   const lastAppliedKeyRef = useRef<string | null>(null)
+  const quotesRef = useRef(quotes)
+  const pendingConfigRef = useRef<Record<string, unknown> | undefined>(undefined)
+  useEffect(() => {
+    quotesRef.current = quotes
+  }, [quotes])
 
-  function applyProposal(p: EditorWriteProposal) {
-    const key = `${p.baseline}\0${p.polished}`
+  function applyProposal(proposal: EditorWriteProposal) {
+    const key = `${proposal.baseline}\0${proposal.polished}`
     if (lastAppliedKeyRef.current === key)
       return
     lastAppliedKeyRef.current = key
-    proposalRef.current = p
-    hideEditorChatPolishedText(p.polished)
+    proposalRef.current = proposal
+    hideEditorChatPolishedText(proposal.polished)
     setEditorChatSuppressDocumentDump(false)
-    const ok = onApplyProposal(p)
+    const ok = onApplyProposal(proposal)
     if (ok)
       setApplyError(null)
     else
       setApplyError('自动应用失败：文稿可能已改动，或行内改写尚未结束。')
   }
 
-  /** Effect 订阅回调：始终读到最新 applyProposal，且不因 props 重订 */
-  const onAgentProposal = useEffectEvent((p: EditorWriteProposal) => {
-    applyProposal(p)
-  })
-
   useEffect(() => {
     let cancelled = false
 
     async function initializeConversation() {
-      try {
-        const c = await Conversation.create('editor')
-        if (!cancelled)
-          setThreadId(c.id)
-      }
-      catch (err) {
+      const created = await Conversation.create('editor').catch((err: unknown) => {
         if (!cancelled)
           setError(err instanceof Error ? err.message : String(err))
-      }
+        return null
+      })
+      if (!cancelled && created != null)
+        setThreadId(created.id)
     }
 
     void initializeConversation()
@@ -146,68 +144,32 @@ export function EditorChatPanel({
     }
   }, [])
 
-  useEffect(() => {
-    if (!agent?.subscribe)
-      return
-    const { unsubscribe } = agent.subscribe({
-      onCustomEvent: ({ event }) => {
-        ingestWriterCustomEvent(event, onAgentProposal)
-      },
-      onEvent: ({ event }) => {
-        ingestWriterCustomEvent(event, onAgentProposal)
-      },
-    })
-    return unsubscribe
-  }, [agent])
-
-  async function runChat(value: string) {
-    const trimmed = value.trim()
-    if (!trimmed || !agent || !rawAgent)
-      return
-
+  function prepareMessages(messages: readonly { type?: string, content?: unknown }[]) {
+    const trimmed = lastHumanText(messages)
+    if (!trimmed)
+      return null
     const baseline = getDocument()
     if (!baseline.trim()) {
       setApplyError('编辑器正文为空，无法生成修改建议。')
-      return
+      return null
     }
-
-    const q = filterFreshQuotes(baseline, [...quotes])
-    if (quotes.length > 0)
+    const fresh = filterFreshQuotes(baseline, [...quotesRef.current])
+    if (quotesRef.current.length > 0)
       onConsumeQuotes()
-
-    const content = formatQuotesForMessage(q, trimmed)
-    const prev = agent.state != null && typeof agent.state === 'object' ? { ...agent.state } : {}
-    const nextState: Record<string, unknown> = {
-      ...prev,
-      editCase: 'document',
-      documentBaseline: baseline,
-      polishInstruction: trimmed,
-      focuses: q.map(x => ({ from: x.from, to: x.to, text: x.text })),
-    }
-    delete nextState.forceIntent
-    writeAgentState(agent, nextState)
-
-    agent.addMessage({
-      id: `editor-chat-${Date.now()}`,
-      role: 'user',
-      content,
-    })
-
     proposalRef.current = null
     lastAppliedKeyRef.current = null
     setEditorChatSuppressDocumentDump(likelyWriteIntent(trimmed))
-    onChatBusyChange?.(true)
     setApplyError(null)
-    await runWithCleanup(async () => {
-      // 单一路径：与 Shell 默认提交一致；CUSTOM 由 subscribe 收
-      await copilotkit.runAgent({
-        agent: rawAgent,
-        forwardedProps: { editorPath: 'chat' },
-      })
-    }, () => {
-      onChatBusyChange?.(false)
-      setEditorChatSuppressDocumentDump(false)
-    })
+    pendingConfigRef.current = {
+      editorPath: 'chat',
+      editCase: 'document',
+      writerMode: 'polish',
+      reasoning: true,
+      documentBaseline: baseline,
+      polishInstruction: trimmed,
+      focuses: fresh.map(quote => ({ from: quote.from, to: quote.to, text: quote.text })),
+    }
+    return rewriteLastHuman(messages, formatQuotesForMessage(fresh, trimmed))
   }
 
   if (error) {
@@ -234,18 +196,26 @@ export function EditorChatPanel({
         <p className="shrink-0 border-b border-border px-3 py-2 text-xs text-destructive">{applyError}</p>
       )}
       <div className="min-h-0 flex-1">
-        <CopilotChatShell
-          agentId="editor"
+        <AssistantGraphRuntime
+          graph="editor"
           threadId={threadId}
-          chatClassName="h-full min-h-0"
-          placeholder={quotes.length > 0 ? '输入问题或改写指令…' : '讨论文稿，或描述想要的修改…'}
-          blockInput={blockInput}
-          blockInputHint={blockInputHint}
-          assistantMessage={EditorChatAssistantMessage}
-          onSubmitMessage={async (value) => {
-            await runChat(value)
+          prepareMessages={prepareMessages}
+          configurable={() => pendingConfigRef.current}
+          onCustom={data => ingestWriterCustomEvent(data, applyProposal)}
+          onRunningChange={(running) => {
+            onChatBusyChange?.(running)
+            if (!running)
+              setEditorChatSuppressDocumentDump(false)
           }}
-        />
+        >
+          <AssistantThread
+            placeholder={quotes.length > 0 ? '输入问题或改写指令…' : '讨论文稿，或描述想要的修改…'}
+            emptyHint="讨论文稿，或描述想要的修改。"
+            blocked={blockInput}
+            blockInputHint={blockInputHint}
+            hideAssistantText={isEditorChatInternalAssistantContent}
+          />
+        </AssistantGraphRuntime>
       </div>
     </div>
   )

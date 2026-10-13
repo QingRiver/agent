@@ -88,28 +88,9 @@ export const ApprovalDecisionSchema = z.object({
   reason: z.string().optional(),
 })
 
-// ==========================================
-// PendingInterrupt —— checkpoint 持久化的挂起中断
-// ==========================================
-
 /**
- * langgraph checkpoint 中挂起的 HITL 中断（由 `getState` hydrate，非 DB 投影）。
- * 与 `InterruptRequest` 同构(interruptId + type + 各 type 字段)，type 覆盖全部 6 种交互。
- * interruptId 来自 langgraph task（`task.interrupts[].id`），CLI 侧来自 randomUUID()。
- */
-export const PendingInterruptSchema = z.discriminatedUnion('type', [
-  z.object({ interruptId: z.string(), type: z.literal('input'), message: z.string(), placeholder: z.string().optional() }),
-  z.object({ interruptId: z.string(), type: z.literal('select'), message: z.string(), options: z.array(SelectOptionSchema) }),
-  z.object({ interruptId: z.string(), type: z.literal('multiSelect'), message: z.string(), options: z.array(SelectOptionSchema) }),
-  z.object({ interruptId: z.string(), type: z.literal('modal'), title: z.string(), body: z.string(), actions: z.array(z.string()) }),
-  z.object({ interruptId: z.string(), type: z.literal('approval'), message: z.string(), details: z.string() }),
-  z.object({ interruptId: z.string(), type: z.literal('unlock'), message: z.string(), key: z.string() }),
-])
-export type PendingInterrupt = z.infer<typeof PendingInterruptSchema>
-
-/**
- * InterruptRequest 的 value 形态（无 `interruptId`）。
- * - 用于 live event / CopilotKit 等场景：值里不带 interruptId，需要调用方补回。
+ * `interrupt()` 的 value（无 `interruptId`）。
+ * LangGraph 把 id 放在中断对象上，卡片渲染时再补回 `InterruptRequest`。
  */
 export const InterruptRequestValueSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('input'), message: z.string(), placeholder: z.string().optional() }),
@@ -120,11 +101,6 @@ export const InterruptRequestValueSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('unlock'), message: z.string(), key: z.string() }),
 ])
 export type InterruptRequestValue = z.infer<typeof InterruptRequestValueSchema>
-
-/** 图执行态：Postgres LangGraph checkpoint 为唯一真相源 */
-export interface ThreadState {
-  pendingInterrupt: PendingInterrupt | null
-}
 
 export { ASK_TOOLS_SYSTEM_PROMPT } from './askTools'
 export {
@@ -155,6 +131,7 @@ export {
   type Hunk,
   hunkKey,
   WRITER_CHANGE_SUMMARIES_EVENT,
+  WRITER_REASONING_EVENT,
   WriterChangeSummariesSchema,
   type WriterChangeSummary,
   WriterChangeSummarySchema,

@@ -78,7 +78,7 @@ pnpm devops e2e clear-kb --email x --dry-run       # 只打印将删数量
 pnpm devops e2e kb-pipeline  # apps/server/gateway KB 内部管线测试（非 HTTP）
 pnpm devops e2e tags         # KB + GTD + shared tags 真实 HTTP（需 pnpm dev）
 pnpm devops e2e hitl         # packages/graph hitlGraph vitest（不需 server）
-pnpm devops e2e agent        # kb CopilotKit SSE（需 pnpm dev + infra up kb + e2e seed）
+pnpm devops e2e agent        # kb agent LangGraph SSE（需 pnpm dev + infra up kb + e2e seed）
 pnpm devops e2e hitl-agent   # hitl 4 步 interrupt + resume SSE（需 pnpm dev + e2e auth）
 pnpm devops e2e ui           # playwright UI（需 pnpm dev + e2e auth）
 ```

@@ -82,7 +82,7 @@ Schema TS：`src/db/schema/{conversation,tags,project,gtd,kb,skill}.ts`。生成
 
 ### Checkpoint / HITL
 
-会话消息与挂起中断在 LangGraph checkpoint（非 `conversation_threads` 列）。刷新后由 [CheckpointConnectRunner](src/copilot/checkpointConnectRunner.ts) 投影为 AG-UI 事件。
+会话消息与挂起中断在 LangGraph checkpoint（非 `conversation_threads` 列）。聊天窗口用 `GET /graphs/:name/state` 读取。
 
 ### 结构总览
 
@@ -198,22 +198,20 @@ erDiagram
 | GET | `/conversations/list` | 当前用户会话列表 |
 | POST | `/conversations/create` | body: `{ agentId: GraphsName }` |
 | GET | `/conversations/detail` | query: `id` |
-| GET | `/conversations/messages` | query: `id` → `messages` + `threadState`（含服务端 `pendingInterrupt`，供 e2e / 调试；客户端 HITL UI 不读此字段） |
 | POST | `/conversations/pin` | 置顶 |
 | POST | `/conversations/unpin` | 取消置顶 |
 | POST | `/conversations/delete` | 删除会话并 `deleteThread` checkpoint |
 
 `agentId` 与下方 Agent 列表 / `packages/graph` 的 `Graphs` 键一致。
 
-### CopilotKit
+### 图（需登录）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| * | `/copilotkit/*` | CopilotRuntime；需登录；校验 thread 归属 |
+| POST | `/graphs/:name/stream` | LangGraph `messages` / `updates` / `custom` SSE |
+| GET | `/graphs/:name/state` | query: `threadId` → 扁平消息和 `{ id, value }` 中断 |
 
-AG-UI 流：`streamEvents(v3)` + `@agent/graph` `AguiTransformer`；各 agent 在 [src/agent/graphAgents.ts](src/agent/graphAgents.ts) 注册。
-
-`connect` 时由 [CheckpointConnectRunner](src/copilot/checkpointConnectRunner.ts) 从 checkpoint hydrate 历史消息（`MESSAGES_SNAPSHOT`），有挂起中断则补发 `RUN_FINISHED(interrupt)`。
+图注册在 [src/agent/graphAgents.ts](src/agent/graphAgents.ts)。
 
 ### 知识库（需登录）
 
@@ -255,8 +253,7 @@ AG-UI 流：`streamEvents(v3)` + `@agent/graph` `AguiTransformer`；各 agent �
 
 ```bash
 curl -sk https://localhost:3000/heartbeat
-curl -sk https://localhost:3000/copilotkit/info
-# 会话 / kb / tags / gtd 需 Bearer token，见 client 登录后 DevTools
+# 会话 / graphs / kb / tags / gtd 需 Bearer token，见 client 登录后 DevTools
 ```
 
 
@@ -264,11 +261,10 @@ curl -sk https://localhost:3000/copilotkit/info
 
 ```text
 src/
-├── index.ts                 # Hono 入口、auth、copilotKit、apiRoutes
-├── agent/                   # 图编译、AG-UI 流、错误序列化
+├── index.ts                 # Hono 入口、auth、apiRoutes
+├── agent/                   # 图编译、LangGraph 直连
 ├── auth/                    # better-auth
-├── conversation/            # checkpoint hydrate、pendingInterrupt、thread 归属
-├── copilot/                 # Runtime、CheckpointConnectRunner、honoBridge
+├── conversation/            # checkpoint 快照、thread 归属
 ├── db/
 │   ├── bootstrap.ts         # auth + drizzle + checkpoint 启动迁移
 │   ├── checkpointer.ts      # PostgresSaver
@@ -291,8 +287,7 @@ flowchart LR
   A[logger] --> B[static]
   B --> C["/api/auth"]
   C --> D[session 注入]
-  D --> E[copilotKit]
-  E --> F[apiRoutes]
+  D --> F[apiRoutes]
   F --> F1[default]
   F --> F2[conversations]
   F --> F3[kb]

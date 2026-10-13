@@ -1,13 +1,10 @@
 /**
  * 直连 Chat Completions（非 LangChain）通用内核。
- * - silent：整段返回，不进 AG-UI（分类 / hunk 摘要 / 旁路 writer 改稿）
- * - streamReasoning：流式；reasoning_* → AG-UI；content 只累积，不发 TEXT_MESSAGE_*
+ * - silent：整段返回（分类 / hunk 摘要 / 旁路改稿）
+ * - streamReasoning：边读边把思考增量交给 onReasoningDelta，正文仍整段返回
  */
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
-import { randomUUID } from 'node:crypto'
 import process from 'node:process'
-import { EventType } from '@ag-ui/core'
-import { AGUI_WRITER_EVENT } from '../stream/aguiTransformer'
 
 export type ChatCompletionMode = 'silent' | 'streamReasoning'
 
@@ -21,7 +18,7 @@ function resolveOpenAiEnv(): { apiKey: string, base: string, model: string } {
 }
 
 export async function runChatCompletion(
-  config: LangGraphRunnableConfig | undefined,
+  _config: LangGraphRunnableConfig | undefined,
   params: {
     system: string
     user: string
@@ -32,6 +29,8 @@ export async function runChatCompletion(
      * silent 默认 disabled；streamReasoning 默认 enabled。
      */
     thinking?: boolean
+    /** 思考增量。正文不从这里出去，避免整篇改稿刷进对话。 */
+    onReasoningDelta?: (delta: string) => void
   },
 ): Promise<string> {
   const { apiKey, base, model } = resolveOpenAiEnv()
@@ -72,41 +71,7 @@ export async function runChatCompletion(
   if (!res.body)
     throw new Error('runChatCompletion(streamReasoning): 无响应流')
 
-  const writer = config?.writer
-  const emit = (payload: unknown) => {
-    if (writer)
-      writer({ name: AGUI_WRITER_EVENT, payload })
-  }
-
-  const reasoningMessageId = `${randomUUID()}:reasoning:0`
-  let reasoningStarted = false
   let content = ''
-
-  const flushReasoningEnd = () => {
-    if (!reasoningStarted)
-      return
-    emit({ type: EventType.REASONING_MESSAGE_END, messageId: reasoningMessageId })
-    reasoningStarted = false
-  }
-
-  const onReasoningDelta = (delta: string) => {
-    if (!delta)
-      return
-    if (!reasoningStarted) {
-      emit({
-        type: EventType.REASONING_MESSAGE_START,
-        messageId: reasoningMessageId,
-        role: 'reasoning',
-      })
-      reasoningStarted = true
-    }
-    emit({
-      type: EventType.REASONING_MESSAGE_CONTENT,
-      messageId: reasoningMessageId,
-      delta,
-    })
-  }
-
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -143,16 +108,17 @@ export async function runChatCompletion(
       const delta = parsed.choices?.[0]?.delta
       if (!delta)
         continue
-      if (thinkingEnabled) {
-        const reasoning = delta.reasoning_content ?? delta.reasoning
-        if (typeof reasoning === 'string' && reasoning)
-          onReasoningDelta(reasoning)
-      }
+      const reasoning = typeof delta.reasoning_content === 'string'
+        ? delta.reasoning_content
+        : typeof delta.reasoning === 'string'
+          ? delta.reasoning
+          : ''
+      if (reasoning)
+        params.onReasoningDelta?.(reasoning)
       if (typeof delta.content === 'string' && delta.content)
         content += delta.content
     }
   }
 
-  flushReasoningEnd()
   return content.trim()
 }

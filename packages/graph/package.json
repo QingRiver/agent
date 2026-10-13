@@ -12,8 +12,6 @@
     "graphs:md": "tsx scripts/export-graphs-mermaid.ts"
   },
   "dependencies": {
-    "@ag-ui/core": "catalog:",
-    "@agent/claude": "workspace:*",
     "@agent/env": "workspace:*",
     "@agent/kb": "workspace:*",
     "@agent/proto": "workspace:*",

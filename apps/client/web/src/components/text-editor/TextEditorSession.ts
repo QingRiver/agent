@@ -1,12 +1,10 @@
 import type { Hunk, WriterChangeSummary } from '@agent/proto'
-import type { GraphAguiSseEvent } from '@apis/graph-agui-sse'
 import type { ViewUpdate } from '@codemirror/view'
-import type { AgentErrorInfo } from '@components/copilot/AgentErrorBanner'
 import type { InlineEditState } from './inline-edit-field'
 import type { Suggestion } from './types'
 import { computeHunks, hunkKey, WRITER_CHANGE_SUMMARIES_EVENT } from '@agent/proto'
 import { Conversation } from '@apis/conversation-api'
-import { runGraphAguiSse } from '@apis/graph-agui-sse'
+import { streamGraphLangGraph } from '@apis/graph-langgraph-sse'
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
@@ -49,7 +47,7 @@ export interface TextEditorSessionOptions {
   mount: HTMLElement
   onSuggestionsChange: (suggestions: Suggestion[]) => void
   onPolishingChange: (polishing: boolean) => void
-  onAgentError?: (error: AgentErrorInfo) => void
+  onAgentError?: (message: string) => void
   onSelectionAction?: (action: 'edit' | 'chat', range: SelectionRange) => void
   onInlineEditChange?: (edit: InlineEditState | null) => void
 }
@@ -60,6 +58,25 @@ function sugSid(h: Hunk): string {
 
 function sugSignature(sugs: Suggestion[]): string {
   return sugs.map(s => `${s.sid}|${s.stale ? 1 : 0}|${s.summary}|${s.newText.length}`).join('::')
+}
+
+function aiTextFromWire(data: unknown): string {
+  if (!Array.isArray(data) || data.length < 1)
+    return ''
+  const message = data[0] as { type?: string, content?: unknown }
+  if (message.type !== 'ai')
+    return ''
+  if (typeof message.content === 'string')
+    return message.content
+  if (!Array.isArray(message.content))
+    return ''
+  return message.content.map((block) => {
+    if (typeof block === 'string')
+      return block
+    if (block != null && typeof block === 'object' && 'text' in block)
+      return String((block as { text?: unknown }).text ?? '')
+    return ''
+  }).join('')
 }
 
 /**
@@ -205,12 +222,7 @@ export class TextEditorSession {
           if (from === to)
             return false
           if (view.state.field(suggestionsField).length > 0) {
-            this.options.onAgentError?.({
-              message: '请先处理正文中的修订预览，或全部拒绝后再使用 ⌘K',
-              code: 'EDITOR_BUSY',
-              name: 'Busy',
-              json: '{}',
-            })
+            this.options.onAgentError?.('请先处理正文中的修订预览，或全部拒绝后再使用 ⌘K')
             return true
           }
           this.options.onSelectionAction?.('edit', {
@@ -400,12 +412,7 @@ export class TextEditorSession {
     if (!this.alive() || this.polishing || this.running || !this.view)
       return
     if (this.view.state.field(suggestionsField).length > 0) {
-      this.options.onAgentError?.({
-        message: '请先处理正文中的修订预览，或全部拒绝后再使用 ⌘K',
-        code: 'EDITOR_BUSY',
-        name: 'Busy',
-        json: '{}',
-      })
+      this.options.onAgentError?.('请先处理正文中的修订预览，或全部拒绝后再使用 ⌘K')
       return
     }
     if (this.view.state.sliceDoc(params.from, params.to) !== params.text)
@@ -440,25 +447,19 @@ export class TextEditorSession {
       polishInstruction: instruction,
       focuses: [{ from: params.from, to: params.to, text: params.text }],
     })
-    const messages = [{ id: `writer-inline-${Date.now()}`, role: 'user' as const, content: userContent }]
     let aiText = ''
     try {
-      await this.runGraphSse(messages, (event) => {
-        if (!this.alive() || gen !== this.inlineGen || this.inlineAbort)
+      await this.runGraphStream(userContent, (text) => {
+        if (!this.alive() || gen !== this.inlineGen || this.inlineAbort || !text)
           return
-        if (event.type === 'TEXT_MESSAGE_CONTENT') {
-          aiText += event.delta ?? ''
-          this.view?.dispatch({
-            effects: setInlineAiTextEffect.of({
-              aiText: sanitizeInlineOutput(aiText) || aiText,
-              streaming: true,
-            }),
-          })
-        }
-        else if (event.type === 'RUN_ERROR') {
-          this.reportRunError(event, '选区改写失败')
-        }
-      })
+        aiText = text
+        this.view?.dispatch({
+          effects: setInlineAiTextEffect.of({
+            aiText: sanitizeInlineOutput(aiText) || aiText,
+            streaming: true,
+          }),
+        })
+      }, () => {})
     }
     catch (err) {
       if (this.isAbortError(err))
@@ -466,12 +467,7 @@ export class TextEditorSession {
       if (this.alive() && gen === this.inlineGen) {
         console.error('writer inline 失败:', err)
         const message = err instanceof Error ? err.message : String(err)
-        this.options.onAgentError?.({
-          message,
-          code: 'AGENT_LOCAL',
-          name: err instanceof Error ? err.name : 'Error',
-          json: JSON.stringify({}, null, 2),
-        })
+        this.options.onAgentError?.(message)
       }
     }
     finally {
@@ -497,22 +493,12 @@ export class TextEditorSession {
     if (!this.alive() || !this.view)
       return false
     if (this.view.state.field(inlineEditField)) {
-      this.options.onAgentError?.({
-        message: '请先结束行内改写，再应用对话中的修改',
-        code: 'EDITOR_BUSY',
-        name: 'Busy',
-        json: '{}',
-      })
+      this.options.onAgentError?.('请先结束行内改写，再应用对话中的修改')
       return false
     }
     const current = this.view.state.doc.toString()
     if (current !== params.baseline) {
-      this.options.onAgentError?.({
-        message: '文稿已变更，无法应用此次修改建议',
-        code: 'BASELINE_STALE',
-        name: 'Stale',
-        json: '{}',
-      })
+      this.options.onAgentError?.('文稿已变更，无法应用此次修改建议')
       return false
     }
     const polished = params.polished.trim()
@@ -548,28 +534,21 @@ export class TextEditorSession {
     let aiText = ''
     let polishedFromCustom = ''
     this.setEditCase('document', { documentBaseline: original })
-    const messages = [{ id: `writer-user-${Date.now()}`, role: 'user' as const, content: original }]
     try {
-      await this.runGraphSse(messages, (event) => {
+      await this.runGraphStream(original, (text) => {
+        if (this.alive() && this.polishBaseline !== null && text)
+          aiText = text
+      }, (data) => {
         if (!this.alive() || this.polishBaseline === null)
           return
-        if (event.type === 'CUSTOM' && event.name === WRITER_CHANGE_SUMMARIES_EVENT) {
-          const value = event.value as {
-            changes?: WriterChangeSummary[]
-            polished?: string
-          } | null
-          this.applyAgentSummaries(value)
-          if (typeof value?.polished === 'string' && value.polished.trim()) {
-            polishedFromCustom = value.polished
-            this.syncSuggestions(original, polishedFromCustom, { final: true })
-          }
-        }
-        else if (event.type === 'TEXT_MESSAGE_CONTENT') {
-          // document 案助手气泡为短说明；改稿在 CUSTOM.polished
-          aiText += event.delta ?? ''
-        }
-        else if (event.type === 'RUN_ERROR') {
-          this.reportRunError(event, '润色失败')
+        const event = data as { name?: string, payload?: { changes?: WriterChangeSummary[], polished?: string } }
+        if (event.name !== WRITER_CHANGE_SUMMARIES_EVENT)
+          return
+        const value = event.payload
+        this.applyAgentSummaries(value)
+        if (typeof value?.polished === 'string' && value.polished.trim()) {
+          polishedFromCustom = value.polished
+          this.syncSuggestions(original, polishedFromCustom, { final: true })
         }
       })
     }
@@ -579,15 +558,7 @@ export class TextEditorSession {
       if (this.alive()) {
         console.error('writer agent 失败:', err)
         const message = err instanceof Error ? err.message : String(err)
-        const detail: Record<string, string> = {}
-        if (err instanceof Error && err.stack)
-          detail.stack = err.stack
-        this.options.onAgentError?.({
-          message,
-          code: 'AGENT_LOCAL',
-          name: err instanceof Error ? err.name : 'Error',
-          json: JSON.stringify(detail, null, 2),
-        })
+        this.options.onAgentError?.(message)
       }
     }
     finally {
@@ -602,9 +573,10 @@ export class TextEditorSession {
     }
   }
 
-  private async runGraphSse(
-    messages: Array<{ id: string, role: 'user' | 'assistant' | 'system', content: string }>,
-    onEvent: (event: GraphAguiSseEvent) => void,
+  private async runGraphStream(
+    content: string,
+    onAiText: (text: string) => void,
+    onCustom: (data: unknown) => void,
   ): Promise<void> {
     if (this.running)
       return
@@ -616,15 +588,20 @@ export class TextEditorSession {
         this.threadId = (await Conversation.create('editor')).id
       if (!this.alive() || abort.signal.aborted)
         return
-      await runGraphAguiSse({
+      for await (const event of streamGraphLangGraph({
         graph: 'editor',
         threadId: this.threadId,
-        state: this.writerState,
-        forwardedProps: { editorPath: 'job' },
-        messages,
+        messages: [{ type: 'human', content }],
+        configurable: { editorPath: 'job', ...this.writerState },
         signal: abort.signal,
-        onEvent,
-      })
+        onCustom,
+      })) {
+        const wire = event as { event?: string, data?: unknown }
+        if (wire.event === 'messages')
+          onAiText(aiTextFromWire(wire.data))
+        else if (wire.event === 'error')
+          this.reportRunError(wire.data, '运行失败')
+      }
     }
     finally {
       if (this.runAbort === abort)
@@ -633,17 +610,10 @@ export class TextEditorSession {
     }
   }
 
-  private reportRunError(event: GraphAguiSseEvent, fallback: string): void {
-    const str = (k: string): string => {
-      const v = event[k]
-      return typeof v === 'string' ? v : ''
-    }
-    this.options.onAgentError?.({
-      message: str('message') || fallback,
-      code: str('code'),
-      name: str('name'),
-      json: str('json'),
-    })
+  private reportRunError(data: unknown, fallback: string): void {
+    const record = data != null && typeof data === 'object' ? data as Record<string, unknown> : {}
+    const message = typeof record.message === 'string' && record.message ? record.message : fallback
+    this.options.onAgentError?.(message)
   }
 
   private isAbortError(err: unknown): boolean {

@@ -3,7 +3,7 @@ import { z } from 'zod'
 const LlmEnvSchema = z.object({
   OPENAI_API_KEY: z.string().min(1, 'OPENAI_API_KEY 未设置'),
   OPENAI_BASE_URL: z.url('OPENAI_BASE_URL 须为合法 URL'),
-  OPENAI_MODEL: z.string().default('deepseek-v4-flash'),
+  OPENAI_MODEL: z.string().default('deepseek-flash'),
   OPENAI_MODEL_MINI: z.string().optional(),
 })
 

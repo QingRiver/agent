@@ -9,6 +9,8 @@ const resourcesSearchSchema = z.object({
   q: z.string().optional().catch(undefined),
   /** 多选标签 id，逗号分隔 */
   tag: z.string().optional().catch(undefined),
+  /** 提示词库深链：打开 version_text 编辑 */
+  text: z.string().optional().catch(undefined),
 })
 
 export const Route = createFileRoute('/resources')({

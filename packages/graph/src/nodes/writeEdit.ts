@@ -1,18 +1,17 @@
 import type { EditorEditCase, WriterChangeSummary } from '@agent/proto'
 import type { BaseMessage } from '@langchain/core/messages'
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
+import { randomUUID } from 'node:crypto'
 import process from 'node:process'
-import { computeHunks, WRITER_CHANGE_SUMMARIES_EVENT, WriterHunkSummariesSchema } from '@agent/proto'
+import { computeHunks, WRITER_CHANGE_SUMMARIES_EVENT, WRITER_REASONING_EVENT, WriterHunkSummariesSchema } from '@agent/proto'
 import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ChatOpenAI } from '@langchain/openai'
 import { readEditorPath } from '../edges/routeByEditorPath'
 import {
   buildWriteSystemPrompt,
   DOCUMENT_ASSISTANT_NOTE,
-  DOCUMENT_WRITING_NOTE,
   SUMMARY_SYSTEM_PROMPT,
 } from '../prompts/editorPrompts'
-import { writeAguiAssistantText } from '../stream/writeAguiAssistantText'
 import { lastHumanMessageText, messageText } from '../utils/messageText'
 import { parseLlmJson } from '../utils/parseLlmJson'
 import { runChatCompletion } from './chatCompletion'
@@ -106,15 +105,24 @@ export async function runWriteEdit(
     return { messages: [response], polished }
   }
 
-  // document：聊天先出「编写中…」；正文静默累积（不发 TEXT_MESSAGE）
-  writeAguiAssistantText(config, DOCUMENT_WRITING_NOTE)
   const useReasoning = input.reasoning === true
+  const reasoningId = useReasoning ? randomUUID() : ''
   const polished = await runChatCompletion(config, {
     system,
     user: humanContent,
     temperature: 0.7,
     mode: useReasoning ? 'streamReasoning' : 'silent',
     thinking: useReasoning,
+    ...(useReasoning
+      ? {
+          onReasoningDelta: (delta: string) => {
+            config.writer?.({
+              name: WRITER_REASONING_EVENT,
+              payload: { id: reasoningId, delta },
+            })
+          },
+        }
+      : {}),
   })
 
   const baseline = input.documentBaseline!.trim()

@@ -4,16 +4,14 @@ packages:
   - '!**/.venv/**'
 
 catalog:
-  '@ag-ui/client': ^0.0.57
-  '@ag-ui/core': ^0.0.57
+  '@assistant-ui/react': ^0.15.28
+  '@assistant-ui/react-langgraph': ^0.14.34
+  '@assistant-ui/react-markdown': ^0.14.21
   '@babel/core': ^7.29.7
   '@antfu/eslint-config': ^9.1.0
-  '@anthropic-ai/claude-agent-sdk': ^0.3.170
   '@codemirror/lang-markdown': ^6.3.2
   '@codemirror/state': ^6.5.2
   '@codemirror/view': ^6.36.4
-  '@copilotkit/react-core': ^1.61.1
-  '@copilotkit/runtime': ^1.61.1
   '@dnd-kit/core': ^6.3.1
   '@dnd-kit/sortable': ^10.0.0
   '@dnd-kit/utilities': ^3.2.2
@@ -21,9 +19,9 @@ catalog:
   '@hono/node-server': ^2.0.10
   '@hono/zod-validator': ^0.8.0
   '@inkjs/ui': ^2.0.0
-  '@langchain/anthropic': ^1.4.0
   '@langchain/core': ^1.2.2
   '@langchain/langgraph': ^1.4.7
+  '@langchain/langgraph-sdk': ^1.12.3
   '@langchain/langgraph-checkpoint': ^1.1.3
   '@langchain/langgraph-checkpoint-postgres': ^1.0.4
   '@langchain/openai': ^1.5.4
@@ -94,7 +92,6 @@ catalog:
   react-day-picker: ^10.0.1
   react-dom: ^19.2.6
   react-server-dom-webpack: 19.2.6
-  rxjs: 7.8.2
   shiki: ^4.0.0
   string-width: ^8.2.1
   supports-hyperlinks: ^4.3.0
@@ -114,13 +111,10 @@ catalog:
 
 overrides:
   '@langchain/langgraph-checkpoint': 'catalog:'
-  rxjs: 'catalog:'
-  # Node 26 内置 undici@8；@qdrant/js-client-rest@1.18.0 仍用 undici@6 造 Agent
-  # 再塞给 global fetch → UND_ERR_INVALID_ARG。升到 7.28 可同时兼容 Node 22/24/26
-  # （8.x 在 Node 24 会挂）。上游修复：qdrant-js#146；发版后可去掉本 override。
+  # Node 26 内置 undici@8。qdrant 客户端用 npm 的 undici.Agent 再交给 global fetch，
+  # 两边主版本不一致就会 UND_ERR_INVALID_ARG。钉 7.28 可同时兼容 Node 22/24/26
+  # （8.x 在 Node 24 会挂）。qdrant-js#146 仍未合并；1.19.0 只把依赖升到 undici 7.29，
+  # 请求路径没变。那条 PR 发版后再去掉本 override。
   undici: 7.28.0
-  # CopilotKit 嵌套旧版；上游升版后可删
-  '@hono/node-server': '>=2.0.10'
-  uuid: '>=11.1.1'
 
 shellEmulator: true

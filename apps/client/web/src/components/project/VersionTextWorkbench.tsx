@@ -11,7 +11,7 @@ interface VersionTextWorkbenchProps {
   text: VersionTextRow
   skill?: SkillRow | null
   allTags: TagRow[]
-  onChangeSkillTags: (skillId: string, tagIds: string[]) => Promise<void>
+  onChangeSkillTags?: (skillId: string, tagIds: string[]) => Promise<void>
 }
 
 /**
@@ -259,7 +259,7 @@ export function VersionTextWorkbench({
           </div>
         </div>
 
-        {skill && (
+        {skill && onChangeSkillTags && (
           <div className="border-b border-border px-3 py-2">
             <KbDocTagsBar
               tagIds={skill.tagIds ?? []}
@@ -271,7 +271,7 @@ export function VersionTextWorkbench({
 
         {publishOpen && (
           <div className="flex flex-wrap items-end gap-2 border-b border-border bg-muted/30 px-3 py-2">
-            <label className="min-w-[12rem] flex-1 text-xs">
+            <label className="min-w-48 flex-1 text-xs">
               <span className="mb-1 block text-muted-foreground">版本描述</span>
               <input
                 value={versionDesc}

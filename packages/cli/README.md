@@ -1,6 +1,6 @@
 # @agent/cli
 
-终端 ReAct 实验：Ink UI + Effect `agentLoop` + OpenAI driver + MCP / HITL。与 Web Copilot 图定义独立，共用 `@agent/proto` 与 `@agent/tools`。
+终端 ReAct 实验：Ink UI + Effect `agentLoop` + OpenAI driver + MCP / HITL。与 Web 的 LangGraph 图独立，共用 `@agent/proto` 与 `@agent/tools`。
 
 ## 入口
 
@@ -30,7 +30,7 @@ pnpm cli
 pnpm --filter @agent/cli start
 ```
 
-不经 server / Copilot；会话在进程内，无 checkpoint 持久化。
+不经 gateway；会话在进程内，无 checkpoint 持久化。
 
 ## 常用命令
 

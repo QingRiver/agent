@@ -56,13 +56,6 @@ export default defineConfig({
   server: {
     ...(https ? { https } : {}),
     proxy: {
-      // 更具体的路径必须写在 /api 之前
-      '/api/copilotkit': {
-        target: 'https://127.0.0.1:3000',
-        changeOrigin: true,
-        secure: false,
-        rewrite: path => path.replace(/^\/api\/copilotkit/, '/copilotkit'),
-      },
       '/api/auth': {
         target: 'https://127.0.0.1:3000',
         // 保留浏览器 Origin（localhost:5173），供 better-auth trustedOrigins 校验

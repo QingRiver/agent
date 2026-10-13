@@ -1,7 +1,8 @@
 import type { ReactAgentLabConfig } from './agentLabConfig'
 import { AgentConfigApi } from '@apis/agent-config-api'
 import { Conversation } from '@apis/conversation-api'
-import { CopilotChatShell } from '@components/copilot/CopilotChatShell'
+import { AssistantGraphRuntime } from '@components/assistant/AssistantGraphRuntime'
+import { AssistantLangGraphThread } from '@components/assistant/AssistantThread'
 import { ReactAgentRuntimeStore } from '@stores/react-agent-runtime-store'
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -70,11 +71,13 @@ function AgentLabChatPanel({
         </p>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border">
-        <CopilotChatShell
-          agentId="reactAgent"
+        <AssistantGraphRuntime
+          graph="reactAgent"
           threadId={threadId}
-          hitl
-        />
+          configurable={() => ReactAgentRuntimeStore.mergeConfigurable()}
+        >
+          <AssistantLangGraphThread placeholder="输入消息…" emptyHint="按左侧配置发一条消息。" />
+        </AssistantGraphRuntime>
       </div>
     </div>
   )

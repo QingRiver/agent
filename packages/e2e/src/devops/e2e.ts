@@ -51,7 +51,7 @@ export function e2eKbAgent(): void {
   runInRepo('pnpm', ['exec', 'tsx', E2E_RUNNER_TS, 'kb-agent'])
 }
 
-/** playwright UI flow（需 pnpm dev + e2e auth）：驱动真实浏览器验证 AG-UI 前端交互 */
+/** playwright UI flow（需 pnpm dev + e2e auth）：驱动真实浏览器走 /graphs/:name/stream */
 export function e2eUi(): void {
   console.log('[devops] e2e ui (playwright,需要 server: pnpm dev)')
   runInRepo('pnpm', ['--filter', '@agent/e2e', 'exec', 'playwright', 'test', '--reporter=line'])

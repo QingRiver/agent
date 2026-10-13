@@ -1,6 +1,7 @@
 import type { GraphsName } from '@apis/api-types'
+import { AssistantGraphRuntime } from '@components/assistant/AssistantGraphRuntime'
+import { AssistantLangGraphThread } from '@components/assistant/AssistantThread'
 import { ConversationSidebar } from '@components/conversation/ConversationSidebar'
-import { CopilotChatShell } from '@components/copilot/CopilotChatShell'
 import { useConversations } from '@hooks/useConversations'
 import { ChatLayout } from '@layouts/ChatLayout'
 import { createFileRoute } from '@tanstack/react-router'
@@ -22,11 +23,9 @@ function ChatPanel({
         <h1 className="text-lg font-semibold text-foreground">{graphsName}</h1>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border">
-        <CopilotChatShell
-          agentId={graphsName}
-          threadId={threadId}
-          hitl
-        />
+        <AssistantGraphRuntime graph={graphsName} threadId={threadId}>
+          <AssistantLangGraphThread placeholder="输入消息…" />
+        </AssistantGraphRuntime>
       </div>
     </div>
   )

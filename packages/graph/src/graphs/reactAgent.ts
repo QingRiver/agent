@@ -20,7 +20,6 @@ export {
   composeReactAgentSystemPrompt,
   DEFAULT_REACT_AGENT_USER_PROMPT,
   KB_SEARCH_SYSTEM_PROMPT,
-  REACT_AGENT_FORWARDED_PROPS_KEY,
   REACT_AGENT_MAX_STEPS_DEFAULT,
   REACT_AGENT_MAX_STEPS_MAX,
   REACT_AGENT_MAX_STEPS_MIN,
@@ -28,7 +27,7 @@ export {
   type ReactAgentRuntimeConfig,
   ReactAgentRuntimeConfigSchema,
   readAgentConfigId,
-  readReactAgentForwardedProps,
+  readReactAgentRuntimeConfig,
   sanitizeKbId,
   sanitizeUserPrompt,
 } from '../prompts/reactAgentPrompts'
@@ -43,7 +42,7 @@ const ReactAgentState = Annotation.Root({
 type ReactAgentStateType = typeof ReactAgentState.State
 
 const tools = [...KB_TOOLS, ...ASK_TOOLS, readSkillFileTool]
-/** 必须直接挂 ToolNode：外层再 toolNode.invoke 会导致同 id 双发 TOOL_CALL_START（AG-UI verify 失败） */
+/** 必须直接挂 ToolNode：外层再 toolNode.invoke 会让同一次调用发两套 tool 事件。 */
 const toolsNode = new ToolNode(tools)
 
 const llmWithTools = new ChatOpenAI({
@@ -77,8 +76,8 @@ function afterAgent(state: ReactAgentStateType): 'tools' | typeof END {
 }
 
 /**
- * 环次数唯一由 streamEvents.recursionLimit（= 配置 maxSteps）约束。
- * kbId 由 server resolveConfigurable 写入 configurable，kb_search 自行读取。
+ * 环次数唯一由 graph.stream 的 recursionLimit（= 配置 maxSteps）约束。
+ * kbId 由 server 写入 configurable，kb_search 自行读取。
  */
 export const reactAgentGraph = new StateGraph(ReactAgentState)
   .addNode('agent', agentNode)

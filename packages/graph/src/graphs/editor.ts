@@ -12,7 +12,7 @@ export { WRITER_CHANGE_SUMMARIES_EVENT, type WriterChangeSummary } from '@agent/
 
 /**
  * 文本编辑器统一图。
- * `forwardedProps.editorPath`：
+ * `configurable.editorPath`：
  * - `job`：润色 / ⌘K → 直达 writeEdit（无 thinking）
  * - `chat`：对话 → classify → chatbot | writeEdit（Write 可 reasoning）
  */

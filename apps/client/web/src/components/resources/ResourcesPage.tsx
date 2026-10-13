@@ -1,6 +1,9 @@
+import type { VersionTextRow } from '@apis/skill-api'
 import type { ResourceRow } from './ResourcesTable'
 import { parseFrontmatter, SKILL_ENTRY_FILENAME, VERSION_TEXT_TYPE } from '@agent/proto'
 import { ProjectListPage } from '@components/project/ProjectListPage'
+import { VersionTextWorkbench } from '@components/project/VersionTextWorkbench'
+import { Button } from '@components/ui/button'
 import { useAuth } from '@hooks/useAuth'
 import { cn } from '@lib/utils'
 import { DirStore } from '@stores/dir-store'
@@ -9,7 +12,9 @@ import { SkillStore } from '@stores/skill-store'
 import { TagsStore } from '@stores/tags-store'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useAtomValue } from 'jotai'
-import { useEffect, useMemo } from 'react'
+import { ArrowLeft, Plus } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { NewPromptDialog } from './NewPromptDialog'
 import { ResourcesTable, ResourcesToolbar } from './ResourcesTable'
 
 const routeApi = getRouteApi('/resources')
@@ -60,6 +65,7 @@ export function ResourcesPage() {
   const search = routeApi.useSearch()
   const tab: TabId = search.tab ?? 'project'
   const q = search.q ?? ''
+  const promptTextId = tab === 'prompt' ? search.text : undefined
   const selectedTagIds = useMemo(() => parseTagParam(search.tag), [search.tag])
 
   const kbs = useAtomValue(KbStore.kbsAtom)
@@ -68,6 +74,7 @@ export function ResourcesPage() {
   const texts = useAtomValue(SkillStore.textsAtom)
   const tags = useAtomValue(TagsStore.tagsAtom)
   const tagsById = useAtomValue(TagsStore.tagsByIdAtom)
+  const [createPromptOpen, setCreatePromptOpen] = useState(false)
 
   useEffect(() => {
     void DirStore.refresh()
@@ -134,13 +141,22 @@ export function ResourcesPage() {
     return []
   }, [kbRows, promptRows, q, selectedTagIds, skillRows, tab])
 
-  function setSearch(next: { tab?: TabId, q?: string, tag?: string | undefined }) {
+  const selectedPrompt = promptTextId
+    ? texts.find(t => t.id === promptTextId && t.type === VERSION_TEXT_TYPE.PROMPT)
+    : undefined
+
+  function setSearch(next: { tab?: TabId, q?: string, tag?: string | undefined, text?: string | undefined }) {
+    const nextTab = next.tab ?? tab
+    const switching = next.tab != null && next.tab !== tab
     void navigate({
       to: '/resources',
       search: {
-        tab: next.tab ?? tab,
+        tab: nextTab,
         q: (next.q !== undefined ? next.q : q) || undefined,
-        tag: next.tag !== undefined ? next.tag : serializeTags(selectedTagIds),
+        tag: switching ? undefined : (next.tag !== undefined ? next.tag : serializeTags(selectedTagIds)),
+        text: nextTab === 'prompt' && !switching
+          ? (next.text !== undefined ? next.text : promptTextId)
+          : undefined,
       },
       replace: true,
     })
@@ -153,6 +169,29 @@ export function ResourcesPage() {
     setSearch({ tag: serializeTags(next) })
   }
 
+  function openPrompt(text: VersionTextRow) {
+    void navigate({
+      to: '/resources',
+      search: {
+        tab: 'prompt',
+        q: q || undefined,
+        tag: serializeTags(selectedTagIds),
+        text: text.id,
+      },
+    })
+  }
+
+  function closePrompt() {
+    void navigate({
+      to: '/resources',
+      search: {
+        tab: 'prompt',
+        q: q || undefined,
+        tag: serializeTags(selectedTagIds),
+      },
+    })
+  }
+
   function onRowClick(row: ResourceRow) {
     if (tab === 'kb') {
       void navigate({ to: '/kb', search: { kb: row.id } })
@@ -160,16 +199,8 @@ export function ResourcesPage() {
     }
     if (tab === 'prompt') {
       const text = texts.find(t => t.id === row.id)
-      if (!text)
-        return
-      const projectId = DirStore.projectOf(dirsById, text.mountDirId)
-      if (!projectId)
-        return
-      void navigate({
-        to: '/projects/$id',
-        params: { id: projectId },
-        search: { text: text.id },
-      })
+      if (text)
+        openPrompt(text)
       return
     }
     if (tab === 'skill') {
@@ -236,22 +267,57 @@ export function ResourcesPage() {
             )
           : (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background">
-                <ResourcesToolbar
-                  q={q}
-                  onQChange={value => setSearch({ q: value })}
-                  tags={tags}
-                  selectedTagIds={selectedTagIds}
-                  onToggleTag={toggleTag}
-                  showTagFilter={tab === 'skill' || selectedTagIds.length > 0 || tab === 'kb' || tab === 'prompt'}
-                />
-                <ResourcesTable
-                  rows={visibleRows}
-                  tagsById={tagsById}
-                  emptyText={tab === 'prompt' ? '暂无提示词（type=prompt）' : '暂无数据'}
-                  onRowClick={onRowClick}
-                />
+                {tab === 'prompt' && selectedPrompt
+                  ? (
+                      <>
+                        <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+                          <Button type="button" size="sm" variant="ghost" onClick={closePrompt}>
+                            <ArrowLeft className="size-4" />
+                            返回列表
+                          </Button>
+                          <span className="truncate text-sm font-medium text-foreground">{selectedPrompt.filename}</span>
+                        </div>
+                        <VersionTextWorkbench
+                          key={selectedPrompt.id}
+                          text={selectedPrompt}
+                          allTags={tags}
+                        />
+                      </>
+                    )
+                  : (
+                      <>
+                        <ResourcesToolbar
+                          q={q}
+                          onQChange={value => setSearch({ q: value })}
+                          tags={tags}
+                          selectedTagIds={selectedTagIds}
+                          onToggleTag={toggleTag}
+                          showTagFilter={tab === 'skill' || selectedTagIds.length > 0 || tab === 'kb' || tab === 'prompt'}
+                          action={tab === 'prompt'
+                            ? (
+                                <Button type="button" size="sm" onClick={() => setCreatePromptOpen(true)}>
+                                  <Plus className="size-4" />
+                                  新建提示词
+                                </Button>
+                              )
+                            : undefined}
+                        />
+                        <ResourcesTable
+                          rows={visibleRows}
+                          tagsById={tagsById}
+                          emptyText={tab === 'prompt' ? '暂无提示词，点击右上角新建' : '暂无数据'}
+                          onRowClick={onRowClick}
+                        />
+                      </>
+                    )}
               </div>
             )}
+
+      <NewPromptDialog
+        open={createPromptOpen}
+        onClose={() => setCreatePromptOpen(false)}
+        onCreated={openPrompt}
+      />
     </div>
   )
 }

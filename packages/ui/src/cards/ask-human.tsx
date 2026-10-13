@@ -5,7 +5,7 @@ import { useState } from 'react'
  * ask_human 中断 UI 卡片 —— 按 InterruptRequest.type 分发渲染。
  * 各 Card 收 `onRespond(payload)`，payload 形状由 type 决定
  * (input→{value}, select→{value}, multiSelect→{values}, modal→{action}, approval→{approved}, unlock→{})。
- * 纯展示：不依赖 CopilotKit；resume 由 Host 适配器负责。
+ * 纯展示。resume 由调用方把 payload 交回图。
  */
 
 export function InterruptCard({

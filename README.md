@@ -1,6 +1,6 @@
 # agent
 
-多 Agent 实验场：LangGraph 图编排 + CopilotKit AG-UI 流式协议 + 会话持久化（PostgreSQL checkpoint）。
+多 Agent 实验场：LangGraph 图编排 + assistant-ui 直接消费图流 + 会话持久化（PostgreSQL checkpoint）。
 
 支持 ReAct 工具调用、人在回路（HITL）、知识库 RAG、A 股分析（Tushare）、文本润色等能力；Web / CLI 共用同一套图定义。
 
@@ -8,14 +8,13 @@
 
 | 路径 | 说明 |
 |------|------|
-| [apps/server/gateway](./apps/server/gateway/README.md) | Hono HTTPS API、CopilotRuntime、会话 / 认证 / 知识库 |
+| [apps/server/gateway](./apps/server/gateway/README.md) | Hono HTTPS API、图流、会话 / 认证 / 知识库 |
 | [apps/server/rsc-engine](./apps/server/rsc-engine/README.md) | Waku RSC 编译引擎（loopback `3010`） |
 | [apps/client/web](./apps/client/web/README.md) | Vite + React：会话聊天、HITL、知识库、文本编辑器、RSC 演示 |
-| [packages/graph](./packages/graph/README.md) | `@agent/graph` — LangGraph 图与 AguiTransformer |
+| [packages/graph](./packages/graph/README.md) | `@agent/graph` — LangGraph 图 |
 | [packages/kb](./packages/kb/README.md) | `@agent/kb` — 向量召回、rerank、入库算法 |
 | [packages/proto](./packages/proto/README.md) | `@agent/proto` — HITL / 引文 / Writer 中性契约 |
 | [packages/ui](./packages/ui/README.md) | `@agent/ui` — 对话卡片 View（ask_human）+ Storybook |
-| [packages/claude](./packages/claude/README.md) | `@agent/claude` — Claude Agent SDK 适配 |
 | [packages/tools](./packages/tools/README.md) | `@agent/tools` — Open-Meteo、Tushare / HA MCP |
 | [packages/markdown](./packages/markdown/README.md) | `@agent/markdown` — Markdown → HTML + TOC |
 | [packages/env](./packages/env/README.md) | `@agent/env` — 根 `.env` 加载 + zod 校验 |
@@ -131,7 +130,6 @@ pnpm dev
 | `tushare`        | A 股个股分析（Tushare MCP + ask_human）      |
 | `ha`             | Home Assistant（官方 MCP + ask_human）       |
 | `editor`         | 文本编辑器（job 润色/⌘K；chat Ask/Write）   |
-| `claudeAgent`    | Claude Agent SDK + checkpoint + AG-UI |
 | `reactAgent`     | 通用 ReAct（可配 prompt）                   |
 
 
@@ -156,9 +154,9 @@ pnpm test                # Vitest
 | 层级     | 技术                                                                            |
 | ------ | ----------------------------------------------------------------------------- |
 | 根目录    | pnpm workspace、TypeScript、ESLint（@antfu）、Vitest                               |
-| Server | Hono 4、better-auth、Drizzle、CopilotKit Runtime、LangGraph、PostgreSQL checkpoint |
-| Client | React 19、CopilotKit、TanStack Router、Jotai、Tailwind 4                          |
-| Agent  | LangGraph、AG-UI、`AguiTransformer`（`@agent/graph`）                             |
+| Server | Hono 4、better-auth、Drizzle、LangGraph、PostgreSQL checkpoint |
+| Client | React 19、assistant-ui、TanStack Router、Jotai、Tailwind 4                          |
+| Agent  | LangGraph（`@agent/graph`）                             |
 | 知识库    | Qdrant、SiliconFlow embedding/rerank、MarkItDown                                |
 
 
@@ -172,7 +170,7 @@ pnpm test                # Vitest
 |----|------|
 | Server / Client | [apps/server/gateway](./apps/server/gateway/README.md)、[apps/client/web](./apps/client/web/README.md) |
 | Graph / KB / Proto | [graph](./packages/graph/README.md)、[kb](./packages/kb/README.md)、[proto](./packages/proto/README.md) |
-| Claude / Tools / Markdown | [claude](./packages/claude/README.md)、[tools](./packages/tools/README.md)、[markdown](./packages/markdown/README.md) |
+| Tools / Markdown | [tools](./packages/tools/README.md)、[markdown](./packages/markdown/README.md) |
 | Env / CLI / E2E | [env](./packages/env/README.md)、[cli](./packages/cli/README.md)、[e2e](./packages/e2e/README.md) |
 
 ## License

@@ -1,8 +1,11 @@
 import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch'
 import { z } from 'zod'
 
-/** CopilotKit CUSTOM 事件名:writer 润色后的逐条修改说明 */
+/** LangGraph custom 事件名：writer 润色后的逐条修改说明 */
 export const WRITER_CHANGE_SUMMARIES_EVENT = 'writer_change_summaries'
+
+/** LangGraph custom 事件名：chat 改稿时的思考增量。投影成 messages 里的 reasoning 块。 */
+export const WRITER_REASONING_EVENT = 'writer_reasoning'
 
 /**
  * 一个行级 diff hunk:以「行」为原子单位,相邻增删行合并成一个 block。

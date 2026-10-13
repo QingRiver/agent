@@ -2,7 +2,7 @@ import process from 'node:process'
 import { defineConfig } from '@playwright/test'
 
 /**
- * Playwright 配置:驱动真实浏览器验证 AG-UI 前端交互(错误条是否渲染、能否展开)。
+ * Playwright 配置：驱动真实浏览器验证 assistant-ui 直连 LangGraph。
  *
  * 前置:server(pnpm dev,3000)+ dev(5173)+ e2e 账号(pnpm devops e2e auth)。
  * 自签证书用 ignoreHTTPSErrors 放行。

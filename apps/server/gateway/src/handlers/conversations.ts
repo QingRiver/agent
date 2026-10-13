@@ -5,7 +5,6 @@ import type {
 } from '../../shared/conversation'
 import type { AppEnv, AuthUser } from '../types'
 import { listGraphAgentCatalog } from '../agent/graphAgents'
-import { hydrateThreadBundle } from '../conversation/threadHydrate'
 import { getCheckpointer } from '../db/checkpointer'
 import { ConversationService } from '../service/conversation'
 
@@ -30,22 +29,6 @@ export class ConversationHandlers {
       return c.json({ error: 'Not found' }, 404)
 
     return c.json({ conversation })
-  }
-
-  static async messages(
-    c: Context<AppEnv>,
-    user: AuthUser,
-    req: ConversationIdRequest,
-  ) {
-    const conversation = await ConversationService.get(user.id, req.id)
-    if (!conversation)
-      return c.json({ error: 'Not found' }, 404)
-
-    const bundle = await hydrateThreadBundle(conversation.agentId, req.id)
-    return c.json({
-      messages: bundle.messages,
-      threadState: bundle.threadState,
-    })
   }
 
   static async pin(c: Context<AppEnv>, user: AuthUser, req: ConversationIdRequest) {

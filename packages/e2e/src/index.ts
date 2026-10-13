@@ -4,7 +4,7 @@
  * 分层（自底向上，仿 Playwright support/fixtures/tests 分离）：
  *
  *   client/   连接信息 + 认证 fetch（signInE2E / e2eFetch / e2eHeaders / ensureE2eAccount）
- *   support/  flow 共用的机械原语（fail / createThread / drainSse / runAgentRun）
+ *   support/  flow 共用的机械原语（fail / createThread / drainSse / runAgentRun / fetchGraphState）
  *   flows/    真实 HTTP/SSE 场景（tags / hitl-agent / kb-agent），由 runFlow 调度
  *   runner.ts CLI 入口：`tsx packages/e2e/src/runner.ts <flow>`（devops skill 调用）
  *

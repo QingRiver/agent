@@ -10,7 +10,6 @@ import { cors } from 'hono/cors'
 import { getAuth } from './auth/auth'
 import { resolveDevCorsOrigin } from './auth/devOrigins'
 import { bootstrapDatabases } from './db/bootstrap'
-import { copilotKitMiddleware } from './copilot/honoBridge'
 import { handleAppError } from './http/errors'
 import { logger } from './middleware/logger'
 import { apiRoutes } from './routes'
@@ -46,7 +45,6 @@ app.use('*', async (c, next) => {
   await next()
 })
 
-app.use('*', copilotKitMiddleware)
 app.route('/', apiRoutes)
 
 app.onError(handleAppError)
