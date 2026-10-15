@@ -16,6 +16,8 @@ import { lastHumanMessageText } from '../../utils/messageText'
 const llm = new ChatOpenAI({
   model: process.env.OPENAI_MODEL ?? '',
   temperature: 0.2,
+  // 与对话一致：DeepSeek V4 开着思考，正文仍走模型 SSE。
+  modelKwargs: { thinking: { type: 'enabled' } },
 })
 
 function buildGenerateSystemPrompt(context: string): string {
@@ -68,6 +70,7 @@ export async function kbGenerateNode(
   if (typeof correction === 'string' && correction.trim())
     messages.push(new HumanMessage(correction))
 
+  // 传入图的 config，和对话一样走模型 SSE，token 会写进 /graphs/kb/stream。
   const response = await llm.invoke(messages, config)
   const answer = getAIMessageContent(response as AIMessage)
   const validation = validateCitations(answer, state.retrievedChunks)

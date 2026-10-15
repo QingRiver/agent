@@ -51,7 +51,6 @@
     "react": "catalog:",
     "react-day-picker": "catalog:",
     "react-dom": "catalog:",
-    "react-server-dom-webpack": "catalog:",
     "tailwind-merge": "catalog:",
     "tiptap-markdown": "catalog:",
     "y-codemirror.next": "catalog:",

@@ -383,8 +383,9 @@ export class KbService {
   }
 
   /**
-   * 跨 project move 后同步子树挂载文档的 projectId（PG + Qdrant setPayload，不重 embed）。
-   * 由 ProjectService.move 跨 project 时调用；project 域不直接触 Qdrant，经此委托。
+   * move 之后同步子树挂载文档的 kbId 与 projectId（PG + Qdrant setPayload，不重 embed）。
+   * 跨 project move 已在 ProjectService.move 拒绝，这里收到的 projectId 与移动前相同。
+   * project 域不直接触 Qdrant，经此委托。
    */
   static async syncProjectIdForSubtree(
     userId: string,

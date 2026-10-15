@@ -7,7 +7,6 @@ import { graphsRoutes } from './graphs'
 import { gtdRoutes } from './gtd'
 import { kbRoutes } from './kb'
 import { dirRoutes, projectRoutes } from './project'
-import { rscRoutes } from './rsc'
 import { skillRoutes, versionTextRoutes } from './skill'
 import { tagsRoutes } from './tags'
 
@@ -21,7 +20,6 @@ const apiRoutes = new Hono<AppEnv>()
   .route('/dirs', dirRoutes)
   .route('/projects', projectRoutes)
   .route('/gtd', gtdRoutes)
-  .route('/rsc', rscRoutes)
   .route('/skills', skillRoutes)
   .route('/version-texts', versionTextRoutes)
 

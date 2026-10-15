@@ -8,6 +8,7 @@ import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { env } from '@agent/env'
+import { getQdrantClient, resolveCollectionName } from '@agent/kb'
 import { bootstrapDatabases } from '../src/db/bootstrap'
 import { KbService } from '../src/service/kb'
 import { ProjectService } from '../src/service/project'
@@ -23,9 +24,15 @@ async function main(): Promise<void> {
   await bootstrapDatabases()
 
   const kbId = env.KB_COLLECTION
-  const proj = await ProjectService.createProject(SEED_OWNER, { name: 'seed-kb' })
-  const kbDir = await ProjectService.createDir(SEED_OWNER, { parentId: proj.id, name: 'kb' })
-  await KbService.mark(SEED_OWNER, kbDir.id)
+  const projects = await ProjectService.listProjects(SEED_OWNER)
+  const proj = projects.find(item => item.name === 'seed-kb')
+    ?? await ProjectService.createProject(SEED_OWNER, { name: 'seed-kb' })
+  const tree = await ProjectService.listTree(SEED_OWNER)
+  const kbDir = tree.find(item => item.parentId === proj.id && item.name === 'kb')
+    ?? await ProjectService.createDir(SEED_OWNER, { parentId: proj.id, name: 'kb' })
+  const bindings = await KbService.listBindings(SEED_OWNER)
+  if (!bindings.some(item => item.dirId === kbDir.id))
+    await KbService.mark(SEED_OWNER, kbDir.id)
   const buffer = Buffer.from(await readFile(FIXTURE))
   const items = await KbService.ingestFiles({
     userId: SEED_OWNER,
@@ -50,8 +57,17 @@ async function main(): Promise<void> {
     throw new Error(`doc ${item.docId} missing after ingest`)
 
   if (doc.indexingStatus === 'completed' && doc.draftHash === doc.publishedHash) {
-    console.log('[devops/e2e/kb] already committed, skip', item.docId)
-    return
+    const client = getQdrantClient()
+    const coll = resolveCollectionName(kbId)
+    const count = await client.count(coll, {
+      exact: true,
+      filter: { must: [{ key: 'source_doc_id', match: { value: doc.id } }] },
+    }).catch(() => ({ count: 0 }))
+    if (count.count > 0) {
+      console.log('[devops/e2e/kb] already committed, skip', item.docId)
+      return
+    }
+    console.log('[devops/e2e/kb] postgres 已提交但 Qdrant 没有点，重新 commit', item.docId)
   }
 
   const committed = await KbService.commit(item.docId, { skipEnrich: true })

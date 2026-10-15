@@ -81,6 +81,8 @@ test('kb 停 qdrant 后 /graphs/kb/stream 返回 error', async ({ page }) => {
 })
 
 test('已有回复后再出错，历史正文仍在，本轮 stream 为 error', async ({ page }) => {
+  setQdrant('start')
+  await waitForPort(page, true)
   await loginAndOpenKbChat(page)
 
   await sendAndReadStream(page, '怎么开电子发票')

@@ -386,7 +386,7 @@ describe('sync-repository e2e (push/pull 落库)', () => {
   })
 
   it('永久删除 deleted 父 → 连带 tombstone 有效 deleted 子（物理 active/completed），兄弟不波及 [SP-PURGE-SRV-1]', async () => {
-    await insertDir({ id: 'dp-purge1', parentId: null, kind: 'project', name: 'P1', projectId: 'dp-purge1', vdir: 'P1', sortOrder: 0 })
+    await insertDir({ id: 'dp-purge1', parentId: null, kind: 'project', name: 'P-purge1', projectId: 'dp-purge1', vdir: 'P-purge1', sortOrder: 0 })
     await applyPushToPg(USER_ID, {
       mutations: [],
       commands: [

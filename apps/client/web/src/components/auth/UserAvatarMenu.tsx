@@ -12,7 +12,7 @@ import { useAuth } from '@hooks/useAuth'
 import { ThemeStore } from '@stores/theme-store'
 import { Link } from '@tanstack/react-router'
 import { useAtomValue } from 'jotai'
-import { Beaker, Code2, LogOut, MessageSquare, Moon, Palette, Sun } from 'lucide-react'
+import { Code2, LogOut, MessageSquare, Moon, Palette, Sun } from 'lucide-react'
 
 function displayInitial(user: { name?: string, email?: string }): string {
   const source = user.name?.trim() || user.email?.trim() || '?'
@@ -83,12 +83,6 @@ export function UserAvatarMenu() {
           <Link to="/text-editor" className="flex cursor-pointer items-center gap-2">
             <Code2 className="h-4 w-4" />
             编辑器
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/rsc" className="flex cursor-pointer items-center gap-2">
-            <Beaker className="h-4 w-4" />
-            RSC
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />

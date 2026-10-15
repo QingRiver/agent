@@ -15,7 +15,7 @@
     "node": ">=26.0.0 <27.0.0"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter server --filter client --filter rsc-engine dev",
+    "dev": "pnpm --parallel --filter server --filter client dev",
     "dev:ha": "pnpm --filter ha run dev",
     "setup:ha": "pnpm --filter ha run setup",
     "prepare": "pnpm --filter ha run setup",

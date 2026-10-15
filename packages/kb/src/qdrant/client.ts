@@ -13,7 +13,8 @@ let sharedClient: QdrantClient | null = null
 
 export function getQdrantClient(): QdrantClient {
   if (!sharedClient)
-    sharedClient = new QdrantClient({ url: env.QDRANT_URL })
+    // 默认 300s。容器停掉时要在这条时间内才抛错，图流才能写出 event:error。
+    sharedClient = new QdrantClient({ url: env.QDRANT_URL, timeout: 8_000 })
   return sharedClient
 }
 

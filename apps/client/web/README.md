@@ -46,7 +46,6 @@ pnpm dev                        # server + client 并行
 | `/chat` | 会话列表 + assistant-ui 聊天 |
 | `/kb` | 知识库：文件树、Markdown 编辑、导入、召回调试 |
 | `/text-editor` | AI 文本润色编辑器（`editor` Agent） |
-| `/rsc` | RSC 演示：Suspense + use() 解码 gateway 透传的 Flight 流 |
 
 顶栏导航在 [src/routes/__root.tsx](src/routes/__root.tsx)；`RequireAuth` 对非 `/login`、`/register` 路径要求登录。
 

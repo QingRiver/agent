@@ -37,8 +37,6 @@ export const ServerEnvSchema = LlmEnvSchema.extend({
   KB_RECALL_K: z.coerce.number().int().positive().default(20),
   KB_RERANK_TOPK: z.coerce.number().int().positive().default(5),
   KB_RERANK_MIN_SCORE: z.coerce.number().min(0).max(1).default(0.3),
-  /** rsc-engine loopback（浏览器不直连） */
-  RSC_ENGINE_URL: z.url().default('http://127.0.0.1:3010'),
 })
 
 export type ServerEnv = z.infer<typeof ServerEnvSchema>

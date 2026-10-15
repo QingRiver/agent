@@ -59,29 +59,15 @@ async function wipeGtdData(token: string): Promise<void> {
   }
 }
 
-function baseTask(name: string, order: number, extra: Record<string, unknown>, ts: string) {
-  return {
-    name,
-    note: null,
-    parentId: null,
-    order,
-    status: 'active',
-    groupType: null,
-    deferDate: null,
-    dueDate: null,
-    plannedMode: 'none',
-    plannedDate: null,
-    completedAt: null,
-    heldAt: null,
-    droppedAt: null,
-    flagged: false,
-    estimateMinutes: null,
-    repeatRuleId: null,
-    repeatedFromTaskId: null,
-    createdAt: ts,
-    updatedAt: ts,
-    ...extra,
-  }
+interface CreateTaskCommand {
+  id: string
+  type: 'create_task'
+  taskId: string
+  name: string
+  parentId: null
+  order: number
+  mountDirId: null
+  clientTs: string
 }
 
 test('Forecast 三段条：rolling / 过去 / 以后 defer', async ({ page }) => {
@@ -99,53 +85,63 @@ test('Forecast 三段条：rolling / 过去 / 以后 defer', async ({ page }) =>
   const tRolling = `${RUN}-roll`
   const tDeferTomorrow = `${RUN}-defer-tmr`
 
-  const mutations: Mutation[] = [
+  const tasks: Array<{ id: string, name: string, order: number, patch: Record<string, unknown> }> = [
     {
-      id: `${RUN}-m1`,
-      entityId: tOverdue,
-      entity: 'task',
-      op: 'upsert',
-      patch: baseTask('逾期事A', 1, {
+      id: tOverdue,
+      name: '逾期事A',
+      order: 1,
+      patch: {
         dueDate: iso(new Date(startToday.getTime() - 60_000)),
-        plannedMode: 'rolling',
-      }, ts),
-      clientTs: ts,
+      },
     },
     {
-      id: `${RUN}-m2`,
-      entityId: tDueToday,
-      entity: 'task',
-      op: 'upsert',
-      patch: baseTask('截止事B', 2, {
+      id: tDueToday,
+      name: '截止事B',
+      order: 2,
+      patch: {
         dueDate: iso(new Date(startToday.getTime() + 60_000)),
-      }, ts),
-      clientTs: ts,
+      },
     },
     {
-      id: `${RUN}-m3`,
-      entityId: tRolling,
-      entity: 'task',
-      op: 'upsert',
-      patch: baseTask('滚动事C', 3, { plannedMode: 'rolling' }, ts),
-      clientTs: ts,
+      id: tRolling,
+      name: '滚动事C',
+      order: 3,
+      patch: { plannedMode: 'rolling' },
     },
     {
-      id: `${RUN}-m4`,
-      entityId: tDeferTomorrow,
-      entity: 'task',
-      op: 'upsert',
-      patch: baseTask('推迟明日D', 4, {
+      id: tDeferTomorrow,
+      name: '推迟明日D',
+      order: 4,
+      patch: {
         plannedMode: 'rolling',
         deferDate: iso(new Date(tomorrow.getTime() + 60_000)),
-      }, ts),
-      clientTs: ts,
+      },
     },
   ]
+  const commands: CreateTaskCommand[] = tasks.map(task => ({
+    id: `${RUN}-c-${task.id}`,
+    type: 'create_task',
+    taskId: task.id,
+    name: task.name,
+    parentId: null,
+    order: task.order,
+    mountDirId: null,
+    clientTs: ts,
+  }))
+  const mutations: Mutation[] = tasks.map(task => ({
+    id: `${RUN}-m-${task.id}`,
+    entityId: task.id,
+    entity: 'task',
+    op: 'upsert',
+    patch: task.patch,
+    clientTs: ts,
+  }))
 
-  await e2eFetch(token, '/gtd/sync/push', {
+  const pushed = await e2eFetch<{ rejected: Array<{ id: string, reason: string }> }>(token, '/gtd/sync/push', {
     method: 'POST',
-    body: JSON.stringify({ mutations, commands: [], lastSyncId: 0 }),
+    body: JSON.stringify({ mutations, commands, lastSyncId: 0 }),
   })
+  expect(pushed.rejected).toEqual([])
 
   page.on('console', msg => console.log(`[browser:${msg.type()}] ${msg.text()}`))
 

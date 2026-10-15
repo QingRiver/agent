@@ -16,17 +16,17 @@ catalog:
   '@dnd-kit/sortable': ^10.0.0
   '@dnd-kit/utilities': ^3.2.2
   '@eslint-react/eslint-plugin': ^5.9.2
-  '@hono/node-server': ^2.0.10
-  '@hono/zod-validator': ^0.8.0
+  '@hono/node-server': ^2.1.5
+  '@hono/zod-validator': ^0.9.1
   '@inkjs/ui': ^2.0.0
-  '@langchain/core': ^1.2.2
-  '@langchain/langgraph': ^1.4.7
-  '@langchain/langgraph-sdk': ^1.12.3
-  '@langchain/langgraph-checkpoint': ^1.1.3
-  '@langchain/langgraph-checkpoint-postgres': ^1.0.4
-  '@langchain/openai': ^1.5.4
-  '@langchain/textsplitters': ^1.0.1
-  '@modelcontextprotocol/sdk': ^1.30.0
+  '@langchain/core': ^1.2.17
+  '@langchain/langgraph': ^1.5.0
+  '@langchain/langgraph-sdk': ^1.12.4
+  '@langchain/langgraph-checkpoint': ^1.2.0
+  '@langchain/langgraph-checkpoint-postgres': ^1.1.0
+  '@langchain/openai': ^1.6.2
+  '@langchain/textsplitters': ^1.0.2
+  '@modelcontextprotocol/sdk': ^1.32.1
   '@playwright/test': ^1.51.0
   '@qdrant/js-client-rest': ^1.14.0
   '@rolldown/plugin-babel': ^0.2.3
@@ -42,9 +42,9 @@ catalog:
   '@tailwindcss/typography': ^0.5.20
   '@tailwindcss/vite': ^4.3.2
   storybook: ^10.3.0
-  '@tiptap/pm': ^3.29.2
-  '@tiptap/react': ^3.29.2
-  '@tiptap/starter-kit': ^3.29.2
+  '@tiptap/pm': ^3.32.0
+  '@tiptap/react': ^3.32.0
+  '@tiptap/starter-kit': ^3.32.0
   '@tanstack/react-router': ^1.170.10
   '@tanstack/router-plugin': ^1.168.13
   '@types/babel__core': ^7.20.5
@@ -71,29 +71,29 @@ catalog:
   eslint-plugin-react-compiler: 19.1.0-rc.2
   eslint-plugin-react-hooks: ^7.1.1
   highlight.js: ^11.11.1
-  hono: ^4.12.27
+  hono: ^4.13.13
   ink: ^7.0.6
   ink-testing-library: ^4.0.0
   ioredis: ^5.6.0
   jotai: ^2.12.5
   jszip: ^3.10.1
-  katex: ^0.17.0
+  katex: ^0.18.11
   lucide-react: ^1.21.0
   marked: ^18.0.5
   marked-footnote: ^1.4.0
   marked-gfm-heading-id: ^4.1.4
   marked-highlight: ^2.2.4
-  marked-katex-extension: ^5.1.10
-  mermaid: ^10.9.5
+  marked-katex-extension: ^5.1.13
+  mermaid: ^10.9.8
   openai: ^6.41.0
   pg: ^8.22.0
   radash: ^12.1.1
   react: ^19.2.6
   react-day-picker: ^10.0.1
   react-dom: ^19.2.6
-  react-server-dom-webpack: 19.2.6
   shiki: ^4.0.0
   string-width: ^8.2.1
+  sucrase: ^3.35.0
   supports-hyperlinks: ^4.3.0
   tiptap-markdown: ^0.9.0
   tailwind-merge: ^3.3.1
@@ -103,18 +103,22 @@ catalog:
   typescript: npm:@typescript/typescript6@~6.0.1
   typescript-go: npm:typescript@7.0.1-rc
   vite: ^8.1.4
-  vitest: ^4.1.10
-  waku: 1.0.0-beta.8
+  vitest: ^4.1.11
   y-codemirror.next: ^0.3.5
   yjs: ^13.6.31
   zod: ^4.4.3
 
 overrides:
   '@langchain/langgraph-checkpoint': 'catalog:'
+  # MCP SDK 自己的依赖仍解析到 hono 4.12.32；公告要求 >=4.13.7，范围 ^4.11.4 允许 catalog。
+  hono: 'catalog:'
+  '@hono/node-server': 'catalog:'
+  # eslint 的 micromark 仍会拉 katex 0.16；0.18.11 同时满足它的 ^0.16 和 marked-katex 的 <0.19。
+  katex: 'catalog:'
   # Node 26 内置 undici@8。qdrant 客户端用 npm 的 undici.Agent 再交给 global fetch，
-  # 两边主版本不一致就会 UND_ERR_INVALID_ARG。钉 7.28 可同时兼容 Node 22/24/26
-  # （8.x 在 Node 24 会挂）。qdrant-js#146 仍未合并；1.19.0 只把依赖升到 undici 7.29，
-  # 请求路径没变。那条 PR 发版后再去掉本 override。
-  undici: 7.28.0
+  # 两边主版本不一致就会 UND_ERR_INVALID_ARG。钉在 7.x 可同时兼容 Node 22/24/26
+  # （8.x 在 Node 24 会挂）。7.30.0 盖住 >=7.29.1 的安全公告，仍留在 7.x。
+  # qdrant-js#146 仍未合并；那条 PR 发版后再去掉本 override。
+  undici: 7.30.0
 
 shellEmulator: true

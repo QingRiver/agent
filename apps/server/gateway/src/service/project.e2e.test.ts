@@ -14,8 +14,8 @@ async function cleanup(): Promise<void> {
 
 /**
  * dirs 在线服务 e2e（ProjectService 直测）。
- * 覆盖 plan §6 step 6：建 project 根 → 建 dir 子节点 → rename/move（含跨 project 级联
- * task projectId）→ delete 空校验。结构纯函数由 @agent/project 单测覆盖，此处验落库 + 级联。
+ * 覆盖 plan §6 step 6：建 project 根 → 建 dir 子节点 → rename/move（跨 project 拒绝）
+ * → delete 空校验。结构纯函数由 @agent/project 单测覆盖，此处验落库。
  */
 describe('projectService e2e (dirs 在线 API)', () => {
   beforeAll(async () => {
@@ -73,40 +73,20 @@ describe('projectService e2e (dirs 在线 API)', () => {
       .toThrow(ProjectDirError)
   })
 
-  it('move 跨 project → 子树 dir projectId 级联；挂载 task 仅保留 mountDirId', async () => {
-    // project A / dirA1（挂一个 task）/ project B
+  it('move 跨 project → 拒绝，目录留在原项目', async () => {
     const a = await ProjectService.createProject(USER_ID, { name: 'A' })
     const a1 = await ProjectService.createDir(USER_ID, { parentId: a.id, name: 'a1' })
     const b = await ProjectService.createProject(USER_ID, { name: 'B' })
 
-    // 插一个挂载到 a1 的 task（无 projectId 列；归属靠 mountDirId）
-    const taskId = `task-${a1.id}`
-    await db.insert(gtdTasks).values({
-      id: taskId,
-      userId: USER_ID,
-      name: '挂 a1 的任务',
-      status: 'active',
-      mountDirId: a1.id,
-      parentId: null,
-      sortOrder: 0,
-      flagged: false,
-      deleted: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
-
-    // 把 a1 移到 B 下
-    await ProjectService.move(USER_ID, a1.id, { newParentId: b.id })
+    await expect(ProjectService.move(USER_ID, a1.id, { newParentId: b.id }))
+      .rejects
+      .toThrow('禁止跨项目移动目录')
 
     const tree = await ProjectService.listTree(USER_ID)
-    const moved = tree.find(d => d.id === a1.id)
-    expect(moved?.parentId).toBe(b.id)
-    expect(moved?.projectId).toBe(b.id) // 级联到新 project 根
-    expect(moved?.vdir).toBe('B/a1')
-
-    // task 无 projectId；mountDirId 不变（权威）
-    const [task] = await db.select().from(gtdTasks).where(eq(gtdTasks.id, taskId)).limit(1)
-    expect(task?.mountDirId).toBe(a1.id)
+    const stayed = tree.find(d => d.id === a1.id)
+    expect(stayed?.parentId).toBe(a.id)
+    expect(stayed?.projectId).toBe(a.id)
+    expect(stayed?.vdir).toBe('A/a1')
   })
 
   it('delete 非空（有子 dir）→ 拒绝；清空后软删', async () => {

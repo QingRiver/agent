@@ -50,9 +50,6 @@ export default defineConfig({
     }),
     tailwindcss(),
   ],
-  optimizeDeps: {
-    include: ['react-server-dom-webpack/client'],
-  },
   server: {
     ...(https ? { https } : {}),
     proxy: {

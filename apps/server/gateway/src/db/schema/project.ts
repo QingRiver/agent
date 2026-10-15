@@ -10,8 +10,8 @@ import { boolean, check, doublePrecision, index, integer, jsonb, pgTable, text, 
  *
  * 结构靠 `parent_id` 链表达（**无 ltree/path 物化列**）；层级查询由 service 层
  * 「按 `project_id` 拉全树 + buildDirTree 内存组装」完成。`project_id` = walkToRoot(parent_id)
- * 派生的冗余缓存（server 维护，非 LWW）：project 根=自身 id，dir=父的 project_id；
- * 跨 project move 级联更新子树所有 dirs + 挂载实体（task/doc）的 project_id。
+ * 派生的冗余缓存（server 维护，非 LWW）：project 根=自身 id，dir=父的 project_id。
+ * 跨 project 移动目录直接拒绝，不级联改子树或挂载实体的 project_id。
  * `vdir` = name 链派生（展示 + PG 关系查询，**不进 Qdrant payload**）；rename/move 均重算。
  * task/doc 经各自表的 `mount_dir_id` 列挂载到 dirs 节点。
  *

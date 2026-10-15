@@ -9,12 +9,12 @@
 | 路径 | 说明 |
 |------|------|
 | [apps/server/gateway](./apps/server/gateway/README.md) | Hono HTTPS API、图流、会话 / 认证 / 知识库 |
-| [apps/server/rsc-engine](./apps/server/rsc-engine/README.md) | Waku RSC 编译引擎（loopback `3010`） |
-| [apps/client/web](./apps/client/web/README.md) | Vite + React：会话聊天、HITL、知识库、文本编辑器、RSC 演示 |
+| [apps/client/web](./apps/client/web/README.md) | Vite + React：会话聊天、HITL、知识库、文本编辑器 |
 | [packages/graph](./packages/graph/README.md) | `@agent/graph` — LangGraph 图 |
 | [packages/kb](./packages/kb/README.md) | `@agent/kb` — 向量召回、rerank、入库算法 |
 | [packages/proto](./packages/proto/README.md) | `@agent/proto` — HITL / 引文 / Writer 中性契约 |
 | [packages/ui](./packages/ui/README.md) | `@agent/ui` — 对话卡片 View（ask_human）+ Storybook |
+| [packages/code-card](./packages/code-card/README.md) | `@agent/code-card` — 浏览器内编译执行的动态卡片 |
 | [packages/tools](./packages/tools/README.md) | `@agent/tools` — Open-Meteo、Tushare / HA MCP |
 | [packages/markdown](./packages/markdown/README.md) | `@agent/markdown` — Markdown → HTML + TOC |
 | [packages/env](./packages/env/README.md) | `@agent/env` — 根 `.env` 加载 + zod 校验 |

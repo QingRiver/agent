@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["react", "react-dom", "vite/client"],
+    "noEmit": true
+  },
+  "include": ["src", ".storybook"],
+  "exclude": ["src/**/*.stories.tsx"]
+}

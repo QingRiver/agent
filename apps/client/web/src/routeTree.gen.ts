@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TextEditorRouteImport } from './routes/text-editor'
-import { Route as RscRouteImport } from './routes/rsc'
 import { Route as ResourcesRouteImport } from './routes/resources'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ProjectsRouteImport } from './routes/projects'
@@ -27,11 +26,6 @@ import { Route as ProjectsIdRouteImport } from './routes/projects.$id'
 const TextEditorRoute = TextEditorRouteImport.update({
   id: '/text-editor',
   path: '/text-editor',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RscRoute = RscRouteImport.update({
-  id: '/rsc',
-  path: '/rsc',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResourcesRoute = ResourcesRouteImport.update({
@@ -105,7 +99,6 @@ export interface FileRoutesByFullPath {
   '/projects': typeof ProjectsRouteWithChildren
   '/register': typeof RegisterRoute
   '/resources': typeof ResourcesRoute
-  '/rsc': typeof RscRoute
   '/text-editor': typeof TextEditorRoute
   '/projects/$id': typeof ProjectsIdRoute
   '/settings/theme': typeof SettingsThemeRoute
@@ -120,7 +113,6 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/resources': typeof ResourcesRoute
-  '/rsc': typeof RscRoute
   '/text-editor': typeof TextEditorRoute
   '/projects/$id': typeof ProjectsIdRoute
   '/settings/theme': typeof SettingsThemeRoute
@@ -137,7 +129,6 @@ export interface FileRoutesById {
   '/projects': typeof ProjectsRouteWithChildren
   '/register': typeof RegisterRoute
   '/resources': typeof ResourcesRoute
-  '/rsc': typeof RscRoute
   '/text-editor': typeof TextEditorRoute
   '/projects/$id': typeof ProjectsIdRoute
   '/settings/theme': typeof SettingsThemeRoute
@@ -155,7 +146,6 @@ export interface FileRouteTypes {
     | '/projects'
     | '/register'
     | '/resources'
-    | '/rsc'
     | '/text-editor'
     | '/projects/$id'
     | '/settings/theme'
@@ -170,7 +160,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/resources'
-    | '/rsc'
     | '/text-editor'
     | '/projects/$id'
     | '/settings/theme'
@@ -186,7 +175,6 @@ export interface FileRouteTypes {
     | '/projects'
     | '/register'
     | '/resources'
-    | '/rsc'
     | '/text-editor'
     | '/projects/$id'
     | '/settings/theme'
@@ -203,7 +191,6 @@ export interface RootRouteChildren {
   ProjectsRoute: typeof ProjectsRouteWithChildren
   RegisterRoute: typeof RegisterRoute
   ResourcesRoute: typeof ResourcesRoute
-  RscRoute: typeof RscRoute
   TextEditorRoute: typeof TextEditorRoute
   SettingsThemeRoute: typeof SettingsThemeRoute
 }
@@ -215,13 +202,6 @@ declare module '@tanstack/react-router' {
       path: '/text-editor'
       fullPath: '/text-editor'
       preLoaderRoute: typeof TextEditorRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/rsc': {
-      id: '/rsc'
-      path: '/rsc'
-      fullPath: '/rsc'
-      preLoaderRoute: typeof RscRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/resources': {
@@ -335,7 +315,6 @@ const rootRouteChildren: RootRouteChildren = {
   ProjectsRoute: ProjectsRouteWithChildren,
   RegisterRoute: RegisterRoute,
   ResourcesRoute: ResourcesRoute,
-  RscRoute: RscRoute,
   TextEditorRoute: TextEditorRoute,
   SettingsThemeRoute: SettingsThemeRoute,
 }

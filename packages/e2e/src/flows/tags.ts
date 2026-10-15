@@ -1,10 +1,7 @@
-import type { GtdMutation, PullResponse, PushResponse } from '@agent/gtd'
+import type { GtdCommand, GtdMutation, PullResponse, PushResponse } from '@agent/gtd'
 import { randomUUID } from 'node:crypto'
-import process from 'node:process'
 import { e2eFetch, e2eRequest, signInE2E } from '../client'
 import { assert } from '../support'
-
-const KB_ID = process.env.KB_ID ?? 'kb_default'
 
 interface TagRow {
   id: string
@@ -53,42 +50,47 @@ function mutationId(prefix: string): string {
   return `${prefix}-${randomUUID()}`
 }
 
-function taskPatch(name: string, now: string) {
-  return {
-    name,
-    note: null,
-    projectId: null,
-    parentId: null,
-    order: 0,
-    status: 'active' as const,
-    groupType: null,
-    deferDate: null,
-    dueDate: null,
-    completedAt: null,
-    heldAt: null,
-    droppedAt: null,
-    flagged: false,
-    estimateMinutes: null,
-    repeatRuleId: null,
-    repeatedFromTaskId: null,
-    createdAt: now,
-    updatedAt: now,
-    repeatRule: null,
-  }
-}
-
-async function pushMutations(token: string, mutations: GtdMutation[]): Promise<PushResponse> {
+async function pushSync(
+  token: string,
+  mutations: GtdMutation[],
+  commands: GtdCommand[] = [],
+): Promise<PushResponse> {
   const response = await e2eFetch<PushResponse>(
     token,
     '/gtd/sync/push',
-    jsonBody({ mutations, commands: [], lastSyncId: 0 }),
+    jsonBody({ mutations, commands, lastSyncId: 0 }),
   )
   assert(response.rejected.length === 0, `GTD push 被拒绝: ${JSON.stringify(response.rejected)}`)
   assert(
-    response.applied.length === mutations.length,
-    `GTD push applied=${response.applied.length}，期望 ${mutations.length}`,
+    response.applied.length === mutations.length + commands.length,
+    `GTD push applied=${response.applied.length}，期望 ${mutations.length + commands.length}`,
   )
   return response
+}
+
+/** 当前用户的知识库挂载点。没有就建一个项目目录并 mark。 */
+async function ensureKbMount(token: string): Promise<string> {
+  const listed = await e2eFetch<{ kbs: Array<{ dirId: string }> }>(
+    token,
+    '/kb/kbs/list',
+    jsonBody({}),
+  )
+  const existing = listed.kbs[0]
+  if (existing)
+    return existing.dirId
+
+  const project = (await e2eFetch<{ dir: { id: string } }>(
+    token,
+    '/projects/create',
+    jsonBody({ name: `e2e-tags-${Date.now()}` }),
+  )).dir
+  const dir = (await e2eFetch<{ dir: { id: string } }>(
+    token,
+    '/dirs/create',
+    jsonBody({ parentId: project.id, name: 'kb' }),
+  )).dir
+  await e2eFetch(token, '/kb/kbs/create', jsonBody({ dirId: dir.id }))
+  return dir.id
 }
 
 async function pullAll(token: string): Promise<PullResponse> {
@@ -99,6 +101,7 @@ async function createScenario(
   token: string,
   cleanup: CleanupState,
   suffix: string,
+  mountDirId: string,
 ): Promise<Scenario> {
   const tag = (await e2eFetch<{ tag: TagRow }>(
     token,
@@ -113,7 +116,7 @@ async function createScenario(
       token,
       '/kb/documents/create',
       jsonBody({
-        kbId: KB_ID,
+        mountDirId,
         name: `e2e-${suffix}-doc-${label}-${randomUUID().slice(0, 8)}`,
         content: `# ${suffix}-${label}`,
         tagIds: [tag.id],
@@ -126,15 +129,18 @@ async function createScenario(
   const now = new Date().toISOString()
   const taskIds = [randomUUID(), randomUUID()]
   const taskTagIds = taskIds.map(taskId => `${taskId}|${tag.id}`)
+  const commands: GtdCommand[] = []
   const mutations: GtdMutation[] = []
   for (const [index, taskId] of taskIds.entries()) {
-    mutations.push({
-      id: mutationId('task'),
-      entity: 'task',
-      entityId: taskId,
-      op: 'upsert',
+    commands.push({
+      id: mutationId('create-task'),
+      type: 'create_task',
+      taskId,
+      name: `e2e-${suffix}-task-${index + 1}`,
+      parentId: null,
+      order: index,
+      mountDirId: null,
       clientTs: now,
-      patch: taskPatch(`e2e-${suffix}-task-${index + 1}`, now),
     })
     mutations.push({
       id: mutationId('task-tag'),
@@ -147,7 +153,7 @@ async function createScenario(
     cleanup.taskIds.add(taskId)
     cleanup.taskTagIds.add(taskTagIds[index]!)
   }
-  await pushMutations(token, mutations)
+  await pushSync(token, mutations, commands)
 
   // 从真实读接口确认两域关联均已落地。
   for (const doc of docs) {
@@ -210,8 +216,8 @@ async function assertTagDeleted(token: string, tagId: string): Promise<void> {
   assert(!list.tags.some(tag => tag.id === tagId), `已删除 tag ${tagId} 仍出现在列表`)
 }
 
-async function caseUntag(token: string, cleanup: CleanupState): Promise<void> {
-  const scenario = await createScenario(token, cleanup, 'untag')
+async function caseUntag(token: string, cleanup: CleanupState, mountDirId: string): Promise<void> {
+  const scenario = await createScenario(token, cleanup, 'untag', mountDirId)
   const preview = await previewDelete(token, scenario)
   assert(preview.docs.length === 2 && preview.tasks.length === 2, 'untag dryRun 资源数不正确')
 
@@ -238,8 +244,8 @@ async function caseUntag(token: string, cleanup: CleanupState): Promise<void> {
   console.log('[e2e/tags] case1 untag 通过')
 }
 
-async function casePartialDelete(token: string, cleanup: CleanupState): Promise<void> {
-  const scenario = await createScenario(token, cleanup, 'partial')
+async function casePartialDelete(token: string, cleanup: CleanupState, mountDirId: string): Promise<void> {
+  const scenario = await createScenario(token, cleanup, 'partial', mountDirId)
   await previewDelete(token, scenario)
   const [deletedDoc, keptDoc] = scenario.docs
   const [deletedTaskId, keptTaskId] = scenario.taskIds
@@ -273,8 +279,8 @@ async function casePartialDelete(token: string, cleanup: CleanupState): Promise<
   console.log('[e2e/tags] case2 部分删除通过')
 }
 
-async function caseFullDelete(token: string, cleanup: CleanupState): Promise<void> {
-  const scenario = await createScenario(token, cleanup, 'full')
+async function caseFullDelete(token: string, cleanup: CleanupState, mountDirId: string): Promise<void> {
+  const scenario = await createScenario(token, cleanup, 'full', mountDirId)
   const preview = await previewDelete(token, scenario)
 
   await e2eFetch<{ ok: true }>(
@@ -338,7 +344,7 @@ async function cleanupFlow(token: string, state: CleanupState): Promise<void> {
   ]
   if (mutations.length) {
     try {
-      await pushMutations(token, mutations)
+      await pushSync(token, mutations)
     }
     catch (error) {
       console.warn('[e2e/tags] cleanup GTD 失败:', error)
@@ -360,9 +366,10 @@ export async function runTagsE2E(): Promise<void> {
   }
 
   try {
-    await caseUntag(token, cleanup)
-    await casePartialDelete(token, cleanup)
-    await caseFullDelete(token, cleanup)
+    const mountDirId = await ensureKbMount(token)
+    await caseUntag(token, cleanup, mountDirId)
+    await casePartialDelete(token, cleanup, mountDirId)
+    await caseFullDelete(token, cleanup, mountDirId)
     console.log('\n[e2e/tags] 完整 HTTP 流程通过 ✓')
   }
   finally {

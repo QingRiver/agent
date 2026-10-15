@@ -23,8 +23,8 @@ import { ancestorIdsOf, assertMoveAllowed, SkillService } from './skill'
  *
  * 结构靠 parent_id 链；层级查询走「按 projectId 拉全树 + buildDirTree 内存组装」。
  * project_id 是 walkToProjectRoot 派生冗余缓存（server 维护，非 LWW）：
- * - create/move 后落库重算受影响行的 projectId
- * - 跨 project move 级联子树 dirs 的 projectId（gtd_tasks 仅认 mountDirId）
+ * - create/同 project move 后落库重算受影响行的 vdir（projectId 不变）
+ * - 跨 project move 直接拒绝（gtd_tasks 仅认 mountDirId，不随目录改项目）
  *
  * 错误：结构违规 → ProjectDirError（→409）；不可见/已删 → notFound（→404）。
  * ACL v1 骨架：单用户期 owner 恒过，grants 空。
@@ -223,7 +223,7 @@ export class ProjectService {
 
   /**
    * 移动 dir 到新父。
-   * 跨 project move：级联子树 dirs 的 projectId（movedProjectId）。
+   * 跨 project move：projectId 不同即抛 ProjectDirError，不落库。
    * 同 project move：仅改 parentId + 重算子树 vdir，不动 projectId。
    * gtd_tasks 仅认 mountDirId（无 projectId 列），不级联刷 task。
    */

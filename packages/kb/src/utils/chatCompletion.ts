@@ -14,11 +14,23 @@ function resolveModel(model?: string): string {
   return model ?? process.env.OPENAI_MODEL_MINI ?? env.OPENAI_MODEL
 }
 
-/** 直接调用 OpenAI 兼容 API，不经过 LangChain，避免图内 messages 流把这段正文打到前端 */
+/** 改写是内部 JSON。超时后退回原查询，避免一直占着 kb SSE。 */
+const COMPLETION_TIMEOUT_MS = 90_000
+
+function completionsUrl(): string {
+  const base = env.OPENAI_BASE_URL.replace(/\/$/, '')
+  return `${base}/chat/completions`
+}
+
+/**
+ * 与对话 `runChatCompletion` 的 silent 相同：整段 JSON 返回。
+ * 关掉思考，避免等整段 CoT 才写出第一个 kb 事件。
+ * 不经过 LangChain，避免改写 JSON 被当成对话正文打到前端。
+ */
 export async function chatCompletionText(options: ChatCompletionOptions): Promise<string> {
-  const baseUrl = env.OPENAI_BASE_URL.replace(/\/$/, '')
-  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+  const response = await fetch(completionsUrl(), {
     method: 'POST',
+    signal: AbortSignal.timeout(COMPLETION_TIMEOUT_MS),
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
@@ -27,6 +39,7 @@ export async function chatCompletionText(options: ChatCompletionOptions): Promis
       model: resolveModel(options.model),
       temperature: options.temperature ?? 0,
       stream: false,
+      thinking: { type: 'disabled' },
       messages: [
         { role: 'system', content: options.system },
         { role: 'user', content: options.user },
@@ -40,7 +53,7 @@ export async function chatCompletionText(options: ChatCompletionOptions): Promis
   }
 
   const json = await response.json() as {
-    choices?: Array<{ message?: { content?: string } }>
+    choices?: Array<{ message?: { content?: string | null } }>
   }
   return json.choices?.[0]?.message?.content ?? ''
 }

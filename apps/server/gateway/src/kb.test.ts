@@ -401,7 +401,6 @@ describe.runIf(hasEmbedding)('kb 提交流水线 + Phase 2 零写/setPayload', (
   const projName = `pipe-${RUN_TAG}`
   let projectId: string
   let kbDirId: string
-  let otherProjectId: string
   let otherKbDirId: string
   let docId: string
   let chunkIdsBefore: string[]
@@ -411,7 +410,6 @@ describe.runIf(hasEmbedding)('kb 提交流水线 + Phase 2 零写/setPayload', (
     projectId = a.projectId
     kbDirId = a.kbDirId
     const b = await setupKb(TEST_USER.id, `${projName}-p2`)
-    otherProjectId = b.projectId
     otherKbDirId = b.kbDirId
   })
 
@@ -491,21 +489,16 @@ describe.runIf(hasEmbedding)('kb 提交流水线 + Phase 2 零写/setPayload', (
     expect(treeAfter.some(d => d.name === 'moved')).toBe(false)
   })
 
-  it('phase 2: 跨 project move → setPayload(project_id)，不重 embed', async () => {
-    // 把 moved-renamed dir 移到 otherProject 根下
+  it('phase 2: 跨 project move → 拒绝，目录与 projectId 不变', async () => {
     const tree = await ProjectService.listTree(TEST_USER.id)
     const moved = tree.find(d => d.name === 'moved-renamed')!
-    await ProjectService.move(TEST_USER.id, moved.id, { newParentId: otherKbDirId })
+    await expect(ProjectService.move(TEST_USER.id, moved.id, { newParentId: otherKbDirId }))
+      .rejects
+      .toThrow('禁止跨项目移动目录')
 
-    const chunksAfter = (await db.select({ id: kbChunks.id }).from(kbChunks).where(eq(kbChunks.docId, docId))).map(c => c.id)
-    expect([...chunksAfter].sort()).toEqual([...chunkIdsBefore].sort())
-
-    const client = getQdrantClient()
-    const coll = resolveCollectionName('ignored')
-    const scrolled = await client.scroll(coll, { limit: 1, with_payload: true, filter: { must: [{ key: 'source_doc_id', match: { value: docId } }] } })
-    const payload = scrolled.points[0]?.payload as Record<string, unknown>
-    expect(payload.project_id).toBe(otherProjectId)
-    expect('vdir' in payload).toBe(false)
+    const stayed = (await ProjectService.listTree(TEST_USER.id)).find(d => d.id === moved.id)
+    expect(stayed?.parentId).toBe(moved.parentId)
+    expect(stayed?.projectId).toBe(projectId)
   })
 
   it('commitBatch 并发：单篇失败不中断，聚合抛错', async () => {

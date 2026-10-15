@@ -49,7 +49,7 @@ export default antfu({
     ],
   },
 }, {
-  files: ['apps/client/**/src/**/*.{tsx,ts}', 'packages/ui/src/**/*.{tsx,ts}'],
+  files: ['apps/client/**/src/**/*.{tsx,ts}', 'packages/ui/src/**/*.{tsx,ts}', 'packages/code-card/src/**/*.{tsx,ts}'],
   plugins: {
     'react-compiler': reactCompiler,
     'react-hooks': reactHooks,
@@ -65,7 +65,7 @@ export default antfu({
     'react-refresh/only-export-components': 'off',
   },
 }, {
-  files: ['packages/ui/**/*.stories.tsx', 'packages/ui/.storybook/**/*.{ts,tsx}'],
+  files: ['packages/ui/**/*.stories.tsx', 'packages/ui/.storybook/**/*.{ts,tsx}', 'packages/code-card/**/*.stories.tsx', 'packages/code-card/.storybook/**/*.{ts,tsx}'],
   rules: {
     'react-refresh/only-export-components': 'off',
   },

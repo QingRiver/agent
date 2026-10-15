@@ -44,7 +44,6 @@ pnpm --filter server dev
 | `QDRANT_URL` / `SILICONFLOW_*` / `KB_*` | 知识库 RAG |
 | `TUSHARE_TOKEN` | A 股分析 Agent |
 | `PORT` | 监听端口（可在 `apps/server/gateway/.env` 覆盖） |
-| `RSC_ENGINE_URL` | rsc-engine loopback（默认 `http://127.0.0.1:3010`）；`POST /rsc/render` 透传 |
 
 Postgres 容器与默认连接串见 [infra/postgres/README.md](../../../infra/postgres/README.md)。
 
@@ -302,6 +301,5 @@ pnpm --filter server dev          # 开发（含预检）
 pnpm --filter server cert         # 生成本地 HTTPS 证书
 pnpm --filter server db:generate  # Drizzle 生成迁移
 pnpm --filter server db:studio    # Drizzle Studio
-pnpm --filter rsc-engine dev      # Waku RSC 引擎（根 pnpm dev 已并行启动）
 ```
 
