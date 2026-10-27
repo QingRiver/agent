@@ -1,6 +1,6 @@
 /**
- * 同步报文测试助手（mutation / command / SyncState）。
- * 行级工厂见 factories.ts；此处只补 push/pull 契约测试需要的信封构造。
+ * 本地意图测试助手（mutation / command）。
+ * 行级工厂见 factories.ts；事务构造见 txn.ts。
  */
 import type { Task } from '../data/schema'
 import type {
@@ -15,7 +15,6 @@ import type {
   TaskTagUpsertMutation,
   TaskUpsertMutation,
 } from '../data/sync-schema'
-import type { SyncState } from '../sync/apply'
 import { NOW_ISO } from './constants'
 
 /** sync 测试里常用的「当前时刻」别名（= NOW_ISO）。 */
@@ -49,20 +48,6 @@ export function makeCommand(cmd: Partial<GtdCommand> & { id?: string, clientTs?:
 export function makeCommand(cmd: Partial<GtdCommand>): GtdCommand {
   const { id = 'c1', clientTs = SYNC_NOW, type = 'complete', ...rest } = cmd
   return { id, clientTs, type, ...rest } as GtdCommand
-}
-
-/** SyncState：clock 默认取 rows 最大 syncId。 */
-export function makeState(
-  rows: EntityRow[] = [],
-  opts: { userId?: string, clock?: number, processedIds?: Set<string> } = {},
-): SyncState {
-  const maxSync = rows.reduce((m, r) => Math.max(m, r.syncId), 0)
-  return {
-    userId: opts.userId ?? 'u1',
-    clock: opts.clock ?? maxSync,
-    rows,
-    processedIds: opts.processedIds ?? new Set<string>(),
-  }
 }
 
 export function findRow(rows: EntityRow[], entity: SyncEntity, id: string): EntityRow | undefined {

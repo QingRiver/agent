@@ -37,9 +37,16 @@ derived/                          # 派生状态（不落库）
     ├── assign.ts                 # 多车道择优归属
     └── render.ts                 # 渲染 Forecast 结果
 
-sync/                             # 同步应用层
-├── apply.ts                      # 应用 push 变更集
-└── repository.ts                 # 仓库接口约定
+sync/                             # 事务重放同步（wiki/GTD-事务重放.md）
+├── txn.ts                        # 写入与事务 schema、整组写入的列
+├── replica.ts                    # 副本状态与 materialize（读时规则）
+├── replay.ts                     # 按 seq 重放事务
+├── snapshot.ts                   # 快照序列化
+├── log.ts                        # 服务器：编号、拉取、压缩
+├── local.ts                      # 设备：已确认 + 未确认
+├── intent.ts                     # 本地命令 / 字段补丁执行器
+├── emit.ts                       # 本地操作 → 事务写入
+└── wire.ts                       # /gtd/sync 请求与响应
 
 time/                             # 时间工具
 ├── clock.ts                      # 墙钟 defer 解锁判断
@@ -62,7 +69,8 @@ fixtures/                         # 场景夹具（测/故事书）
 ├── constants.ts                  # 固定 NOW 与阈值
 ├── factories.ts                  # 实体行工厂函数
 ├── scenarios.ts                  # 具名行为场景集
-├── sync.ts                       # sync 报文测试助手
+├── sync.ts                       # 命令 / 补丁构造助手
+├── txn.ts                        # 事务构造助手
 ├── perspective-prompt.ts         # 透视 prompt 样例
 └── forecast.ts                   # Forecast 单测日期锚点与 opts
 
@@ -77,7 +85,7 @@ prompts/
 **不变量 INV**：终态节点不能有 `ACTIVE` 后代 ≡ 任一 `ACTIVE` 节点的祖先链必须全 `ACTIVE`。
 `derived/invariant.ts` 校验此不变量，所有状态命令的级联设计都为维持它。
 
-状态模型（逐层继承 / 自身状态保真）以源码与测试为准，不在此展开易过时的具体规则：见 `inheritance/effective.ts`（有效状态逐层继承）、`inheritance/cascade.ts`（向上拉回 `planUpwardActivation`：重开/恢复子向上翻链路上**已完成**祖先→ACTIVE，祖先是搁置/删除时不向上翻）、`inheritance/cascade.test.ts` [SP-LINK-STATE]、`derived/reconcile.ts`（并发遗留违法态兜底）。
+状态模型（逐层继承 / 自身状态保真）以源码与测试为准，不在此展开易过时的具体规则：见 `inheritance/effective.ts`（有效状态逐层继承）、`inheritance/cascade.ts`（向上拉回 `planUpwardActivation`：重开/恢复子向上翻链路上**已完成**祖先→ACTIVE，祖先是搁置/删除时不向上翻）、`inheritance/cascade.test.ts` [SP-LINK-STATE]。
 
 ## 模块一览
 
@@ -88,7 +96,7 @@ prompts/
 | `structure` | Task 树与 order |
 | `inheritance` | 有效字段继承与级联 |
 | `derived` | 可用性、不变量、Forecast |
-| `sync` | push 应用与仓库抽象 |
+| `sync` | 事务重放：编号、重放、快照、本地意图 → 写入 |
 | `time` | 墙钟 / 日历 / 日期运算 |
 | `view` | 透视、过滤 DSL |
 | `fixtures` | 可复现场景数据 |

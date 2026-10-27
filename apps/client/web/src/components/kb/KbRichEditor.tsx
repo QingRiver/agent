@@ -2,11 +2,10 @@ import { renderMarkdown } from '@agent/markdown'
 import { useLatest } from '@hooks/useLatest'
 import { ThemeStore } from '@stores/theme-store'
 import { EditorContent, useEditor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
 import { useAtomValue } from 'jotai'
 import { useEffect, useRef } from 'react'
-import { Markdown } from 'tiptap-markdown'
 import { KbMarkdownToc } from './KbMarkdownToc'
+import { createKbRichExtensions } from './kbRichExtensions'
 
 interface KbRichEditorProps {
   value: string
@@ -23,14 +22,7 @@ export function KbRichEditor({ value, onChange, docId }: KbRichEditorProps) {
 
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [
-      StarterKit,
-      Markdown.configure({
-        html: false,
-        transformPastedText: true,
-        transformCopiedText: true,
-      }),
-    ],
+    extensions: createKbRichExtensions(),
     content: value,
     editorProps: {
       attributes: {
@@ -56,7 +48,7 @@ export function KbRichEditor({ value, onChange, docId }: KbRichEditorProps) {
     const current = storage.markdown?.getMarkdown?.() ?? ''
     if (current === value)
       return
-    editor.commands.setContent(value)
+    editor.commands.setContent(value, { emitUpdate: false })
   }, [editor, value])
 
   const { toc } = renderMarkdown(value)

@@ -11,6 +11,8 @@ import { atom, getDefaultStore } from 'jotai'
  */
 export class TagsStore {
   static readonly tagsAtom = atom<TagRow[]>([])
+  /** 至少成功拉取过一次；之前不能据目录判断标签是否已删除。 */
+  static readonly loadedAtom = atom(false)
 
   static readonly tagsByIdAtom = atom((get) => {
     const map = new Map<string, TagRow>()
@@ -29,12 +31,14 @@ export class TagsStore {
 
   static reset(): void {
     TagsStore.store().set(TagsStore.tagsAtom, [])
+    TagsStore.store().set(TagsStore.loadedAtom, false)
   }
 
   static async refreshTags(): Promise<void> {
     try {
       const tags = await TagsApi.list()
       TagsStore.store().set(TagsStore.tagsAtom, tags)
+      TagsStore.store().set(TagsStore.loadedAtom, true)
     }
     catch {
       // 标签刷新失败不阻断主流程

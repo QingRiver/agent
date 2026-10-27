@@ -2,13 +2,12 @@ import { ProjectDirError } from '@agent/project'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db } from '../db/drizzle'
-import { dirs, gtdTasks } from '../db/schema'
+import { dirs } from '../db/schema'
 import { ProjectService } from './project'
 
 const USER_ID = `proj-svc-${Date.now().toString(36)}`
 
 async function cleanup(): Promise<void> {
-  await db.delete(gtdTasks).where(eq(gtdTasks.userId, USER_ID))
   await db.delete(dirs).where(eq(dirs.userId, USER_ID))
 }
 

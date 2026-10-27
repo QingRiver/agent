@@ -2,7 +2,6 @@ import { DirSync } from '@components/gtd/DirSync'
 import { GtdInspector } from '@components/gtd/GtdInspector'
 import { GtdSidebar } from '@components/gtd/GtdSidebar'
 import { GtdSync } from '@components/gtd/GtdSync'
-import { GtdSyncLock } from '@components/gtd/GtdSyncLock'
 import { GtdTaskList } from '@components/gtd/GtdTaskList'
 import { TagSync } from '@components/gtd/TagSync'
 import { GtdLayout } from '@layouts/GtdLayout'
@@ -23,7 +22,6 @@ function GtdPage() {
         inspector={<GtdInspector />}
       >
         <div className="flex h-full min-h-0 flex-col">
-          <GtdSyncLock />
           <div className="min-h-0 flex-1">
             <GtdTaskList />
           </div>

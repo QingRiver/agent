@@ -115,6 +115,21 @@ export function effectivePlannedDate(task: EntityRowOf<'task'>, tree: TaskTree):
 }
 
 /**
+ * 有效挂载目录：只看根任务的 `mountDirId`，子任务自身的值不参与。
+ * 目录已不存在、已删除或位于禁止挂任务的子树时，由 `isMountValid` 判 false，视为 Inbox（null）。
+ */
+export function effectiveMountDirId(
+  task: EntityRowOf<'task'>,
+  tree: TaskTree,
+  isMountValid: (dirId: string) => boolean = () => true,
+): string | null {
+  const chain = ancestors(tree, task.id)
+  const root = chain.at(-1) ?? task
+  const mount = root.data.mountDirId ?? null
+  return mount != null && isMountValid(mount) ? mount : null
+}
+
+/**
  * 有效状态（wiki/GTD.md「有效状态」mermaid；逐层继承）：
  * - 自己或任一祖先被删 → 已删（删除优先级最高，不受完成/搁置影响）。
  * - 否则从最上层往下看本任务这条链：第一个完成的或搁置的祖先是什么状态，本任务的有效状态就是什么

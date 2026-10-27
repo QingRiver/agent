@@ -1,30 +1,17 @@
 import type { AppEnv } from '../types'
-import { PullRequestSchema, PushRequestSchema } from '@agent/gtd'
+import { SyncRequestSchema } from '@agent/gtd'
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
-import { TrashPurgeSchema } from '../../shared/gtd-trash'
 import { GtdSyncHandlers } from '../handlers/gtd-sync'
-import { GtdTrashHandlers } from '../handlers/gtd-trash'
 import { handleAppError } from '../http/errors'
 import { requireAuth } from '../middleware/authMiddleware'
 
 export const gtdRoutes = new Hono<AppEnv>()
   .onError(handleAppError)
   .use('*', requireAuth)
-  // 日常同步走 /sync/push|pull；导入导出为 client 侧行级 JSON（v2.0.0），无 /document 路由。
+  // 唯一入口：上传本机未确认事务 + 拉取服务器新事务（或快照）。导入导出在 client 侧完成。
   .post(
-    '/sync/push',
-    zValidator('json', PushRequestSchema),
-    c => GtdSyncHandlers.push(c, c.get('user')!, c.req.valid('json')),
-  )
-  .post(
-    '/sync/pull',
-    zValidator('json', PullRequestSchema),
-    c => GtdSyncHandlers.pull(c, c.get('user')!, c.req.valid('json')),
-  )
-  /** 回收站永久删除：在线权威，旁路 outbox */
-  .post(
-    '/trash/purge',
-    zValidator('json', TrashPurgeSchema),
-    c => GtdTrashHandlers.purge(c, c.get('user')!, c.req.valid('json')),
+    '/sync',
+    zValidator('json', SyncRequestSchema),
+    c => GtdSyncHandlers.sync(c, c.get('user')!, c.req.valid('json')),
   )

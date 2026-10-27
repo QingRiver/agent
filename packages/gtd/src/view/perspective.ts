@@ -28,6 +28,7 @@ import {
   COMPUTED_STATUS,
   DEFAULT_AVAILABILITY_FILTER,
   EXPLICIT_STATUS,
+  EXPLICIT_STATUS_TEXT,
   GROUP_KEY,
   SORT_DIR,
   SORT_FIELD,
@@ -35,9 +36,9 @@ import {
 import { computeStatus } from '../derived/availability'
 import { defaultForecastOptions, renderForecast } from '../derived/forecast'
 import { effectiveDefer, effectiveDue, effectiveStatus } from '../inheritance/effective'
-import { buildTaskTree } from '../structure/tree'
+import { ancestors, buildTaskTree } from '../structure/tree'
 import { formatZonedYmdHm } from '../time/calendar'
-import { computeCollapsibleSet, effectiveVisibleChildren, visibleDepth } from './collapse'
+import { computeCollapsibleSet, effectiveVisibleChildren } from './collapse'
 import { FILTER_FIELD, LEAF_OP, LOGIC_OP, matchFilter, rawValue } from './filter'
 
 // ─── 类型 ───────────────────────────────────────────────────────────────────
@@ -243,9 +244,15 @@ function compareField(
   if (tree && (field === FILTER_FIELD.DEFER_DATE || field === SORT_FIELD.DEFER_DATE)) {
     return compareIso(effectiveDefer(a, tree), effectiveDefer(b, tree))
   }
-  // ORDER 用 raw 物理值，但 rawValue 不识别 'order'（返回 null 会短路成 0）→ 须在 rawValue 前处理
+  // order / name / addedAt 不是过滤字段，rawValue 不识别（返回 null 会短路成 0）→ 须在 rawValue 前处理
   if (field === SORT_FIELD.ORDER) {
     return a.data.order - b.data.order
+  }
+  if (field === SORT_FIELD.NAME) {
+    return String(a.data.name).localeCompare(String(b.data.name))
+  }
+  if (field === SORT_FIELD.ADDED_AT) {
+    return compareIso(a.data.createdAt, b.data.createdAt)
   }
   const va = rawValue(a, field, ctx)
   const vb = rawValue(b, field, ctx)
@@ -258,17 +265,11 @@ function compareField(
   if (vb == null) {
     return -1
   }
-  if (field === SORT_FIELD.ADDED_AT) {
-    return new Date(a.data.createdAt).getTime() - new Date(b.data.createdAt).getTime()
-  }
   if (field === FILTER_FIELD.FLAGGED || field === SORT_FIELD.FLAGGED) {
     return (va as boolean ? 1 : 0) - (vb as boolean ? 1 : 0)
   }
   if (field === FILTER_FIELD.ESTIMATE || field === SORT_FIELD.ESTIMATE) {
     return (va as number) - (vb as number)
-  }
-  if (field === SORT_FIELD.NAME) {
-    return String(a.data.name).localeCompare(String(b.data.name))
   }
   return 0
 }
@@ -394,16 +395,24 @@ function groupLabel(key: string, groupKey: GroupKey, ctx: RenderContext): string
       return key
     return formatZonedYmdHm(new Date(ms), ctx.timeZone ?? 'UTC')
   }
+  if (groupKey === GROUP_KEY.STATUS)
+    return EXPLICIT_STATUS_TEXT[key as keyof typeof EXPLICIT_STATUS_TEXT] ?? key
+  if (groupKey === GROUP_KEY.FLAGGED)
+    return key === 'true' ? '已加旗标' : '未加旗标'
   return key
 }
 
-function toRenderItem(task: EntityRowOf<'task'>, ctx: RenderContext): RenderItem {
-  return {
+/**
+ * 缩进只数同组里也显示出来的祖先：祖先分到别的组（或被塌陷）时，子任务在本组顶格，
+ * 不会挂在一个看不见的父行下面。不分组时整份列表即一组，等价塌陷后可见深度 [SP-COLLAPSE-2]。
+ */
+function toRenderItems(tasks: EntityRowOf<'task'>[], ctx: RenderContext): RenderItem[] {
+  const members = new Set(tasks.map(t => t.id))
+  return tasks.map(task => ({
     taskId: task.id,
     computed: taskComputed(task, ctx),
-    // 塌陷后可见深度（跳过纯结构祖先）；空集时等价真实树深 [SP-COLLAPSE-2]
-    depth: visibleDepth(ctx.tree, task.id, ctx.collapsibleSet),
-  }
+    depth: ancestors(ctx.tree, task.id).filter(a => members.has(a.id)).length,
+  }))
 }
 
 /** 按 groupBy 键分桶（可多层） */
@@ -413,7 +422,7 @@ export function groupBy(
   ctx: RenderContext,
 ): RenderGroup[] {
   if (keys.length === 0) {
-    return [{ key: '', label: '', children: tasks.map(t => toRenderItem(t, ctx)) }]
+    return [{ key: '', label: '', children: toRenderItems(tasks, ctx) }]
   }
   const first = keys[0]!
   const rest = keys.slice(1)
@@ -428,7 +437,7 @@ export function groupBy(
   return [...buckets.entries()].map(([key, ts]) => ({
     key,
     label: groupLabel(key, first, ctx),
-    children: rest.length ? groupBy(ts, rest, ctx) : ts.map(t => toRenderItem(t, ctx)),
+    children: rest.length ? groupBy(ts, rest, ctx) : toRenderItems(ts, ctx),
   }))
 }
 

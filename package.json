@@ -38,6 +38,7 @@
     "eslint-plugin-format": "catalog:",
     "eslint-plugin-react-compiler": "catalog:",
     "eslint-plugin-react-hooks": "catalog:",
+    "happy-dom": "catalog:",
     "ts-pattern": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",

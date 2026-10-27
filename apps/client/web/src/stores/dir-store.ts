@@ -19,6 +19,8 @@ import { atom, getDefaultStore } from 'jotai'
  */
 export class DirStore {
   static readonly dirsAtom = atom<DirDto[]>([])
+  /** 至少成功拉取过一次；之前不能据目录判断任务挂载是否失效。 */
+  static readonly loadedAtom = atom(false)
 
   static readonly dirsByIdAtom = atom((get) => {
     const map = new Map<string, DirDto>()
@@ -46,6 +48,7 @@ export class DirStore {
 
   static reset(): void {
     DirStore.store().set(DirStore.dirsAtom, [])
+    DirStore.store().set(DirStore.loadedAtom, false)
   }
 
   /** 拉全量 dirs 树 */
@@ -53,6 +56,7 @@ export class DirStore {
     try {
       const dirs = await DirApi.list()
       DirStore.store().set(DirStore.dirsAtom, dirs)
+      DirStore.store().set(DirStore.loadedAtom, true)
     }
     catch {
       // dirs 拉取失败不阻断 GTD 主流程

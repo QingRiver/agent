@@ -2,6 +2,7 @@ import type { RepeatCycle, RepeatRule, Task } from '../data/schema'
 import type { EntityRow, EntityRowOf } from '../data/sync-schema'
 import { match, P } from 'ts-pattern'
 import { EXPLICIT_STATUS, REPEAT_ANCHOR, REPEAT_CYCLE } from '../data/types'
+import { orderBetween, shouldReindex } from '../structure/order'
 
 /**
  * 重复任务克隆（L5 command）：周期日期推算 + 下一实例克隆。
@@ -89,6 +90,28 @@ export function computeNextDates(
 }
 
 /**
+ * 重复系列第 occurrence 次完成后生成的下一实例 id。
+ * 只由规则 id 和次数决定：两台设备离线完成同一次，得到同一个 id，重放时落在同一行。
+ */
+export function repeatSuccessorId(repeatRuleId: string, occurrence: number): string {
+  return `${repeatRuleId}#${occurrence}`
+}
+
+/** 新实例紧跟在旧实例之后；与下一兄弟之间已无空隙时排到同级末尾。同级 order 必须唯一。 */
+function successorOrder(task: EntityRowOf<'task'>, nextTaskId: string, rows: EntityRow[]): number {
+  const { mountDirId, parentId, order } = task.data
+  const siblingOrders = rows
+    .filter((r): r is EntityRowOf<'task'> =>
+      r.entity === 'task' && !r.deleted && r.id !== task.id && r.id !== nextTaskId
+      && r.data.mountDirId === mountDirId && r.data.parentId === parentId)
+    .map(r => r.data.order)
+  const after = siblingOrders.filter(o => o > order).sort((a, b) => a - b)[0] ?? null
+  if (after == null || !shouldReindex(order, after))
+    return orderBetween(order, after)
+  return orderBetween(Math.max(order, ...siblingOrders), null)
+}
+
+/**
  * 克隆下一重复实例：新 task 入 rows（或复活同源软删行），复制旧实例 task_tag。
  * 调用方 `completeTask` 已先把旧任务置 COMPLETED + repeatRule.completedOccurrences++。
  * id 复用客户端提议的 nextTaskId；算下一期日期；复制 task_tag 保持标签继承。
@@ -105,9 +128,11 @@ export function cloneNextInstance(
   const taskId = task.id
   const now = new Date(clientTs)
   const next = computeNextDates(rule, task.data, now)
+  // 行 id 只在信封上；早期数据的 data 里可能残留 id，克隆时去掉
+  const { id: _staleId, ...sourceData } = task.data as typeof task.data & { id?: string }
   const newTaskData = {
-    ...task.data,
-    id: nextTaskId, // 覆盖 data.id：task.data 含旧 id，新实例要用新 id
+    ...sourceData,
+    order: successorOrder(task, nextTaskId, rows),
     status: EXPLICIT_STATUS.ACTIVE,
     completedAt: null,
     heldAt: null,

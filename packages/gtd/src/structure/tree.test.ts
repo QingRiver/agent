@@ -24,6 +24,57 @@ describe('buildTaskTree', () => {
   })
 })
 
+describe('buildTaskTree 读时修复', () => {
+  it('parentId 指向自身视为根', () => {
+    const tree = buildTaskTree([makeTaskRow('a', { parentId: 'a' })])
+    expect(tree.roots.map(n => n.task.id)).toEqual(['a'])
+  })
+
+  it('parentId 指向不存在的任务视为根', () => {
+    const tree = buildTaskTree([makeTaskRow('a', { parentId: 'gone' })])
+    expect(tree.roots.map(n => n.task.id)).toEqual(['a'])
+    expect(tree.byId.get('a')?.parent).toBeNull()
+  })
+
+  it('两节点环：syncId 较大（后写入）的成为根', () => {
+    const x = makeTaskRow('x', { parentId: 'y' }, { syncId: 5 })
+    const y = makeTaskRow('y', { parentId: 'x' }, { syncId: 9 })
+    const tree = buildTaskTree([x, y])
+    expect(tree.roots.map(n => n.task.id)).toEqual(['y'])
+    expect(ancestors(tree, 'x').map(t => t.id)).toEqual(['y'])
+  })
+
+  it('同 syncId 时 id 较大者成为根，与输入顺序无关', () => {
+    const a = makeTaskRow('a', { parentId: 'b' }, { syncId: 1 })
+    const b = makeTaskRow('b', { parentId: 'a' }, { syncId: 1 })
+    expect(buildTaskTree([a, b]).roots.map(n => n.task.id)).toEqual(['b'])
+    expect(buildTaskTree([b, a]).roots.map(n => n.task.id)).toEqual(['b'])
+  })
+
+  it('长环挂着尾巴：只断开环上一个节点，其余结构保留', () => {
+    const rows = [
+      makeTaskRow('a', { parentId: 'd' }, { syncId: 1 }),
+      makeTaskRow('b', { parentId: 'a' }, { syncId: 2 }),
+      makeTaskRow('c', { parentId: 'b' }, { syncId: 7 }),
+      makeTaskRow('d', { parentId: 'c' }, { syncId: 3 }),
+      makeTaskRow('tail', { parentId: 'b' }, { syncId: 99 }),
+    ]
+    const tree = buildTaskTree(rows)
+    expect(tree.roots.map(n => n.task.id)).toEqual(['c'])
+    expect(ancestors(tree, 'tail').map(t => t.id)).toEqual(['b', 'a', 'd', 'c'])
+  })
+
+  it('多个独立的环各自断开', () => {
+    const rows = [
+      makeTaskRow('a', { parentId: 'b' }, { syncId: 2 }),
+      makeTaskRow('b', { parentId: 'a' }, { syncId: 1 }),
+      makeTaskRow('c', { parentId: 'd' }, { syncId: 1 }),
+      makeTaskRow('d', { parentId: 'c' }, { syncId: 2 }),
+    ]
+    expect(buildTaskTree(rows).roots.map(n => n.task.id).sort()).toEqual(['a', 'd'])
+  })
+})
+
 describe('ancestors', () => {
   it('返回从父到根的祖先链', () => {
     const root = makeTaskRow('r', { parentId: null })

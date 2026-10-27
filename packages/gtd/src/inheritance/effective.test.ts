@@ -12,6 +12,7 @@ import { buildTaskTree } from '../structure/tree'
 import {
   effectiveDefer,
   effectiveDue,
+  effectiveMountDirId,
   effectivePlannedDate,
   effectivePlannedMode,
   effectiveStatus,
@@ -308,5 +309,26 @@ describe('有效状态继承 [SP-INH-STATUS]', () => {
     expect(effectiveStatus(c2, tree)).toBe(EXPLICIT_STATUS.HOLD)
     // C2 物理活跃保留（待 C1 继续时还原）
     expect(c2.data.status).toBe(EXPLICIT_STATUS.ACTIVE)
+  })
+})
+
+describe('有效挂载目录：取根任务的 mountDirId', () => {
+  it('子任务自身的 mountDirId 不生效，跟随根', () => {
+    const root = makeTaskRow('r', { mountDirId: 'dir-a' })
+    const child = makeTaskRow('c', { parentId: 'r', mountDirId: 'dir-b' })
+    const tree = buildTaskTree([root, child])
+    expect(effectiveMountDirId(child, tree)).toBe('dir-a')
+    expect(effectiveMountDirId(root, tree)).toBe('dir-a')
+  })
+
+  it('目录已失效时归入收件箱（null）', () => {
+    const root = makeTaskRow('r', { mountDirId: 'dir-gone' })
+    const tree = buildTaskTree([root])
+    expect(effectiveMountDirId(root, tree, id => id !== 'dir-gone')).toBeNull()
+  })
+
+  it('父任务被永久删除后子任务成为根，用自己的 mountDirId', () => {
+    const orphan = makeTaskRow('c', { parentId: 'gone', mountDirId: 'dir-b' })
+    expect(effectiveMountDirId(orphan, buildTaskTree([orphan]))).toBe('dir-b')
   })
 })

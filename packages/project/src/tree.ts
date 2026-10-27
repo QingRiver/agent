@@ -165,7 +165,7 @@ export function assertMoveValid(
  */
 export function assertCanDelete(hasChildren: boolean, hasMounts: boolean): void {
   if (hasChildren || hasMounts)
-    throw new ProjectDirError('dir/project 须空才能删（无子 dir + 无挂载实体）')
+    throw new ProjectDirError('不能删除：请先移走或删除其中的子目录、任务、文档和文本')
 }
 
 /**

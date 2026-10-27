@@ -302,7 +302,7 @@ export function GtdInspector() {
                       variant="ghost"
                       disabled={suppressed}
                       {...(suppressed ? { title: suppressHint } : {})}
-                      onClick={() => void purgeTrash([task.id])}
+                      onClick={() => purgeTrash([task.id])}
                     >
                       永久删除
                     </Button>
@@ -379,8 +379,8 @@ export function GtdInspector() {
       <DirInspector
         key={dir.id}
         dir={dir}
-        onRename={(id, name) => void DirStore.rename(id, name)}
-        onDelete={id => void DirStore.delete(id)}
+        onRename={DirStore.rename}
+        onDelete={DirStore.delete}
       />
     )
   }
@@ -405,17 +405,38 @@ function DirInspector({
   onDelete,
 }: {
   dir: DirDto
-  onRename: (id: string, name: string) => void
-  onDelete: (id: string) => void
+  onRename: (id: string, name: string) => Promise<void>
+  onDelete: (id: string) => Promise<void>
 }) {
   const [name, setName] = useState(dir.name)
+  const [error, setError] = useState<string | null>(null)
+
+  const run = async (action: () => Promise<void>) => {
+    setError(null)
+    try {
+      await action()
+    }
+    catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   const commit = () => {
     const trimmed = name.trim()
-    if (trimmed && trimmed !== dir.name)
-      onRename(dir.id, trimmed)
-    else
+    if (trimmed && trimmed !== dir.name) {
+      void run(async () => {
+        try {
+          await onRename(dir.id, trimmed)
+        }
+        catch (e) {
+          setName(dir.name)
+          throw e
+        }
+      })
+    }
+    else {
       setName(dir.name)
+    }
   }
 
   return (
@@ -440,10 +461,11 @@ function DirInspector({
           />
         </div>
         <div className="flex flex-wrap gap-2 pt-2">
-          <Button type="button" className="h-9" variant="ghost" onClick={() => onDelete(dir.id)}>
+          <Button type="button" className="h-9" variant="ghost" onClick={() => void run(() => onDelete(dir.id))}>
             删除
           </Button>
         </div>
+        {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}
       </div>
     </aside>
   )

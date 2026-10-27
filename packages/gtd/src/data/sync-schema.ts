@@ -1,7 +1,8 @@
 /**
- * 行级同步模型的 Zod 执行契约（wire 格式即落库格式）。
+ * 行模型与本地意图（命令 / 字段补丁）的 Zod 契约。
  *
- * EntityRow 贯通 Client / wire / Postgres（同形）。
+ * EntityRow 是领域读路径的行模型（由副本 materialize 得到）；同步 wire 是事务，见 sync/txn.ts。
+ * 命令与补丁只在设备本地执行（sync/intent.ts），结果经 sync/emit.ts 变成事务写入。
  * 导入导出见 data/serialize.ts（行级 JSON v2.0.0）。
  * 复用 ./schema 的实体子对象（TaskSchema/RepeatRuleSchema 等，.omit 派生行 data）
  * 与 ./types 枚举（经 schema.ts 的 z.enum 派生）。
@@ -239,27 +240,6 @@ export const GtdCommandSchema = z.discriminatedUnion('type', [
   MoveTaskCommandSchema,
 ])
 
-// ---------------- push / pull ----------------
-
-export const PushRequestSchema = z.object({
-  mutations: z.array(GtdMutationSchema),
-  commands: z.array(GtdCommandSchema),
-  lastSyncId: z.number().int().nonnegative(),
-})
-export const PullRequestSchema = z.object({
-  lastSyncId: z.number().int().nonnegative(),
-})
-export const PushResponseSchema = z.object({
-  applied: z.array(id),
-  rejected: z.array(z.object({ id, reason: z.string() })),
-  changes: z.array(EntityRowSchema),
-  serverSyncId: z.number().int().nonnegative(),
-})
-export const PullResponseSchema = z.object({
-  changes: z.array(EntityRowSchema),
-  serverSyncId: z.number().int().nonnegative(),
-})
-
 // ---------------- 派生类型 ----------------
 
 export type SyncEntity = z.infer<typeof SyncEntitySchema>
@@ -284,8 +264,3 @@ export type DeleteTaskCommand = z.infer<typeof DeleteTaskCommandSchema>
 export type RestoreFromTrashCommand = z.infer<typeof RestoreFromTrashCommandSchema>
 export type CreateTaskCommand = z.infer<typeof CreateTaskCommandSchema>
 export type MoveTaskCommand = z.infer<typeof MoveTaskCommandSchema>
-
-export type PushRequest = z.infer<typeof PushRequestSchema>
-export type PullRequest = z.infer<typeof PullRequestSchema>
-export type PushResponse = z.infer<typeof PushResponseSchema>
-export type PullResponse = z.infer<typeof PullResponseSchema>

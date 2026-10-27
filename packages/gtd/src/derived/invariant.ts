@@ -17,19 +17,36 @@ type InvariantCode
     | 'invalid_defer_due'
     // 物理不变量：禁止「物理完成 ∧ 有效活跃直接子」。父完成时子有效状态跟随完成——complete(P) 后子有效
     // 变完成（非活跃），此态由 effectiveStatus 派生层自动保证合法，invariant 静态检查恒不触发；
-    // 保留作 effectiveStatus 演化/缓存失效/并发边缘的防御兜底（reconcile 同构修复）。只看直接子、看有效态。
+    // 保留作 effectiveStatus 演化的防御检查。只看直接子、看有效态。
     | 'completed_with_active_child'
     // transition 级不变量：repeatRuleId != null 的 COMPLETED 不可重开（SP-INV-REPEAT-REOPEN）。
     // 非静态可检：完成即克隆（cloneNextInstance 把 repeatRule+completedOccurrences 继承到新 ACTIVE 实例），
     // 故「非法重开后的 ACTIVE repeat 任务」与「合法新克隆实例」行态不可区分。
-    // 执行点在 L5 command/state-machine.ts reopenTask（throw，由 applyPush 捕入 rejected）；
+    // 执行点在 L5 command/state-machine.ts reopenTask（throw，本地操作被拒绝）；
     // 此 code 仅供 §6 不变量表追溯，validateInvariants 不加静态检查以避免误报合法克隆实例。
     | 'repeat_not_reopenable'
 
-interface InvariantViolation {
+export interface InvariantViolation {
   code: InvariantCode
+  /** 开发诊断用，含 id 与字段名；面向用户的说明用 INVARIANT_TEXT */
   message: string
   entityId?: string
+}
+
+/** 不变量违反的用户可读说明，前面接实体名称。 */
+export const INVARIANT_TEXT: Record<InvariantCode, string> = {
+  broken_reference: '引用的数据不存在',
+  cycle: '会形成循环嵌套',
+  invalid_inbox: '收件箱任务不能有父任务',
+  group_type_mismatch: '有子任务但不是任务组',
+  duplicate_order: '与同级任务的排序位置冲突',
+  missing_terminal_timestamp: '状态缺少对应的完成或搁置时间',
+  inconsistent_terminal_timestamp: '状态与完成或搁置时间不一致',
+  invalid_repeat_trace: '重复来源任务不存在',
+  invalid_planned: '计划日期设置不完整',
+  invalid_defer_due: '推迟日期晚于截止日期',
+  completed_with_active_child: '已完成但仍有活跃子任务',
+  repeat_not_reopenable: '是重复任务的已完成实例，不能重新打开',
 }
 
 function detectCycle(

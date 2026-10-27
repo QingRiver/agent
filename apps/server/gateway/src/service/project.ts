@@ -15,7 +15,8 @@ import {
 } from '@agent/project'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '../db/drizzle'
-import { dirs, gtdTasks, kbDocuments, kbs, skills, versionTexts } from '../db/schema'
+import { dirs, kbDocuments, kbs, skills, versionTexts } from '../db/schema'
+import { hasTasksMountedIn } from '../gtd/txn-log'
 import { ancestorIdsOf, assertMoveAllowed, SkillService } from './skill'
 
 /**
@@ -24,7 +25,7 @@ import { ancestorIdsOf, assertMoveAllowed, SkillService } from './skill'
  * 结构靠 parent_id 链；层级查询走「按 projectId 拉全树 + buildDirTree 内存组装」。
  * project_id 是 walkToProjectRoot 派生冗余缓存（server 维护，非 LWW）：
  * - create/同 project move 后落库重算受影响行的 vdir（projectId 不变）
- * - 跨 project move 直接拒绝（gtd_tasks 仅认 mountDirId，不随目录改项目）
+ * - 跨 project move 直接拒绝（task 仅认 mountDirId，不随目录改项目）
  *
  * 错误：结构违规 → ProjectDirError（→409）；不可见/已删 → notFound（→404）。
  * ACL v1 骨架：单用户期 owner 恒过，grants 空。
@@ -225,7 +226,7 @@ export class ProjectService {
    * 移动 dir 到新父。
    * 跨 project move：projectId 不同即抛 ProjectDirError，不落库。
    * 同 project move：仅改 parentId + 重算子树 vdir，不动 projectId。
-   * gtd_tasks 仅认 mountDirId（无 projectId 列），不级联刷 task。
+   * task 仅认 mountDirId（无 projectId），不级联刷 task。
    */
   static async move(userId: string, id: string, input: { newParentId: string, sortOrder?: number }): Promise<DirDto> {
     const moveResult = await db.transaction(async (tx) => {
@@ -345,10 +346,10 @@ export class ProjectService {
     await db.transaction(async (tx) => {
       const node = await loadOwnedDir(id, userId, tx)
       const hasChildren = await tx.select({ id: dirs.id }).from(dirs).where(and(eq(dirs.parentId, id), eq(dirs.deleted, false))).limit(1)
-      const hasTaskMounts = await tx.select({ id: gtdTasks.id }).from(gtdTasks).where(and(eq(gtdTasks.userId, userId), eq(gtdTasks.mountDirId, id), eq(gtdTasks.deleted, false))).limit(1)
+      const hasTaskMounts = await hasTasksMountedIn(tx, userId, [id])
       const hasDocMounts = await tx.select({ id: kbDocuments.id }).from(kbDocuments).where(and(eq(kbDocuments.userId, userId), eq(kbDocuments.mountDirId, id))).limit(1)
       const hasTextMounts = await SkillService.hasVersionTextMount(userId, id, tx)
-      assertCanDelete(hasChildren.length > 0, hasTaskMounts.length > 0 || hasDocMounts.length > 0 || hasTextMounts)
+      assertCanDelete(hasChildren.length > 0, hasTaskMounts || hasDocMounts.length > 0 || hasTextMounts)
       await tx.update(dirs).set({ deleted: true, etag: node.etag + 1, updatedAt: new Date() }).where(eq(dirs.id, id))
     })
   }

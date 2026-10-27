@@ -34,6 +34,7 @@
     "@radix-ui/react-popover": "catalog:",
     "@radix-ui/react-slot": "catalog:",
     "@tanstack/react-router": "catalog:",
+    "@tiptap/extension-table": "catalog:",
     "@tiptap/pm": "catalog:",
     "@tiptap/react": "catalog:",
     "@tiptap/starter-kit": "catalog:",

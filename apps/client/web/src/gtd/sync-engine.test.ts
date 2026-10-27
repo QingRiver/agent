@@ -1,221 +1,212 @@
-import type { EntityRow, PullResponse, PushResponse } from '@agent/gtd'
+import type { ClientReplica, LocalIntent, ReplicaState, SyncRequest, SyncResponse, Transaction } from '@agent/gtd'
+import type { PendingQueue, ReplicaStorage } from './replica-store'
+import {
+  appendTransactions,
+  createClientReplica,
+  createServerLog,
+  displayRows,
+  emitWrites,
+  pullSince,
+  resolveResend,
+} from '@agent/gtd'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SyncEngine } from './sync-engine'
 
-// row-store 含真实 IndexedDB，node 环境不可用；mock 掉全部 IO，只测 SyncEngine 调度/状态机逻辑
-vi.mock('./row-store', () => ({
-  clearAll: vi.fn().mockResolvedValue(undefined),
-  loadOutbox: vi.fn().mockResolvedValue([]),
-  loadLastSyncId: vi.fn().mockResolvedValue(0),
-  rebaseTransaction: vi.fn().mockResolvedValue(undefined),
-}))
+const USER = 'u1'
+const TS = '2026-07-20T00:00:00.000Z'
 
-// 浏览器全局 stub（node 环境无 window/document/navigator）
-function stubBrowserGlobals() {
-  const listeners = new Map<string, EventListener>()
-  const stub = {
-    addEventListener: vi.fn((type: string, cb: EventListener) => listeners.set(type, cb)),
-    removeEventListener: vi.fn(),
-  }
-  vi.stubGlobal('navigator', { onLine: true })
+function stubBrowserGlobals(onLine = true) {
+  const stub = { addEventListener: vi.fn(), removeEventListener: vi.fn() }
+  vi.stubGlobal('navigator', { onLine })
   vi.stubGlobal('window', stub)
   vi.stubGlobal('document', { ...stub, visibilityState: 'visible' })
-  return listeners
 }
 
-function mkPushRes(over: Partial<PushResponse> = {}): PushResponse {
-  return { applied: [], rejected: [], changes: [], serverSyncId: 5, ...over }
-}
-function mkPullRes(changes: EntityRow[] = [], serverSyncId = 5): PullResponse {
-  return { changes, serverSyncId }
-}
-
-function mkApi() {
+/** 与 IndexedDB 实现同语义的内存存储。 */
+function memoryStorage(clientId: string): ReplicaStorage & { replica: () => ClientReplica } {
+  let state: ClientReplica = createClientReplica(USER, clientId)
+  let lastClientSeq = 0
   return {
-    push: vi.fn(),
-    pull: vi.fn(),
+    replica: () => state,
+    load: async () => state,
+    loadPending: async () => ({ clientId: state.clientId, pending: [...state.pending] }),
+    appendPending: async (input) => {
+      const acked = state.confirmed.clientSeqs.get(state.clientId) ?? 0
+      const clientSeq = Math.max(lastClientSeq, acked, state.pending.at(-1)?.clientSeq ?? 0) + 1
+      lastClientSeq = clientSeq
+      const txn: Transaction = { ...input, clientId: state.clientId, clientSeq }
+      state = { ...state, pending: [...state.pending, txn] }
+      return txn
+    },
+    saveConfirmed: async (before, after, update) => {
+      if (update.replaced || state.confirmed.seq === before.seq || state.confirmed.seq < after.seq)
+        state = { ...state, confirmed: after }
+      if (state.clientId === update.clientId)
+        state = { ...state, pending: state.pending.filter(t => t.clientSeq > update.ackedClientSeq) }
+    },
+    resolveResend: async (id, resendFrom, newClientId) => {
+      if (state.clientId !== id)
+        return
+      state = resolveResend(state, resendFrom, newClientId)
+      lastClientSeq = state.pending.length
+    },
+    clear: async () => {
+      state = createClientReplica(USER, clientId)
+      lastClientSeq = 0
+    },
+  }
+}
+
+function fakeServer() {
+  let log = createServerLog(USER)
+  return {
+    request: vi.fn(async (req: SyncRequest): Promise<SyncResponse> => {
+      const appended = appendTransactions(log, req.transactions)
+      log = appended.log
+      return {
+        ackedClientSeq: log.head.clientSeqs.get(req.clientId) ?? 0,
+        resendFrom: appended.resendFrom,
+        ...pullSince(log, req.afterSeq),
+      }
+    }),
+    reset: () => {
+      log = createServerLog(USER)
+    },
+  }
+}
+
+/** 一台设备：存储 + 内存里的已确认状态 + SyncEngine，与 GtdStore 的接法相同。 */
+function makeDevice(server: ReturnType<typeof fakeServer>, clientId: string) {
+  const storage = memoryStorage(clientId)
+  let confirmed: ReplicaState = storage.replica().confirmed
+  let queue: PendingQueue = { clientId, pending: [] }
+  const engine = new SyncEngine({
+    storage,
+    request: req => server.request(req),
+    getConfirmed: () => confirmed,
+    onSynced: (next, q) => {
+      confirmed = next
+      queue = q
+    },
+    newClientId: () => `${clientId}-renewed`,
+  })
+  return {
+    storage,
+    engine,
+    names: () => displayRows({ ...queue, confirmed })
+      .flatMap(r => r.entity === 'task' ? [r.data.name] : [])
+      .sort(),
+    confirmed: () => confirmed,
+    async edit(intents: LocalIntent[]) {
+      const rows = displayRows({ clientId: queue.clientId, confirmed, pending: storage.replica().pending })
+      const writes = emitWrites(rows, intents, USER)
+      await storage.appendPending({ id: crypto.randomUUID(), clientTs: TS, writes })
+      queue = await storage.loadPending()
+    },
+  }
+}
+
+function createTask(taskId: string, name = taskId): LocalIntent {
+  return {
+    kind: 'command',
+    command: { id: crypto.randomUUID(), type: 'create_task', taskId, name, parentId: null, order: 0, mountDirId: null, clientTs: TS },
   }
 }
 
 describe('syncEngine', () => {
-  let listeners: Map<string, EventListener>
-
   beforeEach(() => {
-    vi.clearAllMocks()
-    listeners = stubBrowserGlobals()
+    vi.restoreAllMocks()
+    stubBrowserGlobals()
   })
 
-  it('outbox 非空 → 只 push 不 pull（防幽灵闪烁）', async () => {
-    const { loadOutbox } = await import('./row-store')
-    vi.mocked(loadOutbox).mockResolvedValueOnce([
-      { id: 'm1', entity: 'task', entityId: 't1', op: 'upsert', patch: { name: 'x' }, clientTs: '2026-07-20T00:00:00Z' },
-    ])
-    const api = mkApi()
-    api.push.mockResolvedValue(mkPushRes())
-    const engine = new SyncEngine(api)
-    await engine.sync()
-    expect(api.push).toHaveBeenCalledOnce()
-    expect(api.pull).not.toHaveBeenCalled()
+  it('离线编辑后同步：事务被接受、出队，已确认状态包含它', async () => {
+    const server = fakeServer()
+    const a = makeDevice(server, 'A')
+    await a.edit([createTask('t1', 'buy milk')])
+    await a.engine.sync()
+
+    expect(a.storage.replica().pending).toEqual([])
+    expect(a.confirmed().seq).toBe(1)
+    expect(a.names()).toEqual(['buy milk'])
+    expect(a.engine.status).toBe('idle')
   })
 
-  it('outbox 空 → 只 pull 不 push', async () => {
-    const api = mkApi()
-    api.pull.mockResolvedValue(mkPullRes())
-    const engine = new SyncEngine(api)
-    await engine.sync()
-    expect(api.pull).toHaveBeenCalledOnce()
-    expect(api.push).not.toHaveBeenCalled()
+  it('两台设备各自离线编辑，同步后结果一致', async () => {
+    const server = fakeServer()
+    const a = makeDevice(server, 'A')
+    const b = makeDevice(server, 'B')
+    await a.edit([createTask('t1', 'from A')])
+    await b.edit([createTask('t2', 'from B')])
+    await a.engine.sync()
+    await b.engine.sync()
+    await a.engine.sync()
+
+    expect(a.names()).toEqual(['from A', 'from B'])
+    expect(b.names()).toEqual(a.names())
   })
 
-  it('单飞锁：SYNCING 中第二次 sync 只置 dirty，不并行', async () => {
-    const { loadOutbox } = await import('./row-store')
-    vi.mocked(loadOutbox).mockResolvedValue([])
-    const api = mkApi()
-    let resolvePush!: () => void
-    api.pull.mockReturnValue(new Promise<PullResponse>(r => resolvePush = () => r(mkPullRes())))
-    const engine = new SyncEngine(api)
-    const first = engine.sync() // 不 await，进入 SYNCING
-    await Promise.resolve()
-    await engine.sync() // 第二次：应早退，置 dirty
-    expect(api.pull).toHaveBeenCalledOnce()
-    resolvePush()
-    await first
-    // dirty 在 finally 里 await sync() 续跑，无需额外 debounce
-    expect(api.pull).toHaveBeenCalledTimes(2)
+  it('同步进行中又有新编辑：本轮结束后自动再跑一轮', async () => {
+    const server = fakeServer()
+    const a = makeDevice(server, 'A')
+    await a.edit([createTask('t1')])
+    const original = server.request.getMockImplementation()!
+    server.request.mockImplementationOnce(async (req) => {
+      await a.edit([createTask('t2')])
+      return original(req)
+    })
+    await a.engine.sync()
+
+    expect(server.request).toHaveBeenCalledTimes(2)
+    expect(a.storage.replica().pending).toEqual([])
+    expect(a.names()).toEqual(['t1', 't2'])
   })
 
-  it('rejected → onRejected 回调 + 状态 error', async () => {
-    const { loadOutbox } = await import('./row-store')
-    vi.mocked(loadOutbox).mockResolvedValue([
-      { id: 'm1', entity: 'task', entityId: 't1', op: 'upsert', patch: {}, clientTs: '2026-07-20T00:00:00Z' },
-    ])
-    const api = mkApi()
-    api.push.mockResolvedValue(mkPushRes({ rejected: [{ id: 'm1', reason: 'boom' }] }))
-    const engine = new SyncEngine(api)
-    const rejected = vi.fn()
-    engine.setRejectedListener(rejected)
-    await engine.sync()
-    expect(rejected).toHaveBeenCalledWith(
-      [{ id: 'm1', reason: 'boom' }],
-      expect.any(Array),
-    )
+  it('服务器数据被重置：换成服务器快照，未确认事务换设备 id 重新编号后上传', async () => {
+    const server = fakeServer()
+    const a = makeDevice(server, 'A')
+    await a.edit([createTask('t1', 'old')])
+    await a.engine.sync()
+    server.reset()
+    await a.edit([createTask('t2', 'offline')])
+    await a.engine.sync()
+
+    expect(a.storage.replica().clientId).toBe('A-renewed')
+    expect(a.storage.replica().pending).toEqual([])
+    expect(a.names()).toEqual(['offline'])
   })
 
-  it('onSynced：changes 非空时回调刷内存；空时不触发', async () => {
-    const api = mkApi()
-    const changes: EntityRow[] = [
-      { entity: 'task', id: 't1', userId: 'u1', syncId: 6, deleted: false, data: { name: 'y' } } as unknown as EntityRow,
-    ]
-    api.pull.mockResolvedValue(mkPullRes(changes, 6))
-    const engine = new SyncEngine(api)
-    const synced = vi.fn()
-    engine.setSyncedListener(synced)
-    await engine.sync()
-    expect(synced).toHaveBeenCalledWith(changes)
+  it('离线时不发请求，状态为 offline', async () => {
+    stubBrowserGlobals(false)
+    const server = fakeServer()
+    const a = makeDevice(server, 'A')
+    await a.edit([createTask('t1')])
+    await a.engine.sync()
 
-    // 第二轮 changes 空 → 不触发
-    vi.mocked(api.pull).mockResolvedValueOnce(mkPullRes([], 6))
-    synced.mockClear()
-    await engine.sync()
-    expect(synced).not.toHaveBeenCalled()
+    expect(server.request).not.toHaveBeenCalled()
+    expect(a.engine.status).toBe('offline')
+    expect(a.storage.replica().pending).toHaveLength(1)
   })
 
-  it('状态机：idle → syncing → idle', async () => {
-    const api = mkApi()
-    api.pull.mockResolvedValue(mkPullRes())
-    const engine = new SyncEngine(api)
-    const statuses: string[] = []
-    engine.setStatusListener(s => statuses.push(s))
-    await engine.sync()
-    expect(statuses).toEqual(['syncing', 'idle'])
+  it('请求失败：状态为 error，队列保留', async () => {
+    const server = fakeServer()
+    const a = makeDevice(server, 'A')
+    await a.edit([createTask('t1')])
+    server.request.mockRejectedValueOnce(new Error('network'))
+    await a.engine.sync()
+
+    expect(a.engine.status).toBe('error')
+    expect(a.storage.replica().pending).toHaveLength(1)
+
+    await a.engine.sync()
+    expect(a.storage.replica().pending).toEqual([])
   })
 
-  it('push 抛错 → 状态 error', async () => {
-    const { loadOutbox } = await import('./row-store')
-    vi.mocked(loadOutbox).mockResolvedValue([
-      { id: 'm1', entity: 'task', entityId: 't1', op: 'upsert', patch: {}, clientTs: '2026-07-20T00:00:00Z' },
-    ])
-    const api = mkApi()
-    api.push.mockRejectedValue(new Error('network'))
-    const engine = new SyncEngine(api)
-    const statuses: string[] = []
-    engine.setStatusListener(s => statuses.push(s))
-    await engine.sync()
-    expect(statuses).toContain('error')
-  })
+  it('logout 清空本机副本', async () => {
+    const server = fakeServer()
+    const a = makeDevice(server, 'A')
+    await a.edit([createTask('t1')])
+    await a.engine.logout()
 
-  it('scheduleSync debounce 400ms', async () => {
-    vi.useFakeTimers()
-    try {
-      const api = mkApi()
-      api.pull.mockResolvedValue(mkPullRes())
-      const engine = new SyncEngine(api)
-      engine.scheduleSync()
-      vi.advanceTimersByTime(399)
-      expect(api.pull).not.toHaveBeenCalled()
-      vi.advanceTimersByTime(2)
-      await vi.advanceTimersByTimeAsync(0)
-      expect(api.pull).toHaveBeenCalledOnce()
-    }
-    finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('syncRemoteBindings：先消化 outbox，再强制 pull（REST 侧 task_tag 增量）', async () => {
-    const { loadOutbox } = await import('./row-store')
-    vi.mocked(loadOutbox).mockResolvedValueOnce([
-      { id: 'm1', entity: 'task', entityId: 't1', op: 'upsert', patch: { name: 'x' }, clientTs: '2026-07-20T00:00:00Z' },
-    ]).mockResolvedValue([])
-    const api = mkApi()
-    api.push.mockResolvedValue(mkPushRes())
-    api.pull.mockResolvedValue(mkPullRes())
-    const engine = new SyncEngine(api)
-    await engine.syncRemoteBindings()
-    expect(api.push).toHaveBeenCalledOnce()
-    expect(api.pull).toHaveBeenCalledOnce()
-  })
-
-  it('offline → 状态 offline 且不发起请求', async () => {
-    vi.stubGlobal('navigator', { onLine: false })
-    const api = mkApi()
-    const engine = new SyncEngine(api)
-    const statuses: string[] = []
-    engine.setStatusListener(s => statuses.push(s))
-    await engine.sync()
-    expect(api.push).not.toHaveBeenCalled()
-    expect(api.pull).not.toHaveBeenCalled()
-    expect(statuses).toContain('offline')
-  })
-
-  it('bootstrap：sync + startDaemons（注册 online/visibility/interval）', async () => {
-    const api = mkApi()
-    api.pull.mockResolvedValue(mkPullRes())
-    const engine = new SyncEngine(api)
-    await engine.bootstrap()
-    // startDaemons 注册了 online + visibilitychange 监听
-    const windowStub = globalThis.window as unknown as { addEventListener: { mock: { calls: string[][] } } }
-    const docStub = globalThis.document as unknown as { addEventListener: { mock: { calls: string[][] } } }
-    const winTypes = windowStub.addEventListener.mock.calls.map(c => c[0])
-    const docTypes = docStub.addEventListener.mock.calls.map(c => c[0])
-    expect(winTypes).toContain('online')
-    expect(docTypes).toContain('visibilitychange')
-    // bootstrap 先 sync 一次（pull）
-    expect(api.pull).toHaveBeenCalledOnce()
-    // online 事件触发 → sync
-    const onlineCb = listeners.get('online')!
-    api.pull.mockClear()
-    await onlineCb(new Event('online'))
-    await new Promise(r => setTimeout(r, 5))
-    expect(api.pull).toHaveBeenCalled()
-  })
-
-  it('logout：stopDaemons + clearAll', async () => {
-    const { clearAll } = await import('./row-store')
-    const api = mkApi()
-    const engine = new SyncEngine(api)
-    await engine.bootstrap()
-    await engine.logout()
-    expect(clearAll).toHaveBeenCalled()
+    expect(a.storage.replica().pending).toEqual([])
   })
 })

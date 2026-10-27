@@ -80,6 +80,11 @@ export function GtdTaskRow({
   const done = effStatus === EXPLICIT_STATUS.COMPLETED
   // 被祖先连带压制（有效≠物理）→ checkbox 置灰（子不能单独完成/重开，须从压制祖先操作）
   const suppressed = effStatus !== task.data.status
+  // 勾选只在活跃 ↔ 完成之间切换；搁置、回收站中的任务须先恢复
+  const parked = effStatus === EXPLICIT_STATUS.HOLD || effStatus === EXPLICIT_STATUS.DELETED
+  const checkboxHint = suppressed
+    ? '被祖先连带压制，请从压制祖先操作'
+    : parked ? '搁置或回收站中的任务需先恢复' : null
   const selected = selectedTaskId === taskId
   const dueLabel = formatDue(task.data.dueDate)
 
@@ -136,8 +141,8 @@ export function GtdTaskRow({
         : <span className="w-2 shrink-0" />}
       <Checkbox
         checked={done}
-        disabled={suppressed}
-        {...(suppressed ? { title: '被祖先连带压制，请从压制祖先操作' } : {})}
+        disabled={checkboxHint != null}
+        {...(checkboxHint ? { title: checkboxHint } : {})}
         onCheckedChange={(state) => {
           if (state === true)
             completeTask(taskId)

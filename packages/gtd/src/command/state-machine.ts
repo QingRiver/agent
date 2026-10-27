@@ -26,6 +26,7 @@ import type {
 import type { CascadeStep } from '../inheritance/cascade'
 import type { TaskTree } from '../structure/tree'
 import { EXPLICIT_STATUS, PLANNED_MODE } from '../data/types'
+import { INVARIANT_TEXT } from '../derived/invariant'
 import {
   planDeleteCascade,
   planReopenCascade,
@@ -35,9 +36,10 @@ import {
 } from '../inheritance/cascade'
 import { ancestors, buildTaskTree } from '../structure/tree'
 import { shouldStop } from '../time/date-math'
+import { parentNotFound, statusRejected, taskLabel, taskNotFound } from './errors'
 import { cloneNextInstance } from './repeat'
 
-/** apply 成功结果：'applied' 已落库 | 'noop' 幂等无操作；违规走异常通道由 applyPush 捕获。 */
+/** apply 成功结果：'applied' 已落库 | 'noop' 幂等无操作；违规抛错，本地操作被拒绝。 */
 export type ApplyResult = 'applied' | 'noop'
 
 /** 按 entity 收窄查找未软删行；未找到返回 undefined。 */
@@ -111,7 +113,7 @@ export function completeTask(
   const taskId = cmd.taskId
   const task = findLive(rows, 'task', taskId)
   if (!task) {
-    throw new Error(`task ${taskId} not found`)
+    throw taskNotFound()
   }
   // 状态机：仅 active 可 complete；completed 幂等 noop；其他终态（hold/deleted）拒绝
   const status = task.data.status
@@ -119,7 +121,7 @@ export function completeTask(
     return 'noop'
   }
   if (status !== EXPLICIT_STATUS.ACTIVE) {
-    throw new Error(`task ${taskId} not active (current: ${String(status)})`)
+    throw statusRejected(task, '标记完成')
   }
 
   // repeat 克隆预校验（事务性：校验失败则整 command 不分配 syncId）
@@ -187,7 +189,7 @@ export function dropTask(
   const taskId = cmd.taskId
   const task = findLive(rows, 'task', taskId)
   if (!task) {
-    throw new Error(`task ${taskId} not found`)
+    throw taskNotFound()
   }
   // 状态机：仅 active 可 drop；hold 幂等 noop；其他终态（completed/deleted）拒绝
   const status = task.data.status
@@ -195,7 +197,7 @@ export function dropTask(
     return 'noop'
   }
   if (status !== EXPLICIT_STATUS.ACTIVE) {
-    throw new Error(`task ${taskId} not active (current: ${String(status)})`)
+    throw statusRejected(task, '搁置')
   }
   task.data.status = EXPLICIT_STATUS.HOLD
   task.data.heldAt = cmd.clientTs
@@ -218,17 +220,18 @@ export function reopenTask(
   const taskId = cmd.taskId
   const task = findLive(rows, 'task', taskId)
   if (!task) {
-    throw new Error(`task ${taskId} not found`)
+    throw taskNotFound()
   }
   const status = task.data.status
   if (status === EXPLICIT_STATUS.ACTIVE) {
     return 'noop'
   }
   if (status !== EXPLICIT_STATUS.COMPLETED) {
-    throw new Error(`task ${taskId} not completed (current: ${String(status)})`)
+    throw statusRejected(task, '重新打开')
   }
+  // SP-INV-REPEAT-REOPEN
   if (task.data.repeatRuleId != null) {
-    throw new Error(`task ${taskId} is repeating-completed, not reopenable (SP-INV-REPEAT-REOPEN)`)
+    throw new Error(`${taskLabel(task)}${INVARIANT_TEXT.repeat_not_reopenable}；下一次已经生成`)
   }
   const tree: TaskTree = buildTaskTree(liveTasksOf(rows))
   applySteps(rows, planReopenCascade(taskId, tree), cmd.clientTs, nextSyncId)
@@ -247,14 +250,14 @@ export function restoreTask(
   const taskId = cmd.taskId
   const task = findLive(rows, 'task', taskId)
   if (!task) {
-    throw new Error(`task ${taskId} not found`)
+    throw taskNotFound()
   }
   const status = task.data.status
   if (status === EXPLICIT_STATUS.ACTIVE) {
     return 'noop'
   }
   if (status !== EXPLICIT_STATUS.HOLD) {
-    throw new Error(`task ${taskId} not hold (current: ${String(status)})`)
+    throw statusRejected(task, '从搁置中恢复')
   }
   const tree: TaskTree = buildTaskTree(liveTasksOf(rows))
   applySteps(rows, planRestoreCascade(taskId, tree), cmd.clientTs, nextSyncId)
@@ -276,7 +279,7 @@ export function deleteTask(
   const taskId = cmd.taskId
   const task = findLive(rows, 'task', taskId)
   if (!task) {
-    throw new Error(`task ${taskId} not found`)
+    throw taskNotFound()
   }
   const status = task.data.status
   if (status === EXPLICIT_STATUS.DELETED) {
@@ -299,14 +302,14 @@ export function restoreFromTrash(
   const taskId = cmd.taskId
   const task = findLive(rows, 'task', taskId)
   if (!task) {
-    throw new Error(`task ${taskId} not found`)
+    throw taskNotFound()
   }
   const status = task.data.status
   if (status === EXPLICIT_STATUS.ACTIVE) {
     return 'noop'
   }
   if (status !== EXPLICIT_STATUS.DELETED) {
-    throw new Error(`task ${taskId} not in trash (current: ${String(status)})`)
+    throw statusRejected(task, '移出回收站')
   }
   const tree: TaskTree = buildTaskTree(liveTasksOf(rows))
   applySteps(rows, planRestoreFromTrashCascade(taskId, tree), cmd.clientTs, nextSyncId)
@@ -335,7 +338,7 @@ export function createTask(
     throw new Error(`task ${taskId} already exists`)
   }
   if (cmd.parentId != null && !findLive(rows, 'task', cmd.parentId)) {
-    throw new Error(`parent task ${cmd.parentId} not found`)
+    throw parentNotFound()
   }
   const data = {
     name: cmd.name,
@@ -392,20 +395,17 @@ export function moveTask(
   const taskId = cmd.taskId
   const task = findLive(rows, 'task', taskId)
   if (!task) {
-    throw new Error(`task ${taskId} not found`)
+    throw taskNotFound()
   }
   const newParentId = cmd.parentId
   if (newParentId != null && !findLive(rows, 'task', newParentId)) {
-    throw new Error(`parent task ${newParentId} not found`)
+    throw parentNotFound()
   }
   // 防环：新 parentId 不得是自身或其后代（移到自己子树下成环）
   if (newParentId != null) {
-    if (newParentId === taskId) {
-      throw new Error(`cannot move task ${taskId} under itself`)
-    }
     const tree = buildTaskTree(liveTasksOf(rows))
-    if ([...ancestors(tree, newParentId)].some(a => a.id === taskId)) {
-      throw new Error(`cannot move task ${taskId} under its own descendant ${newParentId}`)
+    if (newParentId === taskId || [...ancestors(tree, newParentId)].some(a => a.id === taskId)) {
+      throw new Error(`${taskLabel(task)}不能移到自己或自己的子任务下面`)
     }
   }
   task.data.parentId = newParentId

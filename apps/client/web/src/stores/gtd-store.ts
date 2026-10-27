@@ -1,4 +1,5 @@
 import type {
+  ClientReplica,
   EntityRow,
   EntityRowOf,
   ForecastSignalOptions,
@@ -6,12 +7,19 @@ import type {
   GroupType,
   GtdCommand,
   GtdMutation,
+  InvariantViolation,
+  LocalIntent,
+  MaterializeOptions,
   Perspective,
   PerspectiveInput,
   RepeatRule,
+  ReplicaState,
   SyncEntity,
   Task,
+  Transaction,
+  Write,
 } from '@agent/gtd'
+import type { PendingQueue } from '../gtd/replica-store'
 import type { SyncStatus } from '../gtd/sync-engine'
 import type { GtdSelection, PerspectiveViewOptions } from '../gtd/view-options'
 import {
@@ -21,19 +29,19 @@ import {
   builtinPerspectives,
   DEFAULT_FORECAST_SIGNALS,
   DEFAULT_FORECAST_STRIP,
+  displayRows,
   effectiveStatus,
+  emitWrites,
   entityFocusFilter,
   EXPLICIT_STATUS,
   FORECAST_STRIP_ORDER,
   GROUP_TYPE,
+  INVARIANT_TEXT,
   isBuiltinPerspectiveId,
-  isMutation,
-  isRemotePurgedReason,
   mergeFilter,
   normalizeDeferDue,
   orderBetween,
   orderImportRows,
-  parseRemotePurgedName,
   parseRows,
   PLANNED_MODE,
   reindexSiblings,
@@ -42,14 +50,14 @@ import {
   RowStore,
   serializeRows,
   shouldReindex,
-  shouldStop,
   validateInvariants,
   validatePerspectiveInput,
+  WritesSchema,
 } from '@agent/gtd'
 import { GtdApi } from '@apis/gtd-api'
 import { atom, getDefaultStore } from 'jotai'
 import { isContiguousStripSelection, toggleForecastStrip } from '../gtd/forecast-strip'
-import { applyLocal as applyRows, loadRows, mergeChanges, persistAndQueue, persistLastSyncId, persistRows, removeOutboxIds } from '../gtd/row-store'
+import { idbReplicaStorage } from '../gtd/replica-store'
 import { SyncEngine } from '../gtd/sync-engine'
 import {
   DEFAULT_GTD_SELECTION,
@@ -60,6 +68,7 @@ import {
   viewOptionsScope,
 } from '../gtd/view-options'
 import { DirStore } from './dir-store'
+import { SkillStore } from './skill-store'
 import { TagsStore } from './tags-store'
 
 export type { GtdSelection }
@@ -70,7 +79,7 @@ const LS_FORECAST_STRIP = 'gtd.forecastStrip'
 const LS_FORECAST_SIGNALS = 'gtd.forecastSignals'
 const LS_VIEW_OPTIONS = 'gtd.viewOptions'
 
-// ---------------- mutation/command 构造小工具 ----------------
+// ---------------- 本地意图构造小工具 ----------------
 
 function newId(): string {
   return crypto.randomUUID()
@@ -80,12 +89,14 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
-function upsertMut(entity: SyncEntity, entityId: string, patch: Record<string, unknown>): GtdMutation {
-  return { id: newId(), entity, entityId, op: 'upsert', patch, clientTs: nowIso() } as GtdMutation
+function upsertMut(entity: SyncEntity, entityId: string, patch: Record<string, unknown>): LocalIntent {
+  const mutation = { id: newId(), entity, entityId, op: 'upsert', patch, clientTs: nowIso() } as GtdMutation
+  return { kind: 'mutation', mutation }
 }
 
-function deleteMut(entity: SyncEntity, entityId: string): GtdMutation {
-  return { id: newId(), entity, entityId, op: 'delete', clientTs: nowIso() } as GtdMutation
+function deleteMut(entity: SyncEntity, entityId: string): LocalIntent {
+  const mutation = { id: newId(), entity, entityId, op: 'delete', clientTs: nowIso() } as GtdMutation
+  return { kind: 'mutation', mutation }
 }
 
 /** OF4 Inherited Tags Assignment：目标无标时复制父 task_tag（新建可传 ownTagIds=[]）；已有标不覆盖。 */
@@ -94,7 +105,7 @@ function copyTagMutsFromParent(
   taskId: string,
   parentId: string | null | undefined,
   ownTagIds?: readonly string[],
-): GtdMutation[] {
+): LocalIntent[] {
   if (parentId == null)
     return []
   const own = ownTagIds ?? store.tagIdsOf(taskId)
@@ -107,8 +118,8 @@ function copyTagMutsFromParent(
 
 // command 构造：输入为分支字段（type/taskId/payload/...），自动补 id+clientTs。
 // 用 Record 入参 + GtdCommand 出参，避开 Omit<discriminated-union> 丢变体字段。
-function cmd(c: Record<string, unknown>): GtdCommand {
-  return { ...c, id: newId(), clientTs: nowIso() } as GtdCommand
+function cmd(c: Record<string, unknown>): LocalIntent {
+  return { kind: 'command', command: { ...c, id: newId(), clientTs: nowIso() } as GtdCommand }
 }
 
 // ---------------- 顺序工具 ----------------
@@ -322,62 +333,87 @@ function tShape(s: EntityRowOf<'task'>) {
   return { id: s.id, ...s.data }
 }
 
-/** server soft reject：目录缺失 / 远端 purge → 不 syncLocked */
-function isSoftReject(reason: string): boolean {
-  return /^tag .+ not found$/.test(reason) || isRemotePurgedReason(reason)
+function violationKeys(rows: EntityRow[]): Set<string> {
+  return new Set(validateInvariants(new RowStore(rows)).map(v => `${v.code}|${v.entityId ?? ''}|${v.message}`))
 }
 
-/** 从 outbox 条目解析关联的 task id */
-function taskIdFromOutboxItem(item: GtdMutation | GtdCommand): string | null {
-  if (isMutation(item)) {
-    if (item.entity === 'task')
-      return item.entityId
-    if (item.op === 'upsert' && item.entity === 'task_tag')
-      return item.patch.taskId
-    if (item.op === 'upsert' && item.entity === 'attachment') {
-      const tid = item.patch?.taskId
-      return typeof tid === 'string' ? tid : null
-    }
-    if (item.op === 'delete' && item.entity === 'task_tag') {
-      const bar = item.entityId.indexOf('|')
-      return bar > 0 ? item.entityId.slice(0, bar) : null
-    }
-    if (item.op === 'delete' && item.entity === 'attachment') {
-      // attachment delete 无 taskId；无法从 entityId 反查
-      return null
-    }
-    return null
-  }
-  return item.taskId
+/** 只拒绝这次操作新引入的不变量违反；读时规则留下的旧状态不阻塞编辑。 */
+function introducedViolations(before: EntityRow[], after: EntityRow[]): InvariantViolation[] {
+  const existing = violationKeys(before)
+  return validateInvariants(new RowStore(after))
+    .filter(v => !existing.has(`${v.code}|${v.entityId ?? ''}|${v.message}`))
 }
 
-// ---------------- Store ----------------
+function describeViolation(v: InvariantViolation, rows: EntityRow[]): string {
+  const row = v.entityId ? rows.find(r => r.id === v.entityId) : undefined
+  const subject = row?.entity === 'task' ? `「${row.data.name}」` : ''
+  return `操作未执行：${subject}${INVARIANT_TEXT[v.code]}`
+}
 
-/** SyncEngine 单例（无头守护进程） */
+// ---------------- 副本与同步 ----------------
+
+const storage = idbReplicaStorage
+
+/** 同一浏览器的其他标签页写了副本时互相通知，收到后从 IndexedDB 重新读。 */
+const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('gtd-replica')
+
+/** 已显示在界面上、还没在 IndexedDB 分到 clientSeq 的本地事务（按产生顺序）。 */
+let unpersisted: Transaction[] = []
+let persistChain: Promise<void> = Promise.resolve()
+
 let syncEngine: SyncEngine | null = null
 
 function getSyncEngine(): SyncEngine {
-  if (!syncEngine) {
-    syncEngine = new SyncEngine({
-      push: body => GtdApi.syncPush(body),
-      pull: body => GtdApi.syncPull(body),
-    })
-  }
+  syncEngine ??= new SyncEngine({
+    storage,
+    request: req => GtdApi.sync(req),
+    getConfirmed: () => getDefaultStore().get(GtdStore.localAtom)?.confirmed ?? null,
+    onSynced: (confirmed, queue) => {
+      GtdStore.setFromDisk(confirmed, queue)
+      channel?.postMessage('synced')
+    },
+  })
   return syncEngine
 }
 
-function maxSyncId(rows: EntityRow[]): number {
-  let m = 0
-  for (const r of rows) {
-    if (r.syncId > m)
-      m = r.syncId
+/** dir 自身或祖先被标为 skill：skill 子树里不能挂任务。 */
+function insideSkill(dirId: string, dirsById: Map<string, { parentId: string | null }>, skillDirIds: Map<string, unknown>): boolean {
+  const seen = new Set<string>()
+  let cur: string | null = dirId
+  while (cur && !seen.has(cur)) {
+    if (skillDirIds.has(cur))
+      return true
+    seen.add(cur)
+    cur = dirsById.get(cur)?.parentId ?? null
   }
-  return m
+  return false
 }
 
 export class GtdStore {
   static readonly userIdAtom = atom<string | undefined>(undefined)
-  static readonly rowsAtom = atom<EntityRow[]>([])
+  /** 本机副本：已确认状态 + 未确认事务。界面行由它派生，不另存。 */
+  static readonly localAtom = atom<ClientReplica | null>(null)
+
+  /** 读时规则用的目录：目录还没拉到时一律视为有效，避免整片任务闪进收件箱或丢标签。 */
+  static readonly displayOptionsAtom = atom<MaterializeOptions>((get) => {
+    const options: MaterializeOptions = {}
+    if (get(TagsStore.loadedAtom)) {
+      const tags = get(TagsStore.tagsByIdAtom)
+      options.isTagLive = tagId => tags.has(tagId)
+    }
+    if (get(DirStore.loadedAtom)) {
+      const dirs = get(DirStore.dirsByIdAtom)
+      const skillDirs = get(SkillStore.skillsByDirIdAtom)
+      options.isMountValid = dirId => dirs.has(dirId) && !insideSkill(dirId, dirs, skillDirs)
+    }
+    return options
+  })
+
+  static readonly rowsAtom = atom<EntityRow[]>((get) => {
+    const local = get(GtdStore.localAtom)
+    return local ? displayRows(local, get(GtdStore.displayOptionsAtom)) : []
+  })
+
   static readonly rowStoreAtom = atom(get => new RowStore(get(GtdStore.rowsAtom)))
   /** 派生 TaskTree（live tasks 建树）；供 UI 读 effectiveStatus（洪水继承：删父/搁置父的子有效态被压） */
   static readonly treeAtom = atom(get => buildTaskTree(get(GtdStore.rowStoreAtom).liveTasks()))
@@ -389,7 +425,6 @@ export class GtdStore {
   static readonly selectedTaskIdAtom = atom<string | null>(null)
   static readonly isLoadingAtom = atom(false)
   static readonly syncStatusAtom = atom<SyncStatus>('idle')
-  static readonly syncLockedAtom = atom(false)
   static readonly errorAtom = atom<string | null>(null)
   static readonly dueSoonMs = DUE_SOON_MS
 
@@ -406,10 +441,10 @@ export class GtdStore {
       return
     s.set(GtdStore.userIdAtom, userId)
     if (!userId) {
-      // 登出：stopDaemons + 清空 IDB + 清空 rows
-      const engine = getSyncEngine()
-      await engine.logout()
-      s.set(GtdStore.rowsAtom, [])
+      ++GtdStore.loadGeneration
+      unpersisted = []
+      await getSyncEngine().logout()
+      s.set(GtdStore.localAtom, null)
       s.set(GtdStore.selectedTaskIdAtom, null)
       s.set(GtdStore.errorAtom, null)
       return
@@ -419,59 +454,57 @@ export class GtdStore {
 
   static async load(): Promise<void> {
     const s = GtdStore.store()
+    const userId = s.get(GtdStore.userIdAtom)
+    if (!userId)
+      return
     const gen = ++GtdStore.loadGeneration
     s.set(GtdStore.isLoadingAtom, true)
     s.set(GtdStore.errorAtom, null)
     try {
-      // 先读本地行库 → rows
-      const rows = await loadRows()
-      if (gen === GtdStore.loadGeneration)
-        s.set(GtdStore.rowsAtom, rows)
-      // syncEngine 启动 + 注册 onSynced（背景 pull/push 后以服务端权威 changes 刷内存）
-      const engine = getSyncEngine()
-      engine.setStatusListener(status => s.set(GtdStore.syncStatusAtom, status))
-      engine.setRejectedListener((rejected, outboxSnapshot) => {
-        const soft = rejected.filter(r => isSoftReject(r.reason))
-        const hard = rejected.filter(r => !isSoftReject(r.reason))
-        const remotePurged = soft.filter(r => isRemotePurgedReason(r.reason))
-        if (remotePurged.length > 0)
-          GtdStore.forkRemotePurgedToTrash(remotePurged, outboxSnapshot)
-        if (hard.length === 0) {
-          if (rejected.length) {
-            const msgs = soft.map((r) => {
-              if (isRemotePurgedReason(r.reason)) {
-                const name = parseRemotePurgedName(r.reason) ?? '任务'
-                return `任务「${name}」已在远端被删除`
-              }
-              return r.reason
-            })
-            s.set(GtdStore.errorAtom, msgs.join('；'))
-          }
-          return
-        }
-        s.set(GtdStore.syncLockedAtom, true)
-        s.set(GtdStore.errorAtom, hard.map(r => r.reason).join('; '))
-      })
-      engine.setSyncedListener((changes) => {
-        if (gen !== GtdStore.loadGeneration)
-          return
-        s.set(GtdStore.rowsAtom, mergeChanges(s.get(GtdStore.rowsAtom), changes))
-      })
-      await engine.bootstrap()
-      // sync 后兜底再读一次行（onSynced 已刷，此处保证 bootstrap 空库灌行后落地）
-      const updatedRows = await loadRows()
-      if (gen === GtdStore.loadGeneration)
-        s.set(GtdStore.rowsAtom, updatedRows)
-    }
-    catch (e) {
+      const local = await storage.load(userId)
       if (gen !== GtdStore.loadGeneration)
         return
-      s.set(GtdStore.errorAtom, e instanceof Error ? e.message : String(e))
+      GtdStore.setFromDisk(local.confirmed, local)
+      if (channel)
+        channel.onmessage = () => void GtdStore.reloadFromDisk()
+      const engine = getSyncEngine()
+      engine.setStatusListener(status => s.set(GtdStore.syncStatusAtom, status))
+      await engine.bootstrap()
+    }
+    catch (e) {
+      if (gen === GtdStore.loadGeneration)
+        s.set(GtdStore.errorAtom, e instanceof Error ? e.message : String(e))
     }
     finally {
       if (gen === GtdStore.loadGeneration)
         s.set(GtdStore.isLoadingAtom, false)
     }
+  }
+
+  /** 磁盘上的已确认状态与队列 + 本页还没落盘的事务 → 内存副本。 */
+  static setFromDisk(confirmed: ReplicaState, queue: PendingQueue): void {
+    const s = GtdStore.store()
+    if (confirmed.userId !== s.get(GtdStore.userIdAtom))
+      return
+    const onDisk = new Set(queue.pending.map(t => t.id))
+    s.set(GtdStore.localAtom, {
+      clientId: queue.clientId,
+      confirmed,
+      pending: [...queue.pending, ...unpersisted.filter(t => !onDisk.has(t.id))],
+    })
+  }
+
+  private static async reloadFromDisk(): Promise<void> {
+    const userId = GtdStore.store().get(GtdStore.userIdAtom)
+    if (!userId)
+      return
+    const local = await storage.load(userId)
+    GtdStore.setFromDisk(local.confirmed, local)
+  }
+
+  /** 立刻同步一轮（例如 REST 删除标签后服务器追加了事务）。 */
+  static async syncNow(): Promise<void> {
+    await getSyncEngine().sync()
   }
 
   static setSelection(sel: GtdSelection): void {
@@ -525,74 +558,60 @@ export class GtdStore {
   }
 
   /**
-   * 本地变更 → 校验 → 行级 apply（复用 applyPush 同语义）→ 同事务 persist rows+outbox → scheduleSync。
-   * 真相是 rowsAtom；UI 经 rowStoreAtom 派生刷新。build 在当前 store 上显式产 mutation/command。
+   * 一次本地操作：在当前界面行上执行意图 → 整理成写入 → 检查没有引入新的不变量违反 →
+   * 作为一条未确认事务立即显示，随后在 IndexedDB 分配 clientSeq 并触发同步。
    */
-  private static applyLocal(build: (store: RowStore) => Array<GtdMutation | GtdCommand>): boolean {
+  private static applyLocal(build: (store: RowStore) => LocalIntent[]): boolean {
     const s = GtdStore.store()
-    // reject 锁定期拒绝一切本地编辑，直到用户点「恢复」
-    if (s.get(GtdStore.syncLockedAtom)) {
-      s.set(GtdStore.errorAtom, '同步冲突已锁定编辑，请点击「恢复」重拉服务端数据')
+    const local = s.get(GtdStore.localAtom)
+    if (!local) {
+      s.set(GtdStore.errorAtom, 'GTD 数据尚未加载')
       return false
     }
-    const userId = s.get(GtdStore.userIdAtom) ?? 'u1'
-    const prevRows = s.get(GtdStore.rowsAtom)
-    const store = new RowStore(prevRows)
-
-    let items: Array<GtdMutation | GtdCommand>
+    const rows = s.get(GtdStore.rowsAtom)
+    let writes: Write[]
     try {
-      items = build(store)
+      const intents = build(new RowStore(rows))
+      writes = intents.length > 0 ? emitWrites(rows, intents, local.confirmed.userId) : []
     }
     catch (e) {
       s.set(GtdStore.errorAtom, e instanceof Error ? e.message : String(e))
       return false
     }
-    if (items.length === 0)
-      return false
+    return GtdStore.commitWrites(local, rows, writes)
+  }
 
-    const prevClock = maxSyncId(prevRows)
-    const { rows: nextRows, rejected } = applyRows(prevRows, userId, items, prevClock)
-    if (rejected.length) {
-      s.set(GtdStore.errorAtom, rejected.map(r => r.reason).join('; '))
+  private static commitWrites(local: ClientReplica, rows: EntityRow[], writes: Write[]): boolean {
+    const s = GtdStore.store()
+    if (writes.length === 0)
       return false
-    }
-    const violations = validateInvariants(new RowStore(nextRows))
+    const input = { id: newId(), clientTs: nowIso(), writes }
+    const provisional: Transaction = { ...input, clientId: local.clientId, clientSeq: 0 }
+    const next: ClientReplica = { ...local, pending: [...local.pending, provisional] }
+    const after = displayRows(next, s.get(GtdStore.displayOptionsAtom))
+    const violations = introducedViolations(rows, after)
     if (violations.length > 0) {
-      s.set(GtdStore.errorAtom, violations.map(v => v.message).join('; '))
+      console.warn('[gtd] 写入违反不变量，已拒绝', violations.map(v => v.message))
+      s.set(GtdStore.errorAtom, describeViolation(violations[0]!, after))
       return false
     }
-    s.set(GtdStore.rowsAtom, nextRows)
+    s.set(GtdStore.localAtom, next)
     s.set(GtdStore.errorAtom, null)
-    // 只 persist 改动行（未改行 syncId 不动，不覆写服务端 syncId）
-    // rows + outbox 同一 IDB 事务，完成后才 scheduleSync
-    const changed = nextRows.filter(r => r.syncId > prevClock)
-    void persistAndQueue(changed, items).then(() => getSyncEngine().scheduleSync())
+    unpersisted.push(provisional)
+    persistChain = persistChain
+      .then(async () => {
+        const txn = await storage.appendPending(input)
+        unpersisted = unpersisted.filter(t => t.id !== txn.id)
+        const cur = s.get(GtdStore.localAtom)
+        if (cur)
+          s.set(GtdStore.localAtom, { ...cur, pending: cur.pending.map(t => t.id === txn.id ? txn : t) })
+        channel?.postMessage('queued')
+        getSyncEngine().scheduleSync()
+      })
+      .catch((e: unknown) => {
+        s.set(GtdStore.errorAtom, `本地保存失败：${e instanceof Error ? e.message : String(e)}`)
+      })
     return true
-  }
-
-  /**
-   * REST 改了绑定行（删标 untag 等）后：pull 进 IDB，并强制刷 rowsAtom。
-   * 不依赖 GtdSync 是否挂载 / onSynced 是否已注册。
-   */
-  static async refreshBindingsFromServer(): Promise<void> {
-    const s = GtdStore.store()
-    const engine = getSyncEngine()
-    await engine.syncRemoteBindings()
-    s.set(GtdStore.rowsAtom, await loadRows())
-  }
-
-  /**
-   * 恢复：reject 锁定后用户点「恢复」→ 清空本地行库（rows/outbox/meta）+ 重新 pull 服务端。
-   * 不做乐观行回滚（不划算）；直接以服务端为准重拉。
-   */
-  static async recoverFromReject(): Promise<void> {
-    const s = GtdStore.store()
-    const engine = getSyncEngine()
-    await engine.logout() // stopDaemons + clearAll（清 IDB rows/outbox/meta）
-    s.set(GtdStore.syncLockedAtom, false)
-    s.set(GtdStore.errorAtom, null)
-    s.set(GtdStore.rowsAtom, [])
-    await GtdStore.load() // bootstrap sync() → pull(0) 灌服务端最新
   }
 
   // ---------- Tasks ----------
@@ -635,7 +654,7 @@ export class GtdStore {
       const now = nowIso()
       const id = newId()
       const children = store.liveTasks().filter(t => t.data.parentId === parentId).map(tShape)
-      const items: Array<GtdMutation | GtdCommand> = [
+      const items: LocalIntent[] = [
         cmd({ type: 'create_task', taskId: id, name: trimmed, parentId, order: nextOrder(children), mountDirId: parent.data.mountDirId }),
         ...copyTagMutsFromParent(store, id, parentId, []),
       ]
@@ -665,7 +684,7 @@ export class GtdStore {
       const now = nowIso()
       const children = store.liveTasks().filter(t => t.data.parentId === parent.id && t.id !== taskId).map(tShape)
       // parentId/order 走 move_task 命令（自带拉回）；mountDirId 不变（同 project 内缩进）；updatedAt 走 upsert
-      const items: Array<GtdMutation | GtdCommand> = [
+      const items: LocalIntent[] = [
         cmd({ type: 'move_task', taskId, parentId: parent.id, order: nextOrder(children) }),
         upsertMut('task', taskId, { updatedAt: now }),
         ...copyTagMutsFromParent(store, taskId, parent.id),
@@ -695,7 +714,7 @@ export class GtdStore {
       const after = parentIndex >= 0 ? parentSiblings[parentIndex + 1] ?? null : null
       const remainingChildren = store.liveTasks().filter(t => t.data.parentId === parent.id && t.id !== taskId)
       const now = nowIso()
-      const items: Array<GtdMutation | GtdCommand> = [
+      const items: LocalIntent[] = [
         cmd({ type: 'move_task', taskId, parentId: parent.data.parentId, order: orderBetween(parent.data.order, after?.order ?? null) }),
         upsertMut('task', taskId, { updatedAt: now }),
       ]
@@ -729,7 +748,7 @@ export class GtdStore {
       ).map(tShape)
       const result = targetOrder(siblings, target.beforeId, target.afterId)
       const now = nowIso()
-      const items: GtdMutation[] = [
+      const items: LocalIntent[] = [
         upsertMut('task', taskId, { order: result.order, updatedAt: now }),
       ]
       for (const sib of siblings) {
@@ -746,13 +765,8 @@ export class GtdStore {
       const task = store.findLive('task', taskId)
       if (!task)
         throw new Error('任务不存在')
-      const rule = task.data.repeatRuleId != null ? task.data.repeatRule : undefined
-      const willClone = task.data.repeatRuleId != null && rule != null && !shouldStop(rule, new Date())
-      return [
-        willClone
-          ? cmd({ type: 'complete', taskId, clientGenerated: { nextTaskId: newId() } })
-          : cmd({ type: 'complete', taskId }),
-      ]
+      // 重复任务的后继 id 由 emitWrites 按规则 id 与次数确定，各设备一致
+      return [cmd({ type: 'complete', taskId })]
     })
   }
 
@@ -812,117 +826,13 @@ export class GtdStore {
     })
   }
 
-  /**
-   * 在线永久删除回收站任务（旁路 outbox）。
-   * 须 online；成功后 merge 权威 changes。
-   */
-  static async purgeTrash(taskIds: string[]): Promise<void> {
+  /** 永久删除回收站里的任务（连同子树）。和其他操作一样离线可用，同步后各设备都删除。 */
+  static purgeTrash(taskIds: string[]): void {
     const s = GtdStore.store()
-    if (!navigator.onLine) {
-      s.set(GtdStore.errorAtom, '永久删除需要联网')
-      return
-    }
-    if (taskIds.length === 0)
-      return
-    try {
-      const res = await GtdApi.purgeTrash({ taskIds })
-      s.set(GtdStore.rowsAtom, mergeChanges(s.get(GtdStore.rowsAtom), res.changes))
-      await persistRows(res.changes)
-      await persistLastSyncId(res.serverSyncId)
-      if (res.skipped.length > 0) {
-        s.set(
-          GtdStore.errorAtom,
-          res.skipped.map(x => `${x.id}: ${x.reason}`).join('; '),
-        )
-      }
-      else {
-        s.set(GtdStore.errorAtom, null)
-      }
-      const sel = s.get(GtdStore.selectedTaskIdAtom)
-      if (sel && taskIds.includes(sel))
-        s.set(GtdStore.selectedTaskIdAtom, null)
-    }
-    catch (e) {
-      s.set(GtdStore.errorAtom, e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  /**
-   * REMOTE_PURGED：把本地理应更新的内容 fork 为新 id 进回收站，并清旧 id 相关 outbox。
-   * 在 SyncEngine rebase 前调用（仍持有 outbox 快照）。
-   */
-  private static forkRemotePurgedToTrash(
-    rejected: Array<{ id: string, reason: string }>,
-    outboxSnapshot: Array<GtdMutation | GtdCommand>,
-  ): void {
-    const byOutboxId = new Map(outboxSnapshot.map(i => [i.id, i]))
-    const oldTaskIds = new Set<string>()
-    for (const r of rejected) {
-      const item = byOutboxId.get(r.id)
-      if (!item)
-        continue
-      const tid = taskIdFromOutboxItem(item)
-      if (tid)
-        oldTaskIds.add(tid)
-    }
-    if (oldTaskIds.size === 0)
-      return
-
-    // 清所有仍指向旧 id 的 outbox（含未在本批 rejected 的）
-    const extraOutboxIds = outboxSnapshot
-      .filter((i) => {
-        const tid = taskIdFromOutboxItem(i)
-        return tid != null && oldTaskIds.has(tid)
-      })
-      .map(i => i.id)
-    void removeOutboxIds(extraOutboxIds)
-
-    const s = GtdStore.store()
-    const rows = s.get(GtdStore.rowsAtom)
-    const store = new RowStore(rows)
-    const ts = nowIso()
-
-    for (const oldId of oldTaskIds) {
-      // 含 tombstone：优先 live，否则任意同 id 行
-      const old = store.findLive('task', oldId)
-        ?? rows.find((r): r is EntityRowOf<'task'> => r.entity === 'task' && r.id === oldId)
-      if (!old)
-        continue
-      const newId = crypto.randomUUID()
-      const tagIds = store.tagIdsOf(oldId)
-      // patch 剥离后 task upsert 不可建行（缺 status/parentId）；fork 走 create_task 建行 + upsert 补内容。
-      // 不走 delete 进回收站：delete 是命令（commands 阶段先执行），内容 upsert 是 mutation（后执行），
-      // 同一 push 内 delete 会先于 content upsert → upsert 命中 DELETED 行 noop → 内容丢失。
-      // 故 fork 以 ACTIVE 形态落盘（保内容优先于隐藏进回收站）；用户可再手动删除。
-      // parent 已随 purge 消失则降级为顶层（避免 create_task 引用校验拒绝 fork）。
-      const forkParent = old.data.parentId != null && store.findLive('task', old.data.parentId)
-        ? old.data.parentId
-        : null
-      const {
-        status: _s,
-        parentId: _p,
-        name: _n,
-        order: _o,
-        mountDirId: _m,
-        completedAt: _c,
-        heldAt: _h,
-        droppedAt: _d,
-        repeatedFromTaskId: _r,
-        createdAt: _ca,
-        updatedAt: _ua,
-        ...content
-      } = old.data
-      GtdStore.applyLocal(() => {
-        const items: Array<GtdMutation | GtdCommand> = [
-          cmd({ type: 'create_task', taskId: newId, name: old.data.name, parentId: forkParent, order: old.data.order, mountDirId: old.data.mountDirId }),
-          upsertMut('task', newId, { ...content, updatedAt: ts }),
-        ]
-        for (const tagId of tagIds) {
-          items.push(upsertMut('task_tag', `${newId}|${tagId}`, { taskId: newId, tagId }))
-        }
-        return items
-      })
-    }
+    const ok = GtdStore.applyLocal(() => taskIds.map(taskId => ({ kind: 'purge', taskId }) as const))
+    const sel = s.get(GtdStore.selectedTaskIdAtom)
+    if (ok && sel && taskIds.includes(sel))
+      s.set(GtdStore.selectedTaskIdAtom, null)
   }
 
   static toggleFlag(taskId: string): void {
@@ -979,8 +889,8 @@ export class GtdStore {
       const now = nowIso()
       const parentChanged = nextParent !== task.data.parentId
       // parentId/order 走 move_task 命令（自带拉回 + 防环；patch 已剥离 parentId）；
-      // mountDirId 走 upsert（无约束 LWW，命令不含 mountDirId）。
-      const items: Array<GtdMutation | GtdCommand> = [
+      // mountDirId 走 upsert。挂载读时取自根任务，子孙不用写。
+      const items: LocalIntent[] = [
         cmd({ type: 'move_task', taskId, parentId: nextParent, order: placed.order }),
         upsertMut('task', taskId, { mountDirId: nextMount, updatedAt: now }),
       ]
@@ -991,10 +901,6 @@ export class GtdStore {
         const order = placed.reindexed.get(sib.id)
         if (order != null)
           items.push(upsertMut('task', sib.id, { order, updatedAt: now }))
-      }
-      if (nextMount != null) {
-        for (const id of descendantIds)
-          items.push(upsertMut('task', id, { mountDirId: nextMount, updatedAt: now }))
       }
       return items
     })
@@ -1068,7 +974,7 @@ export class GtdStore {
         throw new Error('任务不存在')
       const current = store.tagIdsOf(taskId)
       const next = new Set(tagIds)
-      const items: GtdMutation[] = []
+      const items: LocalIntent[] = []
       for (const tagId of tagIds) {
         if (!current.includes(tagId))
           items.push(upsertMut('task_tag', `${taskId}|${tagId}`, { taskId, tagId }))
@@ -1151,22 +1057,25 @@ export class GtdStore {
   }
 
   /**
-   * 导入：JSON → parseRows → remapRowIds（全量换新 id，仅新建不覆盖）→
-   * orderImportRows → applyLocal → push。
+   * 导入：JSON → parseRows → remapRowIds（全量换新 id，仅新建不覆盖）→ 每行一条 create 写入，
+   * 整份导入是一条事务。
    */
   static importDocument(json: string): boolean {
     const s = GtdStore.store()
-    const userId = s.get(GtdStore.userIdAtom) ?? 'u1'
-    let rows: EntityRow[]
+    const local = s.get(GtdStore.localAtom)
+    if (!local) {
+      s.set(GtdStore.errorAtom, 'GTD 数据尚未加载')
+      return false
+    }
+    let writes: Write[]
     try {
-      rows = parseRows(json)
+      const rows = orderImportRows(remapRowIds(parseRows(json), local.confirmed.userId)).filter(r => !r.deleted)
+      writes = WritesSchema.parse(rows.map(r => ({ op: 'create', entity: r.entity, id: r.id, data: r.data })))
     }
     catch (e) {
       s.set(GtdStore.errorAtom, `导入失败：${e instanceof Error ? e.message : String(e)}`)
       return false
     }
-    const ordered = orderImportRows(remapRowIds(rows, userId))
-    const items = ordered.map(r => upsertMut(r.entity, r.id, r.data as Record<string, unknown>))
-    return GtdStore.applyLocal(() => items)
+    return GtdStore.commitWrites(local, s.get(GtdStore.rowsAtom), writes)
   }
 }

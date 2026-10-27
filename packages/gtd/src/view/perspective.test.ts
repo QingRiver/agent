@@ -194,6 +194,26 @@ describe('groupBy', () => {
     expect(groups).toHaveLength(2)
   })
 
+  it('status / flagged 分组标题为中文', () => {
+    const a = makeTaskRow('a', { status: EXPLICIT_STATUS.COMPLETED, completedAt: NOW.toISOString(), flagged: true })
+    const b = makeTaskRow('b')
+    const ctx = makeCtx([a, b])
+    expect(groupBy([a, b], [GROUP_KEY.STATUS], ctx).map(g => g.label)).toEqual(['已完成', '活跃'])
+    expect(groupBy([a, b], [GROUP_KEY.FLAGGED], ctx).map(g => g.label)).toEqual(['已加旗标', '未加旗标'])
+  })
+
+  it('缩进只数同组里的祖先：父任务在别的组时子任务顶格', () => {
+    const p = makeTaskRow('p', { groupType: 'parallel', order: 0, mountDirId: 'd' })
+    const a = makeTaskRow('a', { parentId: 'p', order: 0, mountDirId: 'd' })
+    const c = makeTaskRow('c', { parentId: 'p', order: 1, mountDirId: 'd', status: EXPLICIT_STATUS.COMPLETED, completedAt: NOW.toISOString() })
+    const groups = groupBy([p, a, c], [GROUP_KEY.STATUS], makeCtx([p, a, c]))
+    const depths = groups.map(g => [g.label, g.children.map(i => 'depth' in i ? [i.taskId, i.depth] : null)])
+    expect(depths).toEqual([
+      ['活跃', [['p', 0], ['a', 1]]],
+      ['已完成', [['c', 0]]],
+    ])
+  })
+
   it('dueDate 分组标题按 timeZone 格式化到分钟', () => {
     const iso = '2026-08-08T15:59:00.000Z'
     const t = makeTaskRow('a', { dueDate: iso })
@@ -215,6 +235,23 @@ describe('sortTasks', () => {
     const sortBy = [makeSortKey({ field: SORT_FIELD.DUE_DATE, dir: 'asc' })]
     const out = sortTasks([t1, t2, t3], sortBy, new RowStore([t1, t2, t3]), buildTaskTree([t1, t2, t3]))
     expect(out.map(r => r.id)).toEqual(['c', 'b', 'a'])
+  })
+
+  it.each([
+    ['name 降序', SORT_FIELD.NAME, { a: { name: 'beta' }, b: { name: 'gamma' }, c: { name: 'alpha' } }],
+    ['addedAt 降序', SORT_FIELD.ADDED_AT, {
+      a: { createdAt: '2026-07-01T00:00:00.000Z' },
+      b: { createdAt: '2026-07-03T00:00:00.000Z' },
+      c: { createdAt: '2026-07-02T00:00:00.000Z' },
+    }],
+  ] as const)('%s', (_label, field, data) => {
+    const rows = (['a', 'b', 'c'] as const).map(id => makeTaskRow(id, data[id]))
+    const expected = [...rows].sort((x, y) => field === SORT_FIELD.NAME
+      ? y.data.name.localeCompare(x.data.name)
+      : y.data.createdAt.localeCompare(x.data.createdAt)).map(r => r.id)
+    const out = sortTasks(rows, [makeSortKey({ field, dir: 'desc' })], new RowStore(rows), buildTaskTree(rows))
+    expect(out.map(r => r.id)).toEqual(expected)
+    expect(expected).not.toEqual(['a', 'b', 'c'])
   })
 })
 

@@ -8,9 +8,12 @@
  */
 import type { RepeatRule } from '../data/schema'
 
-/** 是否终止重复（completedOccurrences>=maxOccurrences 或 now>endDate）。 */
+/**
+ * 完成当前实例时是否终止重复。maxOccurrences 是系列实例总数：当前实例是第
+ * completedOccurrences+1 个，已到上限就不再生成；或 now>endDate。
+ */
 export function shouldStop(rule: RepeatRule, now: Date): boolean {
-  if (rule.maxOccurrences != null && rule.completedOccurrences >= rule.maxOccurrences)
+  if (rule.maxOccurrences != null && rule.completedOccurrences + 1 >= rule.maxOccurrences)
     return true
   if (rule.endDate && now.getTime() > new Date(rule.endDate).getTime())
     return true

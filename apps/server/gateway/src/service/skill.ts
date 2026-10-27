@@ -11,7 +11,8 @@ import {
 import { and, eq, inArray } from 'drizzle-orm'
 import { invalidateAgentConfigCache } from '../agent/agentConfig/store'
 import { db } from '../db/drizzle'
-import { agentConfigs, dirs, gtdTasks, kbDocuments, kbs, skills, skillTags, versionTexts } from '../db/schema'
+import { agentConfigs, dirs, kbDocuments, kbs, skills, skillTags, versionTexts } from '../db/schema'
+import { hasTasksMountedIn } from '../gtd/txn-log'
 
 export class SkillConflictError extends Error {
   readonly status: 400 | 409
@@ -141,12 +142,7 @@ async function subtreeHasKbOrTask(userId: string, subtreeIds: string[], tx?: DbO
   )).limit(1)
   if (doc)
     return true
-  const [task] = await client.select({ id: gtdTasks.id }).from(gtdTasks).where(and(
-    eq(gtdTasks.userId, userId),
-    inArray(gtdTasks.mountDirId, subtreeIds),
-    eq(gtdTasks.deleted, false),
-  )).limit(1)
-  return !!task
+  return hasTasksMountedIn(client, userId, subtreeIds)
 }
 
 async function skillRowsIn(userId: string, dirIds: string[], tx?: DbOrTx) {

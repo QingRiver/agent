@@ -11,7 +11,6 @@ export function useGtd() {
   const selectedTaskId = useAtomValue(GtdStore.selectedTaskIdAtom)
   const isLoading = useAtomValue(GtdStore.isLoadingAtom)
   const syncStatus = useAtomValue(GtdStore.syncStatusAtom)
-  const syncLocked = useAtomValue(GtdStore.syncLockedAtom)
   const error = useAtomValue(GtdStore.errorAtom)
 
   return {
@@ -24,10 +23,8 @@ export function useGtd() {
     selectedTaskId,
     isLoading,
     syncStatus,
-    syncLocked,
     error,
     load: GtdStore.load,
-    recoverFromReject: GtdStore.recoverFromReject,
     exportDocument: GtdStore.exportDocument,
     importDocument: GtdStore.importDocument,
     setSelection: GtdStore.setSelection,

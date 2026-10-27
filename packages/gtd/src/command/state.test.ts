@@ -1,10 +1,10 @@
 /**
  * 状态机行为规约（SP-STATE-*）。
  * 每条 `it` 上方 `// SP-STATE-N` 与 `wiki/draft/gtd行为规约.md` 一一对应。
- * 实现在 `command/state-machine.ts`（complete/drop/reopen/restore/deleteTask，经 applyPush 驱动）；
+ * 实现在 `command/state-machine.ts`（complete/drop/reopen/restore/deleteTask，经 sync/intent.ts 驱动）；
  * 级联计划委托 L3 `inheritance/cascade.ts`（complete/drop/delete 不改子任务自身状态；reopen/restore 仅自身）。
  */
-import type { EntityRowOf, GtdCommand, GtdMutation, SyncState } from '../sync/apply'
+import type { EntityRow, EntityRowOf, GtdCommand, GtdMutation } from '../data/sync-schema'
 import { describe, expect, it } from 'vitest'
 import { EXPLICIT_STATUS, GROUP_TYPE } from '../data/types'
 import {
@@ -12,19 +12,40 @@ import {
   findRow,
   makeCommand,
   makeMutation,
-  makeState,
   makeTaskRow,
   SYNC_NOW,
 } from '../fixtures'
 import { effectiveStatus } from '../inheritance/effective'
 import { buildTaskTree } from '../structure/tree'
-import { applyPush } from '../sync/apply'
+import { applyCommand, applyMutation } from '../sync/intent'
 
-function runCmd(state: SyncState, cmd: GtdCommand) {
-  return applyPush(state, { mutations: [], commands: [cmd], lastSyncId: 0 })
+interface State {
+  rows: EntityRow[]
+  clock: number
 }
-function runMut(state: SyncState, mut: GtdMutation) {
-  return applyPush(state, { mutations: [mut], commands: [], lastSyncId: 0 })
+
+function makeState(rows: EntityRow[]): State {
+  return { rows, clock: rows.reduce((m, r) => Math.max(m, r.syncId), 0) }
+}
+
+/** 在行副本上执行一次本地意图；违规时行不变，记入 rejected。syncId 只用来观察哪些行被改过。 */
+function run(state: State, id: string, exec: (rows: EntityRow[], nextSyncId: () => number) => void) {
+  const rows = structuredClone(state.rows)
+  let clock = state.clock
+  try {
+    exec(rows, () => ++clock)
+    return { state: { rows, clock }, response: { applied: [id], rejected: [] as { id: string, reason: string }[] } }
+  }
+  catch (e) {
+    return { state, response: { applied: [] as string[], rejected: [{ id, reason: (e as Error).message }] } }
+  }
+}
+
+function runCmd(state: State, cmd: GtdCommand) {
+  return run(state, cmd.id, (rows, next) => applyCommand(cmd, rows, 'u1', next))
+}
+function runMut(state: State, mut: GtdMutation) {
+  return run(state, mut.id, (rows, next) => applyMutation(mut, rows, 'u1', next))
 }
 
 describe('状态机 [SP-STATE]', () => {
@@ -103,7 +124,7 @@ describe('状态机 [SP-STATE]', () => {
       const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.COMPLETED, completedAt: SYNC_NOW, repeatRuleId: 'r1' }, { syncId: 1 })])
       const res = runCmd(state, makeCommand({ id: 'c1', type: 'reopen', taskId: 't1' }))
       expect(res.response.rejected).toHaveLength(1)
-      expect(res.response.rejected[0]?.reason ?? '').toContain('SP-INV-REPEAT-REOPEN')
+      expect(res.response.rejected[0]?.reason ?? '').toContain('不能重新打开')
     })
     it('reopen 子 → 向上翻 COMPLETED 祖先链（父/祖父都→ACTIVE）', () => {
       const gp = makeTaskRow('gp', { status: EXPLICIT_STATUS.COMPLETED, completedAt: SYNC_NOW }, { syncId: 1 })
@@ -257,7 +278,7 @@ describe('状态机 [SP-STATE]', () => {
     })
   })
 
-  // SP-STATE-7: 回收站 live 行 upsert noop；已 purge tombstone → REMOTE_PURGED（不 LWW 写活）
+  // SP-STATE-7: 回收站里的任务 upsert noop；已永久删除的任务不在行里，命令与补丁都被拒绝
   describe('终态锁 / purge [SP-STATE-7]', () => {
     it('回收站 live（status=DELETED, envelope 未删）：upsert noop，不写活', () => {
       const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.DELETED, droppedAt: SYNC_NOW, name: '在站' }, { syncId: 1 })])
@@ -268,27 +289,14 @@ describe('状态机 [SP-STATE]', () => {
       expect(t.deleted).toBe(false)
       expect(field<string>(t, 'name')).toBe('在站')
     })
-    it('已 purge（envelope.deleted + status=DELETED）：upsert → REMOTE_PURGED，不写活', () => {
-      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.DELETED, droppedAt: SYNC_NOW, name: '写周报' }, { syncId: 1, deleted: true })])
-      const res = runMut(state, makeMutation({ id: 'm1', entityId: 't1', patch: { name: '复活' } }))
+    it('已永久删除（不在行里）：upsert 被拒绝，不新建', () => {
+      const res = runMut(makeState([]), makeMutation({ id: 'm1', entityId: 't1', patch: { name: '复活' } }))
       expect(res.response.rejected).toHaveLength(1)
-      expect(res.response.rejected[0]?.reason).toBe('REMOTE_PURGED:写周报')
-      const t = findRow(res.state.rows, 'task', 't1')!
-      expect(t.deleted).toBe(true)
-      expect(field<string>(t, 'name')).toBe('写周报')
+      expect(findRow(res.state.rows, 'task', 't1')).toBeUndefined()
     })
-    it('已 purge：command → REMOTE_PURGED', () => {
-      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.DELETED, droppedAt: SYNC_NOW, name: '写周报' }, { syncId: 1, deleted: true })])
-      const res = runCmd(state, makeCommand({ id: 'c1', type: 'complete', taskId: 't1' }))
+    it('已永久删除（不在行里）：命令被拒绝', () => {
+      const res = runCmd(makeState([]), makeCommand({ id: 'c1', type: 'complete', taskId: 't1' }))
       expect(res.response.rejected).toHaveLength(1)
-      expect(res.response.rejected[0]?.reason).toBe('REMOTE_PURGED:写周报')
-    })
-    it('边界：sync 软删(status=ACTIVE, deleted=true) 仍走 LWW 复活（锁仅作用于 purged）', () => {
-      const state = makeState([makeTaskRow('t1', {}, { syncId: 1, deleted: true })])
-      const res = runMut(state, makeMutation({ id: 'm1', entityId: 't1', patch: { name: '复活' } }))
-      const t = findRow(res.state.rows, 'task', 't1')!
-      expect(t.deleted).toBe(false)
-      expect(field<string>(t, 'name')).toBe('复活')
     })
   })
 
@@ -552,5 +560,33 @@ describe('状态机 [SP-STATE]', () => {
       expect(field<string>(findRow(res.state.rows, 'task', 'p'), 'status')).toBe(EXPLICIT_STATUS.COMPLETED)
       expect(field<string>(findRow(res.state.rows, 'task', 'c1'), 'status')).toBe(EXPLICIT_STATUS.ACTIVE)
     })
+  })
+})
+
+describe('拒绝原因面向用户：用任务名称指代，不带 id', () => {
+  const reason = (rows: EntityRow[], cmd: GtdCommand) => runCmd(makeState(rows), cmd).response.rejected[0]?.reason
+
+  it.each([
+    ['搁置的任务不能完成', { status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { type: 'complete' }, '「写周报」已搁置，不能标记完成'],
+    ['回收站里的任务不能搁置', { status: EXPLICIT_STATUS.DELETED, droppedAt: SYNC_NOW }, { type: 'drop' }, '「写周报」在回收站中，不能搁置'],
+    ['搁置的任务不能重新打开', { status: EXPLICIT_STATUS.HOLD, heldAt: SYNC_NOW }, { type: 'reopen' }, '「写周报」已搁置，不能重新打开'],
+    ['已完成的任务不能从搁置恢复', { status: EXPLICIT_STATUS.COMPLETED, completedAt: SYNC_NOW }, { type: 'restore' }, '「写周报」已完成，不能从搁置中恢复'],
+    ['重复任务的已完成实例不能重开', { status: EXPLICIT_STATUS.COMPLETED, completedAt: SYNC_NOW, repeatRuleId: 'r1' }, { type: 'reopen' }, '「写周报」是重复任务的已完成实例，不能重新打开；下一次已经生成'],
+  ] as const)('%s', (_label, data, cmd, expected) => {
+    const rows = [makeTaskRow('t1', { name: '写周报', ...data })]
+    expect(reason(rows, makeCommand({ taskId: 't1', ...cmd }))).toBe(expected)
+  })
+
+  it('移到自己的子任务下', () => {
+    const rows = [
+      makeTaskRow('p', { name: '父', groupType: GROUP_TYPE.PARALLEL, mountDirId: 'd' }),
+      makeTaskRow('c', { name: '子', parentId: 'p', mountDirId: 'd' }),
+    ]
+    expect(reason(rows, makeCommand({ type: 'move_task', taskId: 'p', parentId: 'c', order: 0 })))
+      .toBe('「父」不能移到自己或自己的子任务下面')
+  })
+
+  it('任务不存在', () => {
+    expect(reason([], makeCommand({ taskId: 'nope' }))).toBe('任务不存在或已被永久删除')
   })
 })

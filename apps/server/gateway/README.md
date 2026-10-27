@@ -64,9 +64,10 @@ Postgres 容器与默认连接串见 [infra/postgres/README.md](../../../infra/p
 | `0000_agent_threads.sql` | `agent_configs`、`conversation_threads` |
 | `0001_tags.sql` | `tags` |
 | `0002_dirs.sql` | `dirs` |
-| `0003_gtd.sql` | `gtd_tasks` / `task_tags` / `perspectives` / `attachments` / `sync_*` |
+| `0003_gtd.sql` | 旧 GTD 行表（已被 0007 删除） |
 | `0004_kb.sql` | `kb_documents`、`kb_chunks`、`kb_doc_tags`、`kbs` |
 | `0005_skills.sql` | `skills`、`version_text`、`skill_tags` |
+| `0007_gtd_txn_log.sql` | 删除 0003 的旧 GTD 表与存量数据；新建 `gtd_heads`、`gtd_txns`、`gtd_rows`、`gtd_tombstones`、`gtd_clients` |
 
 Schema TS：`src/db/schema/{conversation,tags,project,gtd,kb,skill}.ts`。生成：`pnpm --filter server db:generate`。
 
@@ -101,7 +102,6 @@ erDiagram
 
   %% tags（KB / GTD 共用）
   tags ||--o{ kb_doc_tags : "tag_id"
-  tags ||--o{ gtd_task_tags : "tag_id"
 
   %% kb
   kb_nodes ||--o{ kb_nodes : "parent_id"
@@ -109,16 +109,11 @@ erDiagram
   kb_documents ||--o{ kb_chunks : "doc_id"
   kb_documents ||--o{ kb_doc_tags : "doc_id"
 
-  %% gtd
-  gtd_folders ||--o{ gtd_folders : "parent_id"
-  gtd_folders ||--o{ gtd_projects : "folder_id"
-  gtd_projects ||--o{ gtd_tasks : "project_id"
-  gtd_tasks ||--o{ gtd_tasks : "parent_id"
-  gtd_tasks ||--o{ gtd_task_tags : "task_id"
-  gtd_tasks ||--o{ gtd_attachments : "task_id"
-  gtd_perspectives
-  gtd_sync_clocks
-  gtd_sync_mutations
+  %% gtd：事务链 + 重放出的当前状态，无外键（引用一致性是读时规则）
+  gtd_heads ||--o{ gtd_txns : "user_id"
+  gtd_heads ||--o{ gtd_rows : "user_id"
+  gtd_heads ||--o{ gtd_tombstones : "user_id"
+  gtd_heads ||--o{ gtd_clients : "user_id"
 
   user {
     text id PK
@@ -152,11 +147,19 @@ erDiagram
     text id PK
     text doc_id FK
   }
-  gtd_tasks {
+  gtd_txns {
+    text user_id PK
+    bigint seq PK
+    text client_id
+    bigint client_seq
+    jsonb writes
+  }
+  gtd_rows {
+    text user_id PK
+    text entity PK
     text id PK
-    text user_id
-    text project_id FK
-    text parent_id FK
+    jsonb data
+    bigint last_seq
   }
   checkpoints {
     text thread_id PK
@@ -243,10 +246,11 @@ erDiagram
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/gtd/sync/push` | 增量推送 |
-| POST | `/gtd/sync/pull` | 增量拉取 |
+| POST | `/gtd/sync` | 上传本机未确认事务 + 拉取服务器新事务（或快照），一次往返 |
 
-契约：`@agent/gtd` 的 `PushRequestSchema` / `PullRequestSchema`。
+契约：`@agent/gtd` 的 `SyncRequestSchema` / `SyncResponseSchema`；原理见 [wiki/GTD-事务重放.md](../../../wiki/GTD-事务重放.md)。
+服务器只按设备 clientSeq 去重查缺号、分配连续 seq、用 `@agent/gtd` 的 `appendToHead` 重放，不做业务裁决。
+删除标签时选「删除关联任务」由服务器生成一条事务（设备 id `server`）把任务移进回收站。
 
 ### curl 示例
 

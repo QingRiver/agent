@@ -12,7 +12,7 @@
  *
  * 物理不变量 INV：禁止「物理完成 ∧ 有效活跃直接子」（有效维度）。
  * 父完成时子有效状态跟随完成：complete(P) 后子有效变完成（无有效活跃直接子），INV 自动满足；
- * reconcile 作脏数据/并发遗留兜底。createTask/moveTask/克隆 planUpwardActivation 向上翻补齐重开路径。
+ * createTask/moveTask/克隆 planUpwardActivation 向上翻补齐重开路径。
  *
  * 执行（盖戳/清戳 + 翻状态 + stamp syncId）由 L5 `applySteps` 负责：`targetStatus` 决定戳一致性——
  * ACTIVE 则三个终态戳全清；任一终态则盖该终态戳、清另两个（单一终态时间戳不变量，见 derived/invariant.ts）。
@@ -34,7 +34,7 @@ export interface CascadeStep {
 /**
  * 完成计划：父完成时子的有效状态跟随完成——只改自身状态为完成（子的有效状态由 effectiveStatus
  * 派生为完成，不改子任务自身状态）。故 plan 恒返回空（自身由 completeTask 命令直接写）。
- * 物理不变量 INV「物理完成 ∧ 有效活跃直接子」自动维护：complete(P) 后子有效变完成，无有效活跃直接子；reconcile 作脏数据兜底。
+ * 物理不变量 INV「物理完成 ∧ 有效活跃直接子」自动维护：complete(P) 后子有效变完成，无有效活跃直接子。
  */
 export function planCompleteCascade(_taskId: string, _tree: TaskTree): CascadeStep[] {
   return []

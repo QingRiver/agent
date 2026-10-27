@@ -1,7 +1,11 @@
+import type { EntityRow, EntityRowOf } from '../data/sync-schema'
 import { describe, expect, it } from 'vitest'
+import { RowStore } from '../data/rows'
 import { REPEAT_ANCHOR, REPEAT_CYCLE } from '../data/types'
-import { makeRepeatRule, makeTask, NOW } from '../fixtures'
+import { validateInvariants } from '../derived/invariant'
+import { makeCommand, makeRepeatRule, makeTask, makeTaskRow, NOW } from '../fixtures'
 import { computeNextDates } from './repeat'
+import { completeTask } from './state-machine'
 
 const DAY = 86400000
 
@@ -70,5 +74,37 @@ describe('computeNextDates', () => {
     const dueMs = new Date(next.dueDate as string).getTime()
     const deferMs = new Date(next.deferDate as string).getTime()
     expect(dueMs - deferMs).toBe(2 * DAY)
+  })
+})
+
+describe('完成重复任务克隆下一实例：同级 order', () => {
+  const rule = makeRepeatRule({ id: 'r1', cycle: REPEAT_CYCLE.DAILY, anchor: REPEAT_ANCHOR.COMPLETION })
+  const sibling = (id: string, order: number) => makeTaskRow(id, { mountDirId: 'd1', parentId: 'p', order })
+  const complete = (rows: EntityRow[]) => {
+    let n = 0
+    completeTask(makeCommand({ taskId: 't', clientGenerated: { nextTaskId: 'next' } }), rows, () => ++n)
+    return rows.find((r): r is EntityRowOf<'task'> => r.entity === 'task' && r.id === 'next')!
+  }
+  const base = () => [
+    makeTaskRow('p', { mountDirId: 'd1', groupType: 'parallel' }),
+    makeTaskRow('t', { mountDirId: 'd1', parentId: 'p', order: 1, repeatRuleId: 'r1', repeatRule: rule }),
+  ]
+
+  it('新实例紧跟旧实例，夹在下一兄弟之前，不违反同级 order 唯一', () => {
+    const rows = [...base(), sibling('s', 2)]
+    expect(complete(rows).data.order).toBe(1.5)
+    expect(validateInvariants(new RowStore(rows))).toEqual([])
+  })
+
+  it('旧实例是最后一个：排在它之后', () => {
+    const rows = base()
+    expect(complete(rows).data.order).toBe(2)
+    expect(validateInvariants(new RowStore(rows))).toEqual([])
+  })
+
+  it('与下一兄弟之间已无空隙：排到同级末尾', () => {
+    const rows = [...base(), sibling('s', 1 + 1e-12), sibling('z', 5)]
+    expect(complete(rows).data.order).toBe(6)
+    expect(validateInvariants(new RowStore(rows))).toEqual([])
   })
 })

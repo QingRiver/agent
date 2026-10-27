@@ -15,16 +15,59 @@ export interface TaskTree {
 
 const byOrder = (a: { order: number }, b: { order: number }) => a.order - b.order
 
-/** 由扁平 tasks 按 parentId 构建树（根为 parentId 为 null 或悬空的顶层 action） */
+/** 环里被断开的节点：syncId（最后一次写入的序号）最大者，同号取 id 较大者。 */
+function cycleBreaker(cycle: EntityRowOf<'task'>[]): string {
+  let pick = cycle[0]!
+  for (const task of cycle) {
+    if (task.syncId > pick.syncId || (task.syncId === pick.syncId && task.id > pick.id))
+      pick = task
+  }
+  return pick.id
+}
+
+/**
+ * 每个任务的有效父 id。指向自身、指向不存在的任务视为根；
+ * parentId 各自后写赢可能拼出环，环里由 cycleBreaker 选出的节点视为根。
+ */
+function resolveParents(tasks: EntityRowOf<'task'>[]): Map<string, string | null> {
+  const ids = new Set(tasks.map(t => t.id))
+  const parentOf = new Map<string, string | null>()
+  for (const task of tasks) {
+    const parentId = task.data.parentId
+    parentOf.set(task.id, parentId && parentId !== task.id && ids.has(parentId) ? parentId : null)
+  }
+  const byId = new Map(tasks.map(t => [t.id, t]))
+  const done = new Set<string>()
+  for (const task of tasks) {
+    const path: string[] = []
+    const onPath = new Map<string, number>()
+    let cur: string | null = task.id
+    while (cur != null && !done.has(cur) && !onPath.has(cur)) {
+      onPath.set(cur, path.length)
+      path.push(cur)
+      cur = parentOf.get(cur) ?? null
+    }
+    if (cur != null && onPath.has(cur)) {
+      const cycle = path.slice(onPath.get(cur)!).map(id => byId.get(id)!)
+      parentOf.set(cycleBreaker(cycle), null)
+    }
+    for (const id of path)
+      done.add(id)
+  }
+  return parentOf
+}
+
+/** 由扁平 tasks 按 parentId 构建树（根为 parentId 为 null、悬空、指向自身或被断开的环节点） */
 export function buildTaskTree(tasks: EntityRowOf<'task'>[]): TaskTree {
   const byId = new Map<string, TaskNode>()
   for (const task of tasks)
     byId.set(task.id, { task, parent: null, children: [] })
+  const parentOf = resolveParents(tasks)
   const roots: TaskNode[] = []
   for (const task of tasks) {
     const node = byId.get(task.id)!
-    const parentId = task.data.parentId
-    if (parentId && byId.has(parentId)) {
+    const parentId = parentOf.get(task.id)
+    if (parentId) {
       const parent = byId.get(parentId)!
       node.parent = parent
       parent.children.push(node)

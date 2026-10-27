@@ -76,9 +76,9 @@ export function TagManager({ open, onClose }: TagManagerProps) {
   async function afterDeleteRefresh(hadTasks: boolean) {
     void KbStore.refresh()
     void SkillStore.refresh()
-    // REST 已软删 gtd_task_tags；pull + 刷 rowsAtom（不依赖 /gtd 是否挂了 GtdSync）
+    // 删除关联任务时服务器追加了一条事务，立刻同步一轮拉下来
     if (hadTasks)
-      await GtdStore.refreshBindingsFromServer()
+      await GtdStore.syncNow()
   }
 
   async function onCreate() {

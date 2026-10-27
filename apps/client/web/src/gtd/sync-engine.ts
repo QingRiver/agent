@@ -1,66 +1,48 @@
 /**
- * SyncEngine：无头守护进程。
+ * SyncEngine：无头守护进程，只做一件事——把本机未确认事务带到 POST /gtd/sync，
+ * 把返回的新事务（或快照）重放进已确认状态并落盘。
  *
- * 唯一职责：在本地 IndexedDB 与远端 Server 之间可靠搬运数据。
- * 不关心 UI 框架、不关心透视渲染。用户编辑走 GtdStore → scheduleSync；
- * Engine 只响应 scheduleSync 与环境信号。
- *
- * 状态机：IDLE / SYNCING / ERROR / OFFLINE
- * 防幽灵闪烁：outbox 非空 → 只 push 不 pull
+ * 没有冲突、拒绝与回滚：服务器对合法事务只排序不裁决，界面永远是 predict(已确认 + 未确认)。
+ * 一轮同步期间又有新编辑时，本轮结束后立刻再跑一轮。
  */
-import type { EntityRow, GtdCommand, GtdMutation, PullResponse, PushResponse } from '@agent/gtd'
-import { isMutation } from '@agent/gtd'
-import {
-  clearAll,
-  loadLastSyncId,
-  loadOutbox,
-  rebaseTransaction,
-} from './row-store'
+import type { ReplicaState, SyncRequest, SyncResponse } from '@agent/gtd'
+import type { PendingQueue, ReplicaStorage } from './replica-store'
+import { receivePull } from '@agent/gtd'
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline'
 
-export interface SyncApi {
-  push: (body: { mutations: GtdMutation[], commands: GtdCommand[], lastSyncId: number }) => Promise<PushResponse>
-  pull: (body: { lastSyncId: number }) => Promise<PullResponse>
+export interface SyncEngineOptions {
+  storage: ReplicaStorage
+  request: (req: SyncRequest) => Promise<SyncResponse>
+  /** 当前内存里的已确认状态；还没加载时为 null，此时不同步。 */
+  getConfirmed: () => ReplicaState | null
+  /** 一轮同步落盘后回调：新的已确认状态与磁盘上的未确认队列。 */
+  onSynced: (confirmed: ReplicaState, queue: PendingQueue) => void
+  newClientId?: () => string
 }
+
+const POLL_MS = 5 * 60 * 1000
 
 export class SyncEngine {
   private syncing = false
   private dirty = false
   private timer: ReturnType<typeof setTimeout> | null = null
+  private intervalId: ReturnType<typeof setInterval> | null = null
+  private daemons = false
   private _status: SyncStatus = 'idle'
   private onStatusChange?: (status: SyncStatus) => void
-  private onRejected?: (
-    rejected: PushResponse['rejected'],
-    outboxSnapshot: Array<GtdMutation | GtdCommand>,
-  ) => void
+  private readonly options: SyncEngineOptions
 
-  private onSynced?: (changes: EntityRow[]) => void
-  private api: SyncApi
-  private daemons = false
-
-  constructor(api: SyncApi) {
-    this.api = api
+  constructor(options: SyncEngineOptions) {
+    this.options = options
   }
 
-  /** 设置状态回调（UI 顶栏 icon） */
   setStatusListener(cb: (status: SyncStatus) => void): void {
     this.onStatusChange = cb
   }
 
-  /** 设置 rejected 回调；rebase 前调用并附带 outbox 快照（供 REMOTE_PURGED fork） */
-  setRejectedListener(
-    cb: (
-      rejected: PushResponse['rejected'],
-      outboxSnapshot: Array<GtdMutation | GtdCommand>,
-    ) => void,
-  ): void {
-    this.onRejected = cb
-  }
-
-  /** 设置 synced 回调：push/pull 后以服务端权威 changes 刷新调用方内存行 */
-  setSyncedListener(cb: (changes: EntityRow[]) => void): void {
-    this.onSynced = cb
+  get status(): SyncStatus {
+    return this._status
   }
 
   private setStatus(status: SyncStatus): void {
@@ -68,22 +50,13 @@ export class SyncEngine {
     this.onStatusChange?.(status)
   }
 
-  /** 当前状态（只读） */
-  get status(): SyncStatus {
-    return this._status
-  }
-
-  /** debounce ~400ms 后 sync */
   scheduleSync(debounceMs = 400): void {
-    if (this.timer) {
+    if (this.timer)
       clearTimeout(this.timer)
-    }
     this.timer = setTimeout(() => void this.sync(), debounceMs)
   }
 
-  /** 同步循环 */
   async sync(): Promise<void> {
-    // 状态机：SYNCING 中不并行
     if (this.syncing) {
       this.dirty = true
       return
@@ -94,164 +67,84 @@ export class SyncEngine {
     }
     this.syncing = true
     this.setStatus('syncing')
-
     try {
-      const outbox = await loadOutbox()
-      const lastSyncId = await loadLastSyncId()
-
-      // 硬规则：outbox 非空 → 只 push；空 → pull
-      const pushRes = outbox.length > 0
-        ? await this.api.push({
-            mutations: outbox.filter(isMutation) as GtdMutation[],
-            commands: outbox.filter(i => !isMutation(i)) as GtdCommand[],
-            lastSyncId,
-          })
-        : null
-
-      if (pushRes) {
-        // rejected 须在 rebase 前回调，以便 soft 路径（REMOTE_PURGED fork）仍能读 outbox
-        if (pushRes.rejected?.length) {
-          this.onRejected?.(pushRes.rejected, outbox)
-        }
-        // IDB 事务 rebase（ack/nack + changes + lastSyncId）
-        await rebaseTransaction(pushRes)
-        if (pushRes.changes.length > 0) {
-          this.onSynced?.(pushRes.changes)
-        }
-      }
-      else {
-        // pull：只 merge changes + lastSyncId
-        const pullRes = await this.api.pull({ lastSyncId })
-        await rebaseTransaction({ applied: [], rejected: [], changes: pullRes.changes, serverSyncId: pullRes.serverSyncId })
-        if (pullRes.changes.length > 0) {
-          this.onSynced?.(pullRes.changes)
-        }
-      }
-
+      if (await this.round())
+        this.dirty = true
       this.setStatus('idle')
     }
     catch {
+      this.dirty = false
       this.setStatus('error')
-      // 可选：指数退避后 scheduleSync
     }
     finally {
       this.syncing = false
-      // dirty：SYNCING 期间有新编辑 → 同调用栈再跑一轮（await，避免 fire-and-forget 丢结果）
-      if (this.dirty) {
-        this.dirty = false
-        await this.sync()
-      }
     }
-  }
-
-  /**
-   * REST 等外部写改了 sync 行（如 TagsService 软删 task_tag）后调用：
-   * 先消化 outbox（若有），再强制 pull，保证远端 sync_id 增量进 IDB。
-   * 取消 pending debounce，避免与本轮竞态。
-   */
-  async syncRemoteBindings(): Promise<void> {
-    if (this.timer) {
-      clearTimeout(this.timer)
-      this.timer = null
-    }
-    // 若已有 sync 在飞：标 dirty 并等到其（含续跑）结束
-    if (this.syncing) {
-      this.dirty = true
-      while (this.syncing)
-        await new Promise<void>(r => setTimeout(r, 0))
-    }
-    else {
+    if (this.dirty) {
+      this.dirty = false
       await this.sync()
     }
-    // 上一轮若只 push，REST 侧 tombstone 不会出现在 push.changes → 再强制 pull
-    await this.pullOnly()
   }
 
-  /** 忽略 outbox 硬规则，只 pull 增量（供 syncRemoteBindings） */
-  private async pullOnly(): Promise<void> {
-    if (this.syncing) {
-      this.dirty = true
-      while (this.syncing)
-        await new Promise<void>(r => setTimeout(r, 0))
-    }
-    if (!navigator.onLine) {
-      this.setStatus('offline')
-      return
-    }
-    this.syncing = true
-    this.setStatus('syncing')
-    try {
-      const lastSyncId = await loadLastSyncId()
-      const pullRes = await this.api.pull({ lastSyncId })
-      await rebaseTransaction({
-        applied: [],
-        rejected: [],
-        changes: pullRes.changes,
-        serverSyncId: pullRes.serverSyncId,
-      })
-      if (pullRes.changes.length > 0)
-        this.onSynced?.(pullRes.changes)
-      this.setStatus('idle')
-    }
-    catch {
-      this.setStatus('error')
-    }
-    finally {
-      this.syncing = false
-      if (this.dirty) {
-        this.dirty = false
-        await this.sync()
-      }
-    }
+  /** 一次往返；返回是否需要立刻再跑一轮。 */
+  private async round(): Promise<boolean> {
+    const { storage, request, getConfirmed, onSynced } = this.options
+    const confirmed = getConfirmed()
+    if (!confirmed)
+      return false
+    const queue = await storage.loadPending()
+    const res = await request({ clientId: queue.clientId, afterSeq: confirmed.seq, transactions: queue.pending })
+    const next = receivePull({ ...queue, confirmed }, res)
+    await storage.saveConfirmed(confirmed, next.confirmed, {
+      replaced: res.snapshot != null,
+      clientId: queue.clientId,
+      ackedClientSeq: res.ackedClientSeq,
+    })
+    if (res.resendFrom != null)
+      await storage.resolveResend(queue.clientId, res.resendFrom, this.options.newClientId?.() ?? crypto.randomUUID())
+    const after = await storage.loadPending()
+    onSynced(next.confirmed, after)
+    const sent = new Set(queue.pending.map(t => t.id))
+    return res.resendFrom != null || after.pending.some(t => !sent.has(t.id))
   }
 
-  /** 启动守护进程：仅注册 online/visibility/interval，不立即 sync（由 bootstrap/调度器触发） */
+  /** 只注册 online / 可见性 / 定时拉取，不立即同步。 */
   startDaemons(): void {
-    if (this.daemons) {
+    if (this.daemons)
       return
-    }
     this.daemons = true
     window.addEventListener('online', this.onOnline)
     document.addEventListener('visibilitychange', this.onVisibilityChange)
-    this.intervalId = setInterval(() => void this.sync(), 5 * 60 * 1000)
+    this.intervalId = setInterval(() => void this.sync(), POLL_MS)
   }
 
-  /** 停止守护进程（登出用） */
   stopDaemons(): void {
-    if (!this.daemons) {
+    if (!this.daemons)
       return
-    }
     this.daemons = false
     window.removeEventListener('online', this.onOnline)
     document.removeEventListener('visibilitychange', this.onVisibilityChange)
-    if (this.intervalId) {
+    if (this.intervalId)
       clearInterval(this.intervalId)
-    }
-    if (this.timer) {
+    if (this.timer)
       clearTimeout(this.timer)
-    }
   }
-
-  private intervalId: ReturnType<typeof setInterval> | null = null
 
   private onOnline = (): void => {
     void this.sync()
   }
 
   private onVisibilityChange = (): void => {
-    if (document.visibilityState === 'visible') {
+    if (document.visibilityState === 'visible')
       void this.sync()
-    }
   }
 
-  /** 登出/换用户：清空本地数据 */
+  /** 登出 / 换用户：停守护进程并清空本机副本。 */
   async logout(): Promise<void> {
     this.stopDaemons()
-    await clearAll()
+    await this.options.storage.clear()
     this.setStatus('idle')
   }
 
-  /** 启动时灌库 + 同步：空库 pull(0) 灌行；非空库 push pending outbox / pull 增量；末尾统一 startDaemons */
   async bootstrap(): Promise<void> {
     await this.sync()
     this.startDaemons()

@@ -1,18 +1,18 @@
+import type { EntityRow, LocalIntent } from '@agent/gtd'
 import type { SharedTagRow } from '../db/schema/tags'
 import { randomUUID } from 'node:crypto'
+import { EXPLICIT_STATUS } from '@agent/gtd'
 import { setPayloadByDocId } from '@agent/kb'
 import { and, eq, inArray, not } from 'drizzle-orm'
 import { db } from '../db/drizzle'
 import {
-  gtdSyncClocks,
-  gtdTasks,
-  gtdTaskTags,
   kbDocTags,
   kbDocuments,
   skills,
   skillTags,
   tags,
 } from '../db/schema'
+import { appendServerIntents, tasksTaggedWith } from '../gtd/txn-log'
 import { KbService } from './kb'
 import { SkillService } from './skill'
 
@@ -71,18 +71,23 @@ function toDto(row: SharedTagRow): TagDto {
   }
 }
 
-async function allocateSyncIds(userId: string, count: number, tx: Tx): Promise<number[]> {
-  if (count <= 0)
-    return []
-  await tx.insert(gtdSyncClocks).values({ userId, clock: 0 }).onConflictDoNothing()
-  const clockRow = await tx.select().from(gtdSyncClocks).where(eq(gtdSyncClocks.userId, userId)).for('update')
-  const oldClock = clockRow[0]?.clock ?? 0
-  const ids = Array.from({ length: count }, (_, i) => oldClock + i + 1)
-  await tx
-    .update(gtdSyncClocks)
-    .set({ clock: oldClock + count, updatedAt: new Date() })
-    .where(eq(gtdSyncClocks.userId, userId))
-  return ids
+/**
+ * 删除标签时对 GTD 的操作：选中的任务移进回收站（已在回收站的跳过），所有任务解绑这个标签。
+ * rows 是加锁后的当前状态，只对其中存在的行生成意图。
+ */
+function tagRemovalIntents(rows: EntityRow[], tagId: string, trashTaskIds: string[]): LocalIntent[] {
+  const clientTs = new Date().toISOString()
+  const trash = new Set(trashTaskIds)
+  const intents: LocalIntent[] = []
+  for (const row of rows) {
+    if (row.entity === 'task' && trash.has(row.id) && row.data.status !== EXPLICIT_STATUS.DELETED)
+      intents.push({ kind: 'command', command: { type: 'delete', id: randomUUID(), clientTs, taskId: row.id } })
+  }
+  for (const row of rows) {
+    if (row.entity === 'task_tag' && row.data.tagId === tagId)
+      intents.push({ kind: 'mutation', mutation: { id: randomUUID(), entity: 'task_tag', op: 'delete', entityId: row.id, clientTs } })
+  }
+  return intents
 }
 
 export class TagsService {
@@ -270,19 +275,9 @@ export class TagsService {
     return rows.map(r => ({ id: r.id, title: r.title }))
   }
 
-  private static async getLinkedTasks(tagId: string, userId: string): Promise<TagLinkedTask[]> {
-    const rows = await db
-      .select({ id: gtdTasks.id, title: gtdTasks.name })
-      .from(gtdTaskTags)
-      .innerJoin(gtdTasks, eq(gtdTaskTags.taskId, gtdTasks.id))
-      .where(and(
-        eq(gtdTaskTags.tagId, tagId),
-        eq(gtdTaskTags.userId, userId),
-        eq(gtdTaskTags.deleted, false),
-        eq(gtdTasks.userId, userId),
-        eq(gtdTasks.deleted, false),
-      ))
-    return rows.map(r => ({ id: r.id, title: r.title }))
+  private static async getLinkedTasks(tagId: string, userId: string): Promise<(TagLinkedTask & { status: string })[]> {
+    const tasks = await tasksTaggedWith(db, userId, tagId)
+    return tasks.map(t => ({ id: t.id, title: t.name, status: t.status }))
   }
 
   private static async getLinkedSkills(tagId: string, userId: string): Promise<TagLinkedSkill[]> {
@@ -317,28 +312,7 @@ export class TagsService {
 
     await tx.delete(kbDocTags).where(eq(kbDocTags.tagId, tagId))
 
-    const taskTagRows = await tx
-      .select({ taskId: gtdTaskTags.taskId, tagId: gtdTaskTags.tagId })
-      .from(gtdTaskTags)
-      .where(and(
-        eq(gtdTaskTags.tagId, tagId),
-        eq(gtdTaskTags.userId, userId),
-        eq(gtdTaskTags.deleted, false),
-      ))
-
-    if (taskTagRows.length) {
-      const syncIds = await allocateSyncIds(userId, taskTagRows.length, tx)
-      for (let i = 0; i < taskTagRows.length; i++) {
-        const row = taskTagRows[i]!
-        await tx
-          .update(gtdTaskTags)
-          .set({ deleted: true, syncId: syncIds[i] })
-          .where(and(
-            eq(gtdTaskTags.taskId, row.taskId),
-            eq(gtdTaskTags.tagId, row.tagId),
-          ))
-      }
-    }
+    await appendServerIntents(tx, userId, rows => tagRemovalIntents(rows, tagId, []))
 
     const skillTagRows = await tx
       .select({ skillId: skillTags.skillId })
@@ -384,7 +358,7 @@ export class TagsService {
     const linkedSkills = await TagsService.getLinkedSkills(tagId, userId)
 
     if (args.dryRun)
-      return { docs: linkedDocs, tasks: linkedTasks, skills: linkedSkills }
+      return { docs: linkedDocs, tasks: linkedTasks.map(t => ({ id: t.id, title: t.title })), skills: linkedSkills }
 
     if (args.mode === 'untag') {
       let affectedDocIds: string[] = []
@@ -415,71 +389,12 @@ export class TagsService {
       await KbService.removeDoc(docId)
 
     await db.transaction(async (tx) => {
-      if (taskIdsToDelete.length) {
-        const syncIds = await allocateSyncIds(userId, taskIdsToDelete.length, tx)
-        for (let i = 0; i < taskIdsToDelete.length; i++) {
-          const taskId = taskIdsToDelete[i]!
-          await tx
-            .update(gtdTasks)
-            .set({ deleted: true, syncId: syncIds[i], updatedAt: new Date() })
-            .where(and(eq(gtdTasks.id, taskId), eq(gtdTasks.userId, userId)))
-
-          const ttRows = await tx
-            .select({ taskId: gtdTaskTags.taskId, tagId: gtdTaskTags.tagId })
-            .from(gtdTaskTags)
-            .where(and(
-              eq(gtdTaskTags.taskId, taskId),
-              eq(gtdTaskTags.userId, userId),
-              eq(gtdTaskTags.deleted, false),
-            ))
-          if (ttRows.length) {
-            const ttSyncIds = await allocateSyncIds(userId, ttRows.length, tx)
-            for (let j = 0; j < ttRows.length; j++) {
-              const row = ttRows[j]!
-              await tx
-                .update(gtdTaskTags)
-                .set({ deleted: true, syncId: ttSyncIds[j] })
-                .where(and(
-                  eq(gtdTaskTags.taskId, row.taskId),
-                  eq(gtdTaskTags.tagId, row.tagId),
-                ))
-            }
-          }
-        }
-      }
+      await appendServerIntents(tx, userId, rows => tagRemovalIntents(rows, tagId, taskIdsToDelete))
 
       if (remainingDocIds.length) {
         await tx
           .delete(kbDocTags)
           .where(and(eq(kbDocTags.tagId, tagId), inArray(kbDocTags.docId, remainingDocIds)))
-      }
-
-      const remainingTaskIds = linkedTasks
-        .map(t => t.id)
-        .filter(id => !taskIdsToDelete.includes(id))
-      if (remainingTaskIds.length) {
-        const ttRows = await tx
-          .select({ taskId: gtdTaskTags.taskId, tagId: gtdTaskTags.tagId })
-          .from(gtdTaskTags)
-          .where(and(
-            eq(gtdTaskTags.tagId, tagId),
-            eq(gtdTaskTags.userId, userId),
-            eq(gtdTaskTags.deleted, false),
-            inArray(gtdTaskTags.taskId, remainingTaskIds),
-          ))
-        if (ttRows.length) {
-          const syncIds = await allocateSyncIds(userId, ttRows.length, tx)
-          for (let i = 0; i < ttRows.length; i++) {
-            const row = ttRows[i]!
-            await tx
-              .update(gtdTaskTags)
-              .set({ deleted: true, syncId: syncIds[i] })
-              .where(and(
-                eq(gtdTaskTags.taskId, row.taskId),
-                eq(gtdTaskTags.tagId, row.tagId),
-              ))
-          }
-        }
       }
 
       if (remainingSkillIds.length) {

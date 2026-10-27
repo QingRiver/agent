@@ -1,6 +1,7 @@
-import type { GtdCommand, GtdMutation, PullResponse, PushResponse } from '@agent/gtd'
+import type { EntityRow, LocalIntent } from '@agent/gtd'
 import { randomUUID } from 'node:crypto'
-import { e2eFetch, e2eRequest, signInE2E } from '../client'
+import { EXPLICIT_STATUS } from '@agent/gtd'
+import { e2eFetch, e2eRequest, GtdDevice, signInE2E } from '../client'
 import { assert } from '../support'
 
 interface TagRow {
@@ -29,14 +30,17 @@ interface Scenario {
   tag: TagRow
   docs: KbDoc[]
   taskIds: string[]
-  taskTagIds: string[]
 }
 
 interface CleanupState {
   tagIds: Set<string>
   docIds: Set<string>
   taskIds: Set<string>
-  taskTagIds: Set<string>
+}
+
+interface Gtd {
+  token: string
+  device: GtdDevice
 }
 
 function jsonBody(value: unknown): RequestInit {
@@ -46,26 +50,21 @@ function jsonBody(value: unknown): RequestInit {
   }
 }
 
-function mutationId(prefix: string): string {
-  return `${prefix}-${randomUUID()}`
+async function actGtd(gtd: Gtd, intents: LocalIntent[]): Promise<void> {
+  await gtd.device.act(intents)
 }
 
-async function pushSync(
-  token: string,
-  mutations: GtdMutation[],
-  commands: GtdCommand[] = [],
-): Promise<PushResponse> {
-  const response = await e2eFetch<PushResponse>(
-    token,
-    '/gtd/sync/push',
-    jsonBody({ mutations, commands, lastSyncId: 0 }),
-  )
-  assert(response.rejected.length === 0, `GTD push 被拒绝: ${JSON.stringify(response.rejected)}`)
-  assert(
-    response.applied.length === mutations.length + commands.length,
-    `GTD push applied=${response.applied.length}，期望 ${mutations.length + commands.length}`,
-  )
-  return response
+async function gtdRows(gtd: Gtd, deadTagId?: string): Promise<EntityRow[]> {
+  return gtd.device.rows({ isTagLive: tagId => tagId !== deadTagId })
+}
+
+function taskStatus(rows: EntityRow[], taskId: string): string | undefined {
+  const task = rows.find(r => r.entity === 'task' && r.id === taskId)
+  return task?.entity === 'task' ? task.data.status : undefined
+}
+
+function hasTaskTag(rows: EntityRow[], taskId: string, tagId: string): boolean {
+  return rows.some(r => r.entity === 'task_tag' && !r.deleted && r.data.taskId === taskId && r.data.tagId === tagId)
 }
 
 /** 当前用户的知识库挂载点。没有就建一个项目目录并 mark。 */
@@ -93,16 +92,13 @@ async function ensureKbMount(token: string): Promise<string> {
   return dir.id
 }
 
-async function pullAll(token: string): Promise<PullResponse> {
-  return e2eFetch<PullResponse>(token, '/gtd/sync/pull', jsonBody({ lastSyncId: 0 }))
-}
-
 async function createScenario(
-  token: string,
+  gtd: Gtd,
   cleanup: CleanupState,
   suffix: string,
   mountDirId: string,
 ): Promise<Scenario> {
+  const { token } = gtd
   const tag = (await e2eFetch<{ tag: TagRow }>(
     token,
     '/tags/create',
@@ -128,32 +124,35 @@ async function createScenario(
 
   const now = new Date().toISOString()
   const taskIds = [randomUUID(), randomUUID()]
-  const taskTagIds = taskIds.map(taskId => `${taskId}|${tag.id}`)
-  const commands: GtdCommand[] = []
-  const mutations: GtdMutation[] = []
+  const intents: LocalIntent[] = []
   for (const [index, taskId] of taskIds.entries()) {
-    commands.push({
-      id: mutationId('create-task'),
-      type: 'create_task',
-      taskId,
-      name: `e2e-${suffix}-task-${index + 1}`,
-      parentId: null,
-      order: index,
-      mountDirId: null,
-      clientTs: now,
+    intents.push({
+      kind: 'command',
+      command: {
+        id: randomUUID(),
+        type: 'create_task',
+        taskId,
+        name: `e2e-${suffix}-task-${index + 1}`,
+        parentId: null,
+        order: index,
+        mountDirId: null,
+        clientTs: now,
+      },
     })
-    mutations.push({
-      id: mutationId('task-tag'),
-      entity: 'task_tag',
-      entityId: taskTagIds[index]!,
-      op: 'upsert',
-      clientTs: now,
-      patch: { taskId, tagId: tag.id },
+    intents.push({
+      kind: 'mutation',
+      mutation: {
+        id: randomUUID(),
+        entity: 'task_tag',
+        entityId: `${taskId}|${tag.id}`,
+        op: 'upsert',
+        clientTs: now,
+        patch: { taskId, tagId: tag.id },
+      },
     })
     cleanup.taskIds.add(taskId)
-    cleanup.taskTagIds.add(taskTagIds[index]!)
   }
-  await pushSync(token, mutations, commands)
+  await actGtd(gtd, intents)
 
   // 从真实读接口确认两域关联均已落地。
   for (const doc of docs) {
@@ -164,17 +163,13 @@ async function createScenario(
     )).doc
     assert(actual.tagIds.includes(tag.id), `文档 ${doc.id} 未关联 tag ${tag.id}`)
   }
-  const pull = await pullAll(token)
+  const rows = await gtdRows(gtd)
   for (const taskId of taskIds) {
-    const task = pull.changes.find(c => c.entity === 'task' && c.id === taskId)
-    assert(task && !task.deleted, `GTD task ${taskId} 未创建`)
-  }
-  for (const taskTagId of taskTagIds) {
-    const taskTag = pull.changes.find(c => c.entity === 'task_tag' && c.id === taskTagId)
-    assert(taskTag && !taskTag.deleted, `GTD task_tag ${taskTagId} 未创建`)
+    assert(taskStatus(rows, taskId) === EXPLICIT_STATUS.ACTIVE, `GTD task ${taskId} 未创建`)
+    assert(hasTaskTag(rows, taskId, tag.id), `GTD task ${taskId} 未关联 tag ${tag.id}`)
   }
 
-  return { tag, docs, taskIds, taskTagIds }
+  return { tag, docs, taskIds }
 }
 
 async function previewDelete(
@@ -216,8 +211,9 @@ async function assertTagDeleted(token: string, tagId: string): Promise<void> {
   assert(!list.tags.some(tag => tag.id === tagId), `已删除 tag ${tagId} 仍出现在列表`)
 }
 
-async function caseUntag(token: string, cleanup: CleanupState, mountDirId: string): Promise<void> {
-  const scenario = await createScenario(token, cleanup, 'untag', mountDirId)
+async function caseUntag(gtd: Gtd, cleanup: CleanupState, mountDirId: string): Promise<void> {
+  const { token } = gtd
+  const scenario = await createScenario(gtd, cleanup, 'untag', mountDirId)
   const preview = await previewDelete(token, scenario)
   assert(preview.docs.length === 2 && preview.tasks.length === 2, 'untag dryRun 资源数不正确')
 
@@ -231,21 +227,18 @@ async function caseUntag(token: string, cleanup: CleanupState, mountDirId: strin
   for (const doc of scenario.docs)
     await assertDocStatus(token, doc.id, 200, scenario.tag.id)
 
-  const pull = await pullAll(token)
+  const rows = await gtdRows(gtd, scenario.tag.id)
   for (const taskId of scenario.taskIds) {
-    const task = pull.changes.find(c => c.entity === 'task' && c.id === taskId)
-    assert(task && !task.deleted, `untag 错删 GTD task ${taskId}`)
-  }
-  for (const taskTagId of scenario.taskTagIds) {
-    const link = pull.changes.find(c => c.entity === 'task_tag' && c.id === taskTagId)
-    assert(link?.deleted, `untag 后 task_tag ${taskTagId} 未删除`)
+    assert(taskStatus(rows, taskId) === EXPLICIT_STATUS.ACTIVE, `untag 错删 GTD task ${taskId}`)
+    assert(!hasTaskTag(rows, taskId, scenario.tag.id), `untag 后 task ${taskId} 仍显示 tag`)
   }
   await assertTagDeleted(token, scenario.tag.id)
   console.log('[e2e/tags] case1 untag 通过')
 }
 
-async function casePartialDelete(token: string, cleanup: CleanupState, mountDirId: string): Promise<void> {
-  const scenario = await createScenario(token, cleanup, 'partial', mountDirId)
+async function casePartialDelete(gtd: Gtd, cleanup: CleanupState, mountDirId: string): Promise<void> {
+  const { token } = gtd
+  const scenario = await createScenario(gtd, cleanup, 'partial', mountDirId)
   await previewDelete(token, scenario)
   const [deletedDoc, keptDoc] = scenario.docs
   const [deletedTaskId, keptTaskId] = scenario.taskIds
@@ -266,21 +259,17 @@ async function casePartialDelete(token: string, cleanup: CleanupState, mountDirI
   await assertDocStatus(token, deletedDoc.id, 404)
   await assertDocStatus(token, keptDoc.id, 200, scenario.tag.id)
 
-  const pull = await pullAll(token)
-  const deletedTask = pull.changes.find(c => c.entity === 'task' && c.id === deletedTaskId)
-  const keptTask = pull.changes.find(c => c.entity === 'task' && c.id === keptTaskId)
-  assert(deletedTask?.deleted, `部分删除未删除 GTD task ${deletedTaskId}`)
-  assert(keptTask && !keptTask.deleted, `部分删除误删 GTD task ${keptTaskId}`)
-  for (const taskTagId of scenario.taskTagIds) {
-    const link = pull.changes.find(c => c.entity === 'task_tag' && c.id === taskTagId)
-    assert(link?.deleted, `部分删除后 task_tag ${taskTagId} 未清理`)
-  }
+  const rows = await gtdRows(gtd, scenario.tag.id)
+  assert(taskStatus(rows, deletedTaskId) === EXPLICIT_STATUS.DELETED, `部分删除未把 GTD task ${deletedTaskId} 移进回收站`)
+  assert(taskStatus(rows, keptTaskId) === EXPLICIT_STATUS.ACTIVE, `部分删除误删 GTD task ${keptTaskId}`)
+  assert(!hasTaskTag(rows, keptTaskId, scenario.tag.id), `部分删除后 task ${keptTaskId} 仍显示 tag`)
   await assertTagDeleted(token, scenario.tag.id)
   console.log('[e2e/tags] case2 部分删除通过')
 }
 
-async function caseFullDelete(token: string, cleanup: CleanupState, mountDirId: string): Promise<void> {
-  const scenario = await createScenario(token, cleanup, 'full', mountDirId)
+async function caseFullDelete(gtd: Gtd, cleanup: CleanupState, mountDirId: string): Promise<void> {
+  const { token } = gtd
+  const scenario = await createScenario(gtd, cleanup, 'full', mountDirId)
   const preview = await previewDelete(token, scenario)
 
   await e2eFetch<{ ok: true }>(
@@ -298,16 +287,15 @@ async function caseFullDelete(token: string, cleanup: CleanupState, mountDirId: 
 
   for (const doc of scenario.docs)
     await assertDocStatus(token, doc.id, 404)
-  const pull = await pullAll(token)
-  for (const taskId of scenario.taskIds) {
-    const task = pull.changes.find(c => c.entity === 'task' && c.id === taskId)
-    assert(task?.deleted, `全部删除未删除 GTD task ${taskId}`)
-  }
+  const rows = await gtdRows(gtd, scenario.tag.id)
+  for (const taskId of scenario.taskIds)
+    assert(taskStatus(rows, taskId) === EXPLICIT_STATUS.DELETED, `全部删除未把 GTD task ${taskId} 移进回收站`)
   await assertTagDeleted(token, scenario.tag.id)
   console.log('[e2e/tags] case2 全部删除通过')
 }
 
-async function cleanupFlow(token: string, state: CleanupState): Promise<void> {
+async function cleanupFlow(gtd: Gtd, state: CleanupState): Promise<void> {
+  const { token } = gtd
   for (const tagId of state.tagIds) {
     const response = await e2eRequest(
       token,
@@ -323,56 +311,48 @@ async function cleanupFlow(token: string, state: CleanupState): Promise<void> {
       console.warn(`[e2e/tags] cleanup doc ${docId} → ${response.status}`)
   }
 
-  const now = new Date().toISOString()
-  const mutations: GtdMutation[] = [
-    ...[...state.taskTagIds].map((entityId): GtdMutation => ({
-      id: mutationId('cleanup-task-tag'),
-      entity: 'task_tag',
-      entityId,
-      op: 'delete',
-      clientTs: now,
-    })),
-    ...[...state.taskIds].map((entityId): GtdMutation => ({
-      id: mutationId('cleanup-task'),
-      // 测试清理用 sync 软删(op:'delete' → row.deleted=true, status 不变),非 domain deleteTask command
-      // (deleteTask 仅 ACTIVE 可删 SP-STATE-6,会拒 completed/hold;清理须删任意态 → 软删)
-      entity: 'task',
-      entityId,
-      op: 'delete',
-      clientTs: now,
-    })),
-  ]
-  if (mutations.length) {
-    try {
-      await pushSync(token, mutations)
-    }
-    catch (error) {
-      console.warn('[e2e/tags] cleanup GTD 失败:', error)
-    }
+  try {
+    const rows = await gtdRows(gtd)
+    const now = new Date().toISOString()
+    const intents = [...state.taskIds].flatMap((taskId): LocalIntent[] => {
+      const status = taskStatus(rows, taskId)
+      if (status === undefined)
+        return []
+      const purge: LocalIntent = { kind: 'purge', taskId }
+      if (status === EXPLICIT_STATUS.DELETED)
+        return [purge]
+      return [{ kind: 'command', command: { id: randomUUID(), type: 'delete', taskId, clientTs: now } }, purge]
+    })
+    if (intents.length)
+      await actGtd(gtd, intents)
+  }
+  catch (error) {
+    console.warn('[e2e/tags] cleanup GTD 失败:', error)
   }
 }
 
 /**
  * 真实 HTTP 全流程：
  * 建 tag + KB 文档 + GTD task/task_tag，再覆盖 untag、部分删与全删。
+ * 删除标签目录后 task_tag 行仍在，设备按标签目录读时隐藏；删除关联任务 = 服务器把任务移进回收站。
  */
 export async function runTagsE2E(): Promise<void> {
   const token = await signInE2E()
+  const gtd: Gtd = { token, device: new GtdDevice(token) }
   const cleanup: CleanupState = {
     tagIds: new Set(),
     docIds: new Set(),
     taskIds: new Set(),
-    taskTagIds: new Set(),
   }
 
   try {
     const mountDirId = await ensureKbMount(token)
-    await caseUntag(token, cleanup, mountDirId)
-    await casePartialDelete(token, cleanup, mountDirId)
-    await caseFullDelete(token, cleanup, mountDirId)
+    await caseUntag(gtd, cleanup, mountDirId)
+    await casePartialDelete(gtd, cleanup, mountDirId)
+    await caseFullDelete(gtd, cleanup, mountDirId)
     console.log('\n[e2e/tags] 完整 HTTP 流程通过 ✓')
   }
   finally {
-    await cleanupFlow(token, cleanup)
+    await cleanupFlow(gtd, cleanup)
   }
 }
