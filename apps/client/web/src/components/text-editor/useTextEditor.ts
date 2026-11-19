@@ -6,9 +6,7 @@ import type { SelectionRange, TextEditorSession } from './TextEditorSession'
 import type { Suggestion } from './types'
 import { ThemeStore } from '@stores/theme-store'
 import { useAtomValue } from 'jotai'
-import { useEffect, useRef, useState } from 'react'
-import { setInlineEditActions } from './inline-edit-field'
-import { setSuggestionGhostActions } from './suggestion-field'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TextEditorSession as Session } from './TextEditorSession'
 
 export interface InlinePromptState {
@@ -42,6 +40,13 @@ export interface UseTextEditorResult {
   consumeQuotes: () => EditorQuote[]
   getDocument: () => string
   applyProposal: (proposal: EditorWriteProposal) => boolean
+  reviewActions: {
+    pendingSids: ReadonlySet<string>
+    accept: (sid: string) => void
+    reject: (sid: string) => void
+    acceptAll: () => void
+    rejectAll: () => void
+  }
 }
 
 export function useTextEditor(): UseTextEditorResult {
@@ -92,16 +97,7 @@ export function useTextEditor(): UseTextEditorResult {
     session.start()
     sessionRef.current = session
 
-    return () => {
-      session.dispose()
-      sessionRef.current = null
-      setInlineEditActions(null)
-      setSuggestionGhostActions(null)
-    }
-  }, [mode])
-
-  useEffect(() => {
-    setInlineEditActions({
+    session.setInlineEditActions({
       stop: () => sessionRef.current?.stopInline(),
       accept: () => sessionRef.current?.acceptInline(),
       reject: () => sessionRef.current?.rejectInline(),
@@ -135,15 +131,26 @@ export function useTextEditor(): UseTextEditorResult {
         })
       },
     })
-    setSuggestionGhostActions({
+    session.setSuggestionGhostActions({
       accept: sid => sessionRef.current?.accept(sid),
       reject: sid => sessionRef.current?.reject(sid),
     })
+
     return () => {
-      setInlineEditActions(null)
-      setSuggestionGhostActions(null)
+      session.setInlineEditActions(null)
+      session.setSuggestionGhostActions(null)
+      session.dispose()
+      sessionRef.current = null
     }
-  }, [])
+  }, [mode])
+
+  const reviewActions = useMemo(() => ({
+    pendingSids: new Set(suggestions.map(s => s.sid)),
+    accept: (sid: string) => sessionRef.current?.accept(sid),
+    reject: (sid: string) => sessionRef.current?.reject(sid),
+    acceptAll: () => sessionRef.current?.acceptAll(),
+    rejectAll: () => sessionRef.current?.rejectAll(),
+  }), [suggestions])
 
   return {
     mountRef,
@@ -153,6 +160,7 @@ export function useTextEditor(): UseTextEditorResult {
     inlineEdit,
     inlinePrompt,
     pendingQuotes,
+    reviewActions,
     polish: () => {
       setAgentError(null)
       void sessionRef.current?.polish()

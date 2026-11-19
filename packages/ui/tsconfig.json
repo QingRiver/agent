@@ -6,6 +6,6 @@
     "types": ["react", "react-dom"],
     "noEmit": true
   },
-  "include": ["src"],
+  "include": ["src", "../../types/global.d.ts"],
   "exclude": ["src/**/*.stories.tsx"]
 }

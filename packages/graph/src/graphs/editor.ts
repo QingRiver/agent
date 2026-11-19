@@ -1,8 +1,7 @@
 import { END, START, StateGraph } from '@langchain/langgraph'
-import { routeByEditorPath } from '../edges/routeByEditorPath'
-import { routeByIntent } from '../edges/routeByIntent'
+import { EDITOR_ENTRY_ENDS, routeEditorEntry } from '../edges/routeByEditorPath'
 import { makeChatbotNode } from '../nodes/chatbot'
-import { classifyEditorIntent } from '../nodes/classifyEditorIntent'
+import { CLASSIFY_INTENT_ENDS, classifyEditorIntent } from '../nodes/classifyEditorIntent'
 import { makeWriteEditNode } from '../nodes/writeEdit'
 import { EDITOR_ASK_SYSTEM_PROMPT } from '../prompts/editorPrompts'
 import { EditorChatState } from '../state/editorChatState'
@@ -17,16 +16,10 @@ export { WRITER_CHANGE_SUMMARIES_EVENT, type WriterChangeSummary } from '@agent/
  * - `chat`：对话 → classify → chatbot | writeEdit（Write 可 reasoning）
  */
 export const editorGraph = new StateGraph(EditorChatState)
-  .addNode('classifyIntent', classifyEditorIntent)
+  .addNode('entry', routeEditorEntry, { ends: [...EDITOR_ENTRY_ENDS] })
+  .addNode('classifyIntent', classifyEditorIntent, { ends: [...CLASSIFY_INTENT_ENDS] })
   .addNode('chatbot', makeChatbotNode({ systemPrompt: EDITOR_ASK_SYSTEM_PROMPT }))
   .addNode('writeEdit', makeWriteEditNode())
-  .addConditionalEdges(START, routeByEditorPath, {
-    writeEdit: 'writeEdit',
-    classifyIntent: 'classifyIntent',
-  })
-  .addConditionalEdges('classifyIntent', routeByIntent, {
-    chatbot: 'chatbot',
-    writeEdit: 'writeEdit',
-  })
+  .addEdge(START, 'entry')
   .addEdge('chatbot', END)
   .addEdge('writeEdit', END)

@@ -1,4 +1,4 @@
-import type { TushareMcp } from '@core/mcp/client'
+import type { TushareMcp } from '@agent/tools'
 import type { ToolDef } from '@core/types'
 import { toolErrorMessage } from '@agent/tools'
 import { Effect } from 'effect'

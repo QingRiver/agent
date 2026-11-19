@@ -1,16 +1,10 @@
 import type { EditorChatIntent } from '@agent/proto'
-import type { BaseMessage } from '@langchain/core/messages'
-import { Annotation } from '@langchain/langgraph'
+import { Annotation, MessagesAnnotation } from '@langchain/langgraph'
+import { lastValue } from './lastValue'
 
 export const EditorChatState = Annotation.Root({
-  messages: Annotation<BaseMessage[]>({
-    reducer: (x, y) => x.concat(y),
-    default: () => [],
-  }),
-  intent: Annotation<EditorChatIntent | null>({
-    reducer: (_x, y) => y,
-    default: () => null,
-  }),
+  ...MessagesAnnotation.spec,
+  intent: lastValue<EditorChatIntent | null>(() => null),
 })
 
 export type EditorChatStateType = typeof EditorChatState.State

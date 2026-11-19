@@ -2,11 +2,12 @@ import type { ReactAgentRuntimeConfig } from '@agent/graph'
 import { env } from '@agent/env'
 import {
   clampMaxSteps,
-  REACT_AGENT_MAX_STEPS_DEFAULT,
   readAgentConfigId,
   sanitizeKbId,
   sanitizeUserPrompt,
 } from '@agent/graph'
+import { REACT_AGENT_MAX_STEPS_DEFAULT } from '@agent/graph/react-agent-config'
+import { HTTPException } from 'hono/http-exception'
 import { SkillService } from '../../service/skill'
 import { loadAgentConfig, toRuntimeBundle } from '../agentConfig/store'
 
@@ -31,11 +32,11 @@ export async function resolveReactAgentRun(
   }
 
   if (!userId)
-    throw new Error('ResolveAgentConfig: missing request userId')
+    throw new HTTPException(401, { message: 'ResolveAgentConfig: missing request userId' })
 
   const record = await loadAgentConfig(userId, agentConfigId)
   if (!record)
-    throw new Error(`ResolveAgentConfig: config not found: ${agentConfigId}`)
+    throw new HTTPException(404, { message: `ResolveAgentConfig: config not found: ${agentConfigId}` })
 
   const bundle: ReactAgentRuntimeConfig = toRuntimeBundle(record)
   const { skillText, skillBindings } = await SkillService.buildIndex(userId, record.skillCodes)

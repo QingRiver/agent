@@ -1,7 +1,7 @@
 import type { AppEnv } from '../types'
 import { Hono } from 'hono'
 import { GraphStateQuerySchema, GraphStreamNameParamSchema, GraphStreamRequestSchema } from '../../shared/graphStream'
-import { GraphStreamHandlers } from '../handlers/graphStream'
+import { graphState, streamGraph } from '../handlers/graphStream'
 import { requireAuth } from '../middleware/authMiddleware'
 import { zValidator } from '../middleware/zodValidator'
 
@@ -11,7 +11,7 @@ export const graphsRoutes = new Hono<AppEnv>()
     '/:name/stream',
     zValidator('param', GraphStreamNameParamSchema),
     zValidator('json', GraphStreamRequestSchema),
-    c => GraphStreamHandlers.stream(
+    c => streamGraph(
       c,
       c.get('user')!,
       c.req.valid('param').name,
@@ -22,7 +22,7 @@ export const graphsRoutes = new Hono<AppEnv>()
     '/:name/state',
     zValidator('param', GraphStreamNameParamSchema),
     zValidator('query', GraphStateQuerySchema),
-    c => GraphStreamHandlers.state(
+    c => graphState(
       c,
       c.get('user')!,
       c.req.valid('param').name,

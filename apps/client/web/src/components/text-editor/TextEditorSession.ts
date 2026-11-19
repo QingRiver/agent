@@ -1,8 +1,9 @@
-import type { Hunk, WriterChangeSummary } from '@agent/proto'
+import type { Hunk, WriterChangeSummary, WriterProposalPayload } from '@agent/proto'
 import type { ViewUpdate } from '@codemirror/view'
-import type { InlineEditState } from './inline-edit-field'
+import type { InlineEditActions, InlineEditState } from './inline-edit-field'
+import type { SuggestionGhostActions } from './suggestion-field'
 import type { Suggestion } from './types'
-import { computeHunks, hunkKey, WRITER_CHANGE_SUMMARIES_EVENT } from '@agent/proto'
+import { computeHunks, hunkKey, parseWriterCustomEvent } from '@agent/proto'
 import { Conversation } from '@apis/conversation-api'
 import { streamGraphLangGraph } from '@apis/graph-langgraph-sse'
 import { markdown } from '@codemirror/lang-markdown'
@@ -13,17 +14,21 @@ import * as Y from 'yjs'
 import {
   buildInlineUserMessage,
   clearInlineEditEffect,
+  inlineEditActionsField,
   inlineEditChangeFilter,
   inlineEditDecorations,
   inlineEditField,
   sanitizeInlineOutput,
   setEditingInstructionEffect,
   setInlineAiTextEffect,
+  setInlineEditActionsEffect,
   startInlineEditEffect,
 } from './inline-edit-field'
 import {
   removeSuggestionEffect,
+  setSuggestionGhostActionsEffect,
   setSuggestionsEffect,
+  suggestionGhostActionsField,
   suggestionGhostChangeFilter,
   suggestionGhostDecorations,
   suggestionsField,
@@ -256,9 +261,11 @@ export class TextEditorSession {
           markdown(),
           yCollab(this.yText, undefined),
           suggestionsField,
+          suggestionGhostActionsField,
           suggestionGhostDecorations,
           suggestionGhostChangeFilter(),
           inlineEditField,
+          inlineEditActionsField,
           inlineEditDecorations,
           inlineEditChangeFilter(),
           selectionKeymap,
@@ -484,12 +491,16 @@ export class TextEditorSession {
     }
   }
 
+  setSuggestionGhostActions(actions: SuggestionGhostActions | null): void {
+    this.view?.dispatch({ effects: setSuggestionGhostActionsEffect.of(actions) })
+  }
+
+  setInlineEditActions(actions: InlineEditActions | null): void {
+    this.view?.dispatch({ effects: setInlineEditActionsEffect.of(actions) })
+  }
+
   /** 将对话 write 提案应用到多段幽灵 Suggestions（不改正文直至用户 accept） */
-  applyProposal(params: {
-    baseline: string
-    polished: string
-    changes?: WriterChangeSummary[]
-  }): boolean {
+  applyProposal(params: WriterProposalPayload): boolean {
     if (!this.alive() || !this.view)
       return false
     if (this.view.state.field(inlineEditField)) {
@@ -507,7 +518,7 @@ export class TextEditorSession {
 
     this.clearSuggestions()
     this.summariesByHunkKey.clear()
-    if (params.changes?.length)
+    if (params.changes.length)
       this.applyAgentSummaries({ changes: params.changes })
     this.syncSuggestions(params.baseline, polished, { final: true })
     return true
@@ -541,15 +552,12 @@ export class TextEditorSession {
       }, (data) => {
         if (!this.alive() || this.polishBaseline === null)
           return
-        const event = data as { name?: string, payload?: { changes?: WriterChangeSummary[], polished?: string } }
-        if (event.name !== WRITER_CHANGE_SUMMARIES_EVENT)
+        const proposal = parseWriterCustomEvent(data)
+        if (!proposal)
           return
-        const value = event.payload
-        this.applyAgentSummaries(value)
-        if (typeof value?.polished === 'string' && value.polished.trim()) {
-          polishedFromCustom = value.polished
-          this.syncSuggestions(original, polishedFromCustom, { final: true })
-        }
+        this.applyAgentSummaries(proposal)
+        polishedFromCustom = proposal.polished
+        this.syncSuggestions(original, polishedFromCustom, { final: true })
       })
     }
     catch (err) {

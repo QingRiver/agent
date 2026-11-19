@@ -31,11 +31,19 @@ export interface SuggestionGhostActions {
   reject: (sid: string) => void
 }
 
-let suggestionGhostActions: SuggestionGhostActions | null = null
+export const setSuggestionGhostActionsEffect = StateEffect.define<SuggestionGhostActions | null>()
 
-export function setSuggestionGhostActions(actions: SuggestionGhostActions | null): void {
-  suggestionGhostActions = actions
-}
+/** 审阅回调挂在 EditorState 上，Widget 点击时从 view 读取（避免模块全局） */
+export const suggestionGhostActionsField = StateField.define<SuggestionGhostActions | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setSuggestionGhostActionsEffect))
+        return e.value
+    }
+    return value
+  },
+})
 
 /** 精简幽灵：summary + 绿字 + 接受/拒绝（无 ⌘K 的 regenerate / follow-up） */
 class SuggestionGhostWidget extends WidgetType {
@@ -59,7 +67,7 @@ class SuggestionGhostWidget extends WidgetType {
       && other.stale === this.stale
   }
 
-  toDOM() {
+  toDOM(view: EditorView) {
     const root = document.createElement('div')
     root.className = 'cm-inline-edit-preview'
     root.setAttribute('contenteditable', 'false')
@@ -96,11 +104,11 @@ class SuggestionGhostWidget extends WidgetType {
 
     if (!this.stale) {
       addBtn('接受', 'cm-inline-edit-btn cm-inline-edit-btn-accept', () => {
-        suggestionGhostActions?.accept(this.sid)
+        view.state.field(suggestionGhostActionsField)?.accept(this.sid)
       })
     }
     addBtn(this.stale ? '移除' : '拒绝', 'cm-inline-edit-btn cm-inline-edit-btn-reject', () => {
-      suggestionGhostActions?.reject(this.sid)
+      view.state.field(suggestionGhostActionsField)?.reject(this.sid)
     })
 
     root.appendChild(toolbar)

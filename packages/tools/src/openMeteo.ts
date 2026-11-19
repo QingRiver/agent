@@ -111,25 +111,8 @@ async function fetchCurrentWeatherByCity(cityName: string): Promise<CurrentWeath
   }
 }
 
-/** 按城市名查询当前天气，返回供 LLM 使用的文本（兼容旧调用） */
-async function fetchWeatherByCity(cityName: string): Promise<string> {
-  const weather = await fetchCurrentWeatherByCity(cityName)
-  if (!weather)
-    return `找不到城市「${cityName}」，请检查名称或尝试英文名。`
-
-  const place = weather.country != null
-    ? `${weather.country} ${weather.city}`
-    : weather.city
-  return [
-    `${place} 当前天气：`,
-    `- 气温：${weather.temperatureC}°C`,
-    `- 状况：${weather.condition}`,
-  ].join('\n')
-}
-
 export const openMeteo = {
   fetchCurrentWeatherByCity,
-  fetchWeatherByCity,
   getCoordinates,
   getCurrentWeather,
 }

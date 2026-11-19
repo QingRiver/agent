@@ -2,10 +2,12 @@ import type { EditorChatIntent } from '@agent/proto'
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
 import type { EditorChatStateType } from '../state/editorChatState'
 import { EditorChatIntentSchema } from '@agent/proto'
+import { Command } from '@langchain/langgraph'
 import { CLASSIFY_INTENT_SYSTEM_PROMPT } from '../prompts/editorPrompts'
 import { lastHumanMessageText } from '../utils/messageText'
-import { parseLlmJson } from '../utils/parseLlmJson'
-import { runChatCompletion } from './chatCompletion'
+import { structuredCompletion } from '../utils/structuredCompletion'
+
+export type EditorIntentRoute = 'writeEdit' | 'chatbot'
 
 /** 明显的改稿意图（避免 reasoning 模型 content 为空时误判为 ask） */
 export function heuristicEditorIntent(text: string): 'ask' | 'write' | null {
@@ -24,29 +26,50 @@ function forceIntent(config: LangGraphRunnableConfig): EditorChatIntent | null {
   return raw === 'ask' || raw === 'write' ? raw : null
 }
 
-/** 纯判定 + LLM 分类：写入 state.intent */
+function gotoForIntent(intent: EditorChatIntent): EditorIntentRoute {
+  return intent === 'write' ? 'writeEdit' : 'chatbot'
+}
+
+/** 纯判定 + LLM 分类：写入 state.intent，并用 Command 分流 */
 export async function classifyEditorIntent(
   state: EditorChatStateType,
   config: LangGraphRunnableConfig,
-): Promise<{ intent: EditorChatIntent }> {
+): Promise<Command<unknown, { intent: EditorChatIntent }, EditorIntentRoute>> {
   const forced = forceIntent(config)
-  if (forced)
-    return { intent: forced }
+  if (forced) {
+    return new Command({
+      update: { intent: forced },
+      goto: gotoForIntent(forced),
+    })
+  }
 
   const text = lastHumanMessageText(state.messages)
-  if (!text)
-    return { intent: 'ask' }
+  if (!text) {
+    return new Command({
+      update: { intent: 'ask' },
+      goto: 'chatbot',
+    })
+  }
 
   const byHeuristic = heuristicEditorIntent(text)
-  if (byHeuristic)
-    return { intent: byHeuristic }
+  if (byHeuristic) {
+    return new Command({
+      update: { intent: byHeuristic },
+      goto: gotoForIntent(byHeuristic),
+    })
+  }
 
-  const raw = await runChatCompletion(undefined, {
+  const parsed = await structuredCompletion({
     system: CLASSIFY_INTENT_SYSTEM_PROMPT,
     user: text,
+    schema: EditorChatIntentSchema,
     temperature: 0,
-    mode: 'silent',
   })
-  const parsed = parseLlmJson(raw, EditorChatIntentSchema)
-  return { intent: parsed?.intent ?? 'ask' }
+  const intent = parsed?.intent ?? 'ask'
+  return new Command({
+    update: { intent },
+    goto: gotoForIntent(intent),
+  })
 }
+
+export const CLASSIFY_INTENT_ENDS = ['chatbot', 'writeEdit'] as const satisfies readonly EditorIntentRoute[]

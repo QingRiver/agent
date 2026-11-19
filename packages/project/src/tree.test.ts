@@ -5,7 +5,10 @@ import {
   assertCanDelete,
   assertMoveValid,
   buildDirTree,
+  canMoveFolderTo,
+  findEnclosingDirId,
   isAncestorOrSelf,
+  isUnderFolder,
   movedProjectId,
   subtreeDirIds,
   subtreeHeight,
@@ -197,5 +200,30 @@ describe('subtreeDirIds', () => {
   it('rootDirId 不在树内 → 空 Set', () => {
     const tree = buildDirTree(branchTree())
     expect(subtreeDirIds(tree, 'not-exist')).toEqual(new Set())
+  })
+})
+
+describe('isUnderFolder / canMoveFolderTo / findEnclosingDirId', () => {
+  it('isUnderFolder 与 isAncestorOrSelf 一致', () => {
+    const tree = buildDirTree(chain(3))
+    expect(isUnderFolder(tree, 'd1', 'd3')).toBe(true)
+    expect(isUnderFolder(tree, 'd3', 'd1')).toBe(false)
+  })
+
+  it('canMoveFolderTo：禁止环与移根', () => {
+    const tree = buildDirTree(chain(3))
+    expect(canMoveFolderTo(tree, 'd2', 'd1')).toBe(false) // 无变更
+    expect(canMoveFolderTo(tree, 'd1', 'd3')).toBe(false) // 环
+    expect(canMoveFolderTo(tree, 'd3', 'd1')).toBe(true)
+    expect(canMoveFolderTo(tree, 'p1', 'd1')).toBe(false)
+    expect(canMoveFolderTo(tree, 'd1', null)).toBe(false)
+  })
+
+  it('findEnclosingDirId 向上匹配', () => {
+    const rows = chain(3)
+    const byId = new Map(rows.map(r => [r.id, r]))
+    const kb = new Set(['d1'])
+    expect(findEnclosingDirId(byId, 'd3', id => kb.has(id))).toBe('d1')
+    expect(findEnclosingDirId(byId, 'd3', id => id === 'missing')).toBeNull()
   })
 })

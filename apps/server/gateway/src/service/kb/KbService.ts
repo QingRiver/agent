@@ -1,5 +1,6 @@
 import type { KbChunk } from '@agent/kb'
-import type { KbDraftUpdate, KbMetaUpdate, KbQueryRequest } from '../../shared/kb'
+import type { KbDraftUpdate, KbMetaUpdate, KbQueryRequest } from '../../../shared/kb'
+import type { KbBinding, KbDoc, KbDocSummary, KbIndexingStatus, KbIngestFile, KbIngestResultItem } from './types'
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
@@ -18,11 +19,22 @@ import {
 import { dirVdir } from '@agent/project'
 import { and, desc, eq, inArray, isNull, not, sql } from 'drizzle-orm'
 import JSZip from 'jszip'
-import { db } from '../db/drizzle'
-import { dirs, kbChunks, kbDocTags, kbDocuments, kbs, skills } from '../db/schema'
-import { ProjectService } from './project'
-import { ancestorIdsOf, assertNotSkillSubtree, loadLiveDirs, subtreeIdsOf } from './skill'
-import { TagsService } from './tags'
+import { db } from '../../db/drizzle'
+import { dirs, kbChunks, kbDocTags, kbDocuments, kbs, skills } from '../../db/schema'
+import { ProjectService } from '../project'
+import { ancestorIdsOf, assertNotSkillSubtree, loadLiveDirs, subtreeIdsOf } from '../skill'
+import { TagsService } from '../tags'
+import { KbConflictError } from './errors'
+
+export { KbConflictError } from './errors'
+export type {
+  KbBinding,
+  KbDoc,
+  KbDocSummary,
+  KbIndexingStatus,
+  KbIngestFile,
+  KbIngestResultItem,
+} from './types'
 
 const SUPPORTED_EXTENSIONS = new Set(['.md', '.markdown', '.docx', '.pdf', '.html', '.htm', '.txt'])
 /** zip 导入仅收 Markdown，避免把包内杂项/Office 丢给 markitdown */
@@ -31,60 +43,6 @@ const ZIP_INGEST_EXTENSIONS = new Set(['.md', '.markdown'])
 const INGEST_PATH_MAX_DEPTH = 5
 /** commitBatch 并发提交数（受上游 LLM/embedding 限流约束，保守取 5） */
 const KB_COMMIT_CONCURRENCY = 5
-
-export class KbConflictError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'KbConflictError'
-  }
-}
-
-export type KbIndexingStatus = 'draft' | 'indexing' | 'completed' | 'error'
-
-export interface KbDocSummary {
-  id: string
-  userId: string
-  kbId: string
-  /** 挂载 dirs.id（权威位置）；必须落在已初始化知识库子树内 */
-  mountDirId: string
-  /** 冗余缓存 = walkToProjectRoot(mountDirId) */
-  projectId: string | null
-  name: string
-  filename: string | null
-  /** 派生展示缓存 = dirVdir(mountDir.vdir, name)；folder 改名/移动后可能软过期，client 据 dir 树重派生 */
-  vdir: string | null
-  tagIds: string[]
-  owner: string | null
-  summary: string | null
-  keywords: string[]
-  toc: string[]
-  visibility: string
-  pinned: boolean
-  indexingStatus: KbIndexingStatus
-  error: string | null
-  draftHash: string | null
-  publishedHash: string | null
-  createdAt: number
-  updatedAt: number
-  indexedAt: number | null
-}
-
-export interface KbDoc extends KbDocSummary {
-  content: string
-  permissions: Record<string, unknown>
-}
-
-export interface KbIngestFile {
-  buffer: Buffer
-  filename: string
-}
-
-export interface KbIngestResultItem {
-  docId: string
-  name: string
-  mountDirId: string
-  skipped: boolean
-}
 
 // ---------- 工具 ----------
 
@@ -233,13 +191,6 @@ async function subtreeMountDirIds(userId: string, rootDirId: string): Promise<Se
       stack.push(child)
   }
   return ids
-}
-
-export interface KbBinding {
-  dirId: string
-  userId: string
-  dirName: string
-  vdir: string
 }
 
 export async function findEnclosingKbDirId(userId: string, dirId: string | null | undefined): Promise<string | null> {

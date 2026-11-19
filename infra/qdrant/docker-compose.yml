@@ -1,6 +1,7 @@
 services:
   qdrant:
-    image: qdrant/qdrant:latest
+    # 与 catalog @qdrant/js-client-rest ^1.20 对齐（minor 差 ≤1）
+    image: qdrant/qdrant:v1.20.0
     container_name: qdrant
     ports:
       - "${QDRANT_API_PORT:-6333}:6333"

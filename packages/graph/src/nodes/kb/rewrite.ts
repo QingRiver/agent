@@ -7,7 +7,6 @@ export async function kbRewriteNode(state: KbStateType) {
   const rewrittenQueries = await rewriteQuery(userQuery)
   return {
     rewrittenQueries,
-    routeRejected: false,
     citationRetries: 0,
     retrievedChunks: [],
   }

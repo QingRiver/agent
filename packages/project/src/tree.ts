@@ -92,6 +92,50 @@ export function isAncestorOrSelf(
   return false
 }
 
+/** UI 别名：`nodeId` 是否在 `ancestorId` 子树内（含自身） */
+export function isUnderFolder(tree: DirTree, ancestorId: string, nodeId: string): boolean {
+  return isAncestorOrSelf(ancestorId, nodeId, tree.byId)
+}
+
+/**
+ * 文件夹能否移到 `targetParentId` 的软校验（UI DnD 用，不含同名/深度抛错细节）。
+ * project 根不可移动；dir 不可移到根；禁止环与无变更。
+ */
+export function canMoveFolderTo(tree: DirTree, folderId: string, targetParentId: string | null): boolean {
+  const folder = tree.byId.get(folderId)
+  if (!folder)
+    return false
+  if (folder.dir.kind === DIR_KIND.PROJECT)
+    return false
+  if (folder.dir.parentId === targetParentId)
+    return false
+  if (targetParentId == null)
+    return false
+  if (targetParentId === folderId)
+    return false
+  return !isUnderFolder(tree, folderId, targetParentId)
+}
+
+/**
+ * 自 `startId` 沿 parent 向上找第一个满足 `match` 的目录 id。
+ * 供 KB 根包围、skill 根等 UI/服务共用。
+ */
+export function findEnclosingDirId(
+  dirsById: Map<string, { parentId: string | null }>,
+  startId: string,
+  match: (dirId: string) => boolean,
+): string | null {
+  let cur: string | null = startId
+  const guard = new Set<string>()
+  while (cur && !guard.has(cur)) {
+    if (match(cur))
+      return cur
+    guard.add(cur)
+    cur = dirsById.get(cur)?.parentId ?? null
+  }
+  return null
+}
+
 /**
  * 沿 parentId 链向上走到 kind=project 根，返回该 project id。
  *

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AgentErrorBanner } from './AgentErrorBanner'
+import { DocumentEditActionsProvider } from './documentEditActions'
 import { EditorChatPanel } from './EditorChatPanel'
 import { InlineEditPrompt } from './InlineEditPrompt'
 import { useTextEditor } from './useTextEditor'
@@ -24,6 +25,7 @@ export function TextEditor() {
     consumeQuotes,
     getDocument,
     applyProposal,
+    reviewActions,
   } = useTextEditor()
 
   const [chatBusy, setChatBusy] = useState(false)
@@ -60,80 +62,82 @@ export function TextEditor() {
   const blockChat = busy
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-65px)] max-w-7xl flex-col gap-3 p-6">
-      <p className="shrink-0 text-sm text-muted-foreground">
-        ⌘K 改写选区 · ⌘J 加入对话 · 改稿后在正文审阅红绿预览
-      </p>
+    <DocumentEditActionsProvider value={reviewActions}>
+      <div className="mx-auto flex h-[calc(100vh-65px)] max-w-7xl flex-col gap-3 p-6">
+        <p className="shrink-0 text-sm text-muted-foreground">
+          ⌘K 改写选区 · ⌘J 加入对话 · 改稿后在正文审阅红绿预览
+        </p>
 
-      {agentError && (
-        <AgentErrorBanner message={agentError} onDismiss={dismissError} />
-      )}
+        {agentError && (
+          <AgentErrorBanner message={agentError} onDismiss={dismissError} />
+        )}
 
-      <div className="flex min-h-0 flex-1 gap-4">
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
-          {suggestions.length > 0 && (
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
-              <span className="text-xs text-sky-800 dark:text-sky-200">
-                已生成
-                {' '}
-                {suggestions.length}
-                {' '}
-                处修订 · 在正文中审阅红绿预览
-              </span>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className="rounded-md border border-emerald-600/40 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-800 hover:bg-emerald-500/20 disabled:opacity-50 dark:text-emerald-200"
-                  disabled={polishing}
-                  onClick={() => acceptAll()}
-                >
-                  全部接受
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50"
-                  disabled={polishing}
-                  onClick={() => rejectAll()}
-                >
-                  全部拒绝
-                </button>
+        <div className="flex min-h-0 flex-1 gap-4">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
+            {suggestions.length > 0 && (
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
+                <span className="text-xs text-sky-800 dark:text-sky-200">
+                  已生成
+                  {' '}
+                  {suggestions.length}
+                  {' '}
+                  处修订 · 在正文中审阅红绿预览
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-emerald-600/40 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-800 hover:bg-emerald-500/20 disabled:opacity-50 dark:text-emerald-200"
+                    disabled={polishing}
+                    onClick={() => acceptAll()}
+                  >
+                    全部接受
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50"
+                    disabled={polishing}
+                    onClick={() => rejectAll()}
+                  >
+                    全部拒绝
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-          <div
-            ref={mountRef}
-            className="min-h-0 flex-1 overflow-auto p-3"
-          />
-        </div>
-
-        <aside className="flex w-88 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-muted">
-          <div className="shrink-0 border-b border-border px-4 py-3">
-            <span className="text-sm font-semibold text-foreground">写作对话</span>
-            <p className="mt-0.5 text-xs text-muted-foreground">⌘J 将选区加入引用</p>
-          </div>
-          <div className="min-h-0 flex-1">
-            <EditorChatPanel
-              quotes={pendingQuotes}
-              onRemoveQuote={removeQuote}
-              onConsumeQuotes={consumeQuotes}
-              getDocument={getDocument}
-              onApplyProposal={applyProposal}
-              onChatBusyChange={setChatBusy}
-              blockInput={blockChat}
-              blockInputHint="改写进行中，请稍候再发送消息。"
+            )}
+            <div
+              ref={mountRef}
+              className="min-h-0 flex-1 overflow-auto p-3"
             />
           </div>
-        </aside>
-      </div>
 
-      {inlinePrompt && (
-        <InlineEditPrompt
-          anchor={inlinePrompt.anchor}
-          initialInstruction={inlinePrompt.initialInstruction}
-          onClose={closeInlinePrompt}
-          onSubmit={submitInlinePrompt}
-        />
-      )}
-    </div>
+          <aside className="flex w-88 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-muted">
+            <div className="shrink-0 border-b border-border px-4 py-3">
+              <span className="text-sm font-semibold text-foreground">写作对话</span>
+              <p className="mt-0.5 text-xs text-muted-foreground">⌘J 将选区加入引用</p>
+            </div>
+            <div className="min-h-0 flex-1">
+              <EditorChatPanel
+                quotes={pendingQuotes}
+                onRemoveQuote={removeQuote}
+                onConsumeQuotes={consumeQuotes}
+                getDocument={getDocument}
+                onApplyProposal={applyProposal}
+                onChatBusyChange={setChatBusy}
+                blockInput={blockChat}
+                blockInputHint="改写进行中，请稍候再发送消息。"
+              />
+            </div>
+          </aside>
+        </div>
+
+        {inlinePrompt && (
+          <InlineEditPrompt
+            anchor={inlinePrompt.anchor}
+            initialInstruction={inlinePrompt.initialInstruction}
+            onClose={closeInlinePrompt}
+            onSubmit={submitInlinePrompt}
+          />
+        )}
+      </div>
+    </DocumentEditActionsProvider>
   )
 }

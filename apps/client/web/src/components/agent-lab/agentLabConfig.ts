@@ -1,15 +1,13 @@
 import type { ReactAgentRuntimeConfig } from '@agent/graph/react-agent-prompts'
+import { REACT_AGENT_MAX_STEPS_DEFAULT } from '@agent/graph/react-agent-config'
 import {
   DEFAULT_REACT_AGENT_USER_PROMPT,
-  REACT_AGENT_MAX_STEPS_DEFAULT,
   ReactAgentRuntimeConfigSchema,
 } from '@agent/graph/react-agent-prompts'
 import { z } from 'zod'
 
 /** 本地只存服务端配置 id，正文一律 GET */
 export const AGENT_LAB_ID_STORAGE_KEY = 'agent-lab:agent-config-id'
-/** @deprecated 旧全文草稿 key，读取时只抽 id 后清除 */
-const LEGACY_FULL_CONFIG_KEY = 'agent-lab:react-agent-config'
 
 export type { ReactAgentRuntimeConfig }
 
@@ -75,21 +73,8 @@ export function labConfigFromRemote(remote: {
 
 export function loadStoredAgentConfigId(): string | null {
   try {
-    const direct = localStorage.getItem(AGENT_LAB_ID_STORAGE_KEY)?.trim()
-    if (direct)
-      return direct
-
-    // 迁移：旧全文草稿只抽 id，然后删掉全文
-    const legacy = localStorage.getItem(LEGACY_FULL_CONFIG_KEY)
-    if (legacy == null)
-      return null
-    localStorage.removeItem(LEGACY_FULL_CONFIG_KEY)
-    const parsed = JSON.parse(legacy) as { agentConfigId?: unknown }
-    const id = typeof parsed.agentConfigId === 'string' ? parsed.agentConfigId.trim() : ''
-    if (!id)
-      return null
-    localStorage.setItem(AGENT_LAB_ID_STORAGE_KEY, id)
-    return id
+    const id = localStorage.getItem(AGENT_LAB_ID_STORAGE_KEY)?.trim()
+    return id || null
   }
   catch {
     return null

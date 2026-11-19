@@ -18,7 +18,7 @@ LangGraph Agent 图定义。Web 通过 gateway 的 `/graphs/:name/stream` 直接
 src/
 ├── graphs/                 # 薄装配（dev / kb / tushare / ha / editor / reactAgent）
 ├── nodes/
-│   ├── writeEdit.ts        # makeWriteEditNode + runWriteEdit
+│   ├── writeEdit/          # makeWriteEditNode + runWriteEdit（document/inline）
 │   ├── chatCompletion.ts   # runChatCompletion(silent|streamReasoning)
 │   ├── classifyEditorIntent.ts
 │   └── chatbot.ts

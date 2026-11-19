@@ -1,6 +1,8 @@
 import type { DirTree, DirTreeNode } from '@agent/project'
 import type { KbDocSummary } from '@apis/kb-api'
 
+export { canMoveFolderTo, isUnderFolder } from '@agent/project'
+
 export interface KbTreeFolder {
   kind: 'folder'
   id: string
@@ -74,39 +76,4 @@ export function buildKbTree(
   }
 
   return tree.roots.map((n): KbTreeNode => toFolder(n))
-}
-
-/** nodeId 是否在 ancestorId 子树内（含自身）——基于 DirTree 的 parentId 链 */
-export function isUnderFolder(tree: DirTree, ancestorId: string, nodeId: string): boolean {
-  if (ancestorId === nodeId)
-    return true
-  let cur: string | null = nodeId
-  const guard = new Set<string>()
-  while (cur != null && !guard.has(cur)) {
-    if (cur === ancestorId)
-      return true
-    guard.add(cur)
-    cur = tree.byId.get(cur)?.dir.parentId ?? null
-  }
-  return false
-}
-
-/**
- * 文件夹（dir）能否移到 targetParentId。
- * project 根不可移动；dir 不可移到根（null）——统一树中根级只有 project。
- * 禁止环与无变更移动。
- */
-export function canMoveFolderTo(tree: DirTree, folderId: string, targetParentId: string | null): boolean {
-  const folder = tree.byId.get(folderId)
-  if (!folder)
-    return false
-  if (folder.dir.kind === 'project')
-    return false
-  if (folder.dir.parentId === targetParentId)
-    return false
-  if (targetParentId == null)
-    return false
-  if (targetParentId === folderId)
-    return false
-  return !isUnderFolder(tree, folderId, targetParentId)
 }

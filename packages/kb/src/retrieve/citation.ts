@@ -25,6 +25,36 @@ export function buildContextFromChunks(chunks: RetrievedChunk[]): string {
     .join('\n\n')
 }
 
+/**
+ * 带可粘贴 MD 引用模板的片段上下文（图 generate / kb_search 工具共用）。
+ * `style: 'tool'` 用 `---` 分隔并略去 heading，节省 ReAct 上下文。
+ */
+export function formatChunksWithCitationHints(
+  chunks: RetrievedChunk[],
+  options?: { style?: 'generate' | 'tool' },
+): string {
+  const style = options?.style ?? 'generate'
+  const separator = style === 'tool' ? '\n\n---\n\n' : '\n\n'
+  return chunks
+    .map((chunk, i) => {
+      const index = i + 1
+      const href = kbCitationHref({
+        index,
+        chunk_id: chunk.chunk_id,
+        source_doc_id: chunk.source_doc_id,
+        heading_path: chunk.heading_path,
+        excerpt: '',
+        ...(chunk.page_number !== undefined ? { page_number: chunk.page_number } : {}),
+      })
+      const mdLink = `[${index}](${href})`
+      if (style === 'tool')
+        return `[${index}] 引用请写 \`${mdLink}\`\n${chunk.raw_text}`
+      const heading = chunk.heading_path.length ? chunk.heading_path.join(' > ') : '正文'
+      return `[${index}] (${heading}) 引用请写 \`${mdLink}\`\n${chunk.raw_text}`
+    })
+    .join(separator)
+}
+
 function parseCitationIndices(answer: string): number[] {
   const indices = new Set<number>()
   for (const match of answer.matchAll(CITATION_REF_RE)) {

@@ -4,7 +4,7 @@ import {
   AgentConfigIdQuerySchema,
   UpsertAgentConfigRequestSchema,
 } from '../../shared/agentConfig'
-import { AgentConfigHandlers } from '../handlers/agentConfig'
+import { getAgentConfigHandler, upsertAgentConfigHandler } from '../handlers/agentConfig'
 import { requireAuth } from '../middleware/authMiddleware'
 import { zValidator } from '../middleware/zodValidator'
 
@@ -13,10 +13,10 @@ export const agentConfigRoutes = new Hono<AppEnv>()
   .post(
     '/upsert',
     zValidator('json', UpsertAgentConfigRequestSchema),
-    c => AgentConfigHandlers.upsert(c, c.get('user')!, c.req.valid('json')),
+    c => upsertAgentConfigHandler(c, c.get('user')!, c.req.valid('json')),
   )
   .get(
     '/get',
     zValidator('query', AgentConfigIdQuerySchema),
-    c => AgentConfigHandlers.get(c, c.get('user')!, c.req.valid('query')),
+    c => getAgentConfigHandler(c, c.get('user')!, c.req.valid('query')),
   )

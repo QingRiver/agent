@@ -64,7 +64,7 @@ pnpm dev                        # server + client 并行
 | 会话列表 / 当前 thread | `GET /conversations/list`、`conversation-store` |
 | 编辑器错误 | 图流 `event: "error"` 的 `message`，`AgentErrorBanner` 只显示这一句 |
 
-HITL 图（`reactAgent`、`tushare`、`dev` 等）挂起时由 `DevInterruptUi` 渲染 `@agent/ui` 的 `InterruptCard`。天气等工具卡挂在 assistant-ui 的 `MessagePrimitive.Parts`。
+HITL 图（`reactAgent`、`tushare`、`dev` 等）挂起时由 `LangGraphInterruptUi` 渲染 `@agent/ui` 的 `InterruptCard`。天气等工具卡挂在 assistant-ui 的 `MessagePrimitive.Parts`。
 
 ### 知识库
 

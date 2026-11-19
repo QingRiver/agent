@@ -1,20 +1,14 @@
-import type { DevStateType } from '../state/devState'
-import process from 'node:process'
 import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
-import { SystemMessage } from '@langchain/core/messages'
 import { END, START, StateGraph } from '@langchain/langgraph'
-import { ToolNode } from '@langchain/langgraph/prebuilt'
-import { ChatOpenAI } from '@langchain/openai'
-import { routeByDevIntent } from '../edges/routeByDevIntent'
-import { shouldContinue } from '../edges/shouldContinue'
 import { clarifyDevIntent } from '../nodes/clarifyDevIntent'
 import { collectHitlDemo } from '../nodes/collectHitlDemo'
 import { executeHitlDemo } from '../nodes/executeHitlDemo'
-import { DevState } from '../state/devState'
+import { DEV_INTENT_ENDS, DevRouteTarget, DevState, DevToolsNode } from '../state/devState'
 import { ASK_TOOLS } from '../tools/ask-tools'
 import { KB_TOOLS } from '../tools/kb'
 import { ORDER_TOOLS } from '../tools/order'
 import { WEATHER_TOOLS } from '../tools/weather'
+import { createToolLoopParts } from './createToolLoopGraph'
 
 const WEATHER_SYSTEM_PROMPT = [
   '你是天气助手。查天气只能通过 get_weather，禁止编造气温或天气。',
@@ -43,85 +37,35 @@ const KB_SYSTEM_PROMPT = [
   '4. 问题明显与知识库无关时，可直接作答，不必调用工具。',
 ].join('\n')
 
-const llm = new ChatOpenAI({
-  model: process.env.OPENAI_MODEL ?? '',
-  temperature: 0,
+const weatherLoop = createToolLoopParts({
+  tools: [...WEATHER_TOOLS, ...ASK_TOOLS],
+  system: `${WEATHER_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`,
+  toolsNodeName: DevToolsNode.weather,
+})
+const orderLoop = createToolLoopParts({
+  tools: [...ORDER_TOOLS, ...ASK_TOOLS],
+  system: `${ORDER_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`,
+  toolsNodeName: DevToolsNode.order,
+})
+const kbLoop = createToolLoopParts({
+  tools: [...KB_TOOLS, ...ASK_TOOLS],
+  system: `${KB_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`,
+  toolsNodeName: DevToolsNode.kb,
 })
 
-const weatherLlm = llm.bindTools([...WEATHER_TOOLS, ...ASK_TOOLS])
-const orderLlm = llm.bindTools([...ORDER_TOOLS, ...ASK_TOOLS])
-const kbLlm = llm.bindTools([...KB_TOOLS, ...ASK_TOOLS])
-
-async function agentWeather(state: DevStateType) {
-  const system = `${WEATHER_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`
-  const messages = state.messages[0]?.type === 'system'
-    ? state.messages
-    : [new SystemMessage(system), ...state.messages]
-  const response = await weatherLlm.invoke(messages)
-  return { messages: [response] }
-}
-
-async function agentOrder(state: DevStateType) {
-  const system = `${ORDER_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`
-  const messages = state.messages[0]?.type === 'system'
-    ? state.messages
-    : [new SystemMessage(system), ...state.messages]
-  const response = await orderLlm.invoke(messages)
-  return { messages: [response] }
-}
-
-async function agentKb(state: DevStateType) {
-  const system = `${KB_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`
-  const messages = state.messages[0]?.type === 'system'
-    ? state.messages
-    : [new SystemMessage(system), ...state.messages]
-  const response = await kbLlm.invoke(messages)
-  return { messages: [response] }
-}
-
-function weatherContinue(state: DevStateType): 'tools_weather' | typeof END {
-  return shouldContinue(state) === 'tools' ? 'tools_weather' : END
-}
-
-function orderContinue(state: DevStateType): 'tools_order' | typeof END {
-  return shouldContinue(state) === 'tools' ? 'tools_order' : END
-}
-
-function kbContinue(state: DevStateType): 'tools_kb' | typeof END {
-  return shouldContinue(state) === 'tools' ? 'tools_kb' : END
-}
-
 export const devGraph = new StateGraph(DevState)
-  .addNode('clarify', clarifyDevIntent)
-  .addNode('agent_weather', agentWeather)
-  .addNode('tools_weather', new ToolNode([...WEATHER_TOOLS, ...ASK_TOOLS]))
-  .addNode('agent_order', agentOrder)
-  .addNode('tools_order', new ToolNode([...ORDER_TOOLS, ...ASK_TOOLS]))
-  .addNode('agent_kb', agentKb)
-  .addNode('tools_kb', new ToolNode([...KB_TOOLS, ...ASK_TOOLS]))
-  .addNode('collect_hitl', collectHitlDemo)
+  .addNode('clarify', clarifyDevIntent, { ends: [...DEV_INTENT_ENDS] })
+  .addNode(DevRouteTarget.agentWeather, weatherLoop.agent, { ends: [...weatherLoop.agentEnds] })
+  .addNode(DevToolsNode.weather, weatherLoop.toolsNode)
+  .addNode(DevRouteTarget.agentOrder, orderLoop.agent, { ends: [...orderLoop.agentEnds] })
+  .addNode(DevToolsNode.order, orderLoop.toolsNode)
+  .addNode(DevRouteTarget.agentKb, kbLoop.agent, { ends: [...kbLoop.agentEnds] })
+  .addNode(DevToolsNode.kb, kbLoop.toolsNode)
+  .addNode(DevRouteTarget.collectHitl, collectHitlDemo)
   .addNode('execute_hitl', executeHitlDemo)
   .addEdge(START, 'clarify')
-  .addConditionalEdges('clarify', routeByDevIntent, {
-    agent_weather: 'agent_weather',
-    agent_order: 'agent_order',
-    agent_kb: 'agent_kb',
-    collect_hitl: 'collect_hitl',
-  })
-  .addConditionalEdges('agent_weather', weatherContinue, {
-    tools_weather: 'tools_weather',
-    [END]: END,
-  })
-  .addEdge('tools_weather', 'agent_weather')
-  .addConditionalEdges('agent_order', orderContinue, {
-    tools_order: 'tools_order',
-    [END]: END,
-  })
-  .addEdge('tools_order', 'agent_order')
-  .addConditionalEdges('agent_kb', kbContinue, {
-    tools_kb: 'tools_kb',
-    [END]: END,
-  })
-  .addEdge('tools_kb', 'agent_kb')
-  .addEdge('collect_hitl', 'execute_hitl')
+  .addEdge(DevToolsNode.weather, DevRouteTarget.agentWeather)
+  .addEdge(DevToolsNode.order, DevRouteTarget.agentOrder)
+  .addEdge(DevToolsNode.kb, DevRouteTarget.agentKb)
+  .addEdge(DevRouteTarget.collectHitl, 'execute_hitl')
   .addEdge('execute_hitl', END)

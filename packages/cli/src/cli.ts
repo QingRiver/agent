@@ -1,9 +1,9 @@
 import process from 'node:process'
 import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
+import { createTushareMcp } from '@agent/tools'
 import { interactTools } from '@cli/agent/interact-tools'
 import { createTushareAgent } from '@cli/agent/tushare'
 import { OpenAIDriver } from '@core/driver/openai'
-import { createTushareMcp } from '@core/mcp/client'
 import { boot } from './boot'
 
 // ==========================================

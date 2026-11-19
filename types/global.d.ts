@@ -1,5 +1,5 @@
 declare global {
-  type ValuesOf<T> = T[keyof T]
+  type ValueOf<T> = T[keyof T]
 }
 
 export {}

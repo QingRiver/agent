@@ -1,7 +1,7 @@
 import type { Context } from 'hono'
 import { ProjectDirError } from '@agent/project'
 import { HTTPException } from 'hono/http-exception'
-import { KbConflictError } from '../service/kb'
+import { KbConflictError } from '../service/kb/errors'
 import { SkillConflictError } from '../service/skill'
 import { TagsConflictError } from '../service/tags'
 

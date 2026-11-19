@@ -1,52 +1,17 @@
-import type { WriterChangeSummary } from '@agent/proto'
+import type { WriterProposalPayload } from '@agent/proto'
 import type { EditorQuote } from './editor-quotes'
-import { WRITER_CHANGE_SUMMARIES_EVENT } from '@agent/proto'
+import { parseWriterCustomEvent, PROPOSE_DOCUMENT_EDITS_TOOL_NAME } from '@agent/proto'
 import { Conversation } from '@apis/conversation-api'
 import { AssistantGraphRuntime } from '@components/assistant/AssistantGraphRuntime'
 import { AssistantThread } from '@components/assistant/AssistantThread'
-import { useEffect, useRef, useState } from 'react'
-import {
-  hideEditorChatPolishedText,
-  isEditorChatInternalAssistantContent,
-  setEditorChatSuppressDocumentDump,
-} from './editor-chat-message'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDocumentEditActions } from './documentEditActions'
+import { DocumentEditDiffToolRender } from './DocumentEditDiffTool'
+import { createEditorChatTextFilter } from './editor-chat-message'
 import { filterFreshQuotes, formatQuotesForMessage } from './editor-quotes'
 import { EditorQuoteChips } from './EditorQuoteChips'
 
-export interface EditorWriteProposal {
-  baseline: string
-  polished: string
-  changes: WriterChangeSummary[]
-}
-
-function proposalFromCustomValue(value: unknown): EditorWriteProposal | null {
-  const v = value as {
-    changes?: WriterChangeSummary[]
-    polished?: string
-    baseline?: string
-  } | null
-  if (typeof v?.polished !== 'string' || !v.polished.trim())
-    return null
-  if (typeof v?.baseline !== 'string')
-    return null
-  return {
-    baseline: v.baseline,
-    polished: v.polished,
-    changes: Array.isArray(v.changes) ? v.changes : [],
-  }
-}
-
-function ingestWriterCustomEvent(
-  data: unknown,
-  onProposal: (proposal: EditorWriteProposal) => void,
-) {
-  const event = data as { name?: string, payload?: unknown }
-  if (event.name !== WRITER_CHANGE_SUMMARIES_EVENT)
-    return
-  const proposal = proposalFromCustomValue(event.payload)
-  if (proposal)
-    onProposal(proposal)
-}
+export type EditorWriteProposal = WriterProposalPayload
 
 function lastHumanText(messages: readonly { type?: string, content?: unknown }[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -99,10 +64,11 @@ export function EditorChatPanel({
   blockInput = false,
   blockInputHint,
 }: EditorChatPanelProps) {
+  const documentEditActions = useDocumentEditActions()
   const [threadId, setThreadId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
-  const proposalRef = useRef<EditorWriteProposal | null>(null)
+  const textFilterRef = useRef(createEditorChatTextFilter())
   const lastAppliedKeyRef = useRef<string | null>(null)
   const quotesRef = useRef(quotes)
   const pendingConfigRef = useRef<Record<string, unknown> | undefined>(undefined)
@@ -115,9 +81,8 @@ export function EditorChatPanel({
     if (lastAppliedKeyRef.current === key)
       return
     lastAppliedKeyRef.current = key
-    proposalRef.current = proposal
-    hideEditorChatPolishedText(proposal.polished)
-    setEditorChatSuppressDocumentDump(false)
+    textFilterRef.current.hidePolishedText(proposal.polished)
+    textFilterRef.current.setSuppressDocumentDump(false)
     const ok = onApplyProposal(proposal)
     if (ok)
       setApplyError(null)
@@ -139,8 +104,10 @@ export function EditorChatPanel({
     }
 
     void initializeConversation()
+    const filter = textFilterRef.current
     return () => {
       cancelled = true
+      filter.clear()
     }
   }, [])
 
@@ -156,9 +123,8 @@ export function EditorChatPanel({
     const fresh = filterFreshQuotes(baseline, [...quotesRef.current])
     if (quotesRef.current.length > 0)
       onConsumeQuotes()
-    proposalRef.current = null
     lastAppliedKeyRef.current = null
-    setEditorChatSuppressDocumentDump(likelyWriteIntent(trimmed))
+    textFilterRef.current.setSuppressDocumentDump(likelyWriteIntent(trimmed))
     setApplyError(null)
     pendingConfigRef.current = {
       editorPath: 'chat',
@@ -171,6 +137,10 @@ export function EditorChatPanel({
     }
     return rewriteLastHuman(messages, formatQuotesForMessage(fresh, trimmed))
   }
+
+  const toolRenderers = useMemo(() => ({
+    [PROPOSE_DOCUMENT_EDITS_TOOL_NAME]: DocumentEditDiffToolRender,
+  }), [])
 
   if (error) {
     return (
@@ -189,6 +159,14 @@ export function EditorChatPanel({
     )
   }
 
+  if (documentEditActions == null) {
+    return (
+      <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">
+        审阅控制器未就绪…
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <EditorQuoteChips quotes={quotes} onRemove={onRemoveQuote} />
@@ -201,11 +179,15 @@ export function EditorChatPanel({
           threadId={threadId}
           prepareMessages={prepareMessages}
           configurable={() => pendingConfigRef.current}
-          onCustom={data => ingestWriterCustomEvent(data, applyProposal)}
+          onCustom={(data) => {
+            const proposal = parseWriterCustomEvent(data)
+            if (proposal)
+              applyProposal(proposal)
+          }}
           onRunningChange={(running) => {
             onChatBusyChange?.(running)
             if (!running)
-              setEditorChatSuppressDocumentDump(false)
+              textFilterRef.current.setSuppressDocumentDump(false)
           }}
         >
           <AssistantThread
@@ -213,7 +195,8 @@ export function EditorChatPanel({
             emptyHint="讨论文稿，或描述想要的修改。"
             blocked={blockInput}
             blockInputHint={blockInputHint}
-            hideAssistantText={isEditorChatInternalAssistantContent}
+            hideAssistantText={text => textFilterRef.current.shouldHide(text)}
+            toolRenderers={toolRenderers}
           />
         </AssistantGraphRuntime>
       </div>

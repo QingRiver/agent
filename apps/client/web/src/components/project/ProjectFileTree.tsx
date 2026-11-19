@@ -1,5 +1,6 @@
 import type { DragEvent, FormEvent, KeyboardEvent } from 'react'
 import type { ProjectTreeNode } from './projectTree'
+import { readTreeDragPayload, writeTreeDragPayload } from '@components/dir-tree/dnd'
 import { cn } from '@lib/utils'
 import {
   BookMarked,
@@ -35,6 +36,10 @@ function parsePayload(raw: string): ProjectDragPayload | null {
     // ignore
   }
   return null
+}
+
+function readPayload(e: DragEvent): ProjectDragPayload | null {
+  return readTreeDragPayload(e, DND_MIME, parsePayload)
 }
 
 export type ProjectSelection
@@ -161,7 +166,7 @@ export function ProjectFileTree(props: ProjectFileTreeProps) {
         onDrop={(e) => {
           e.preventDefault()
           setDropTarget(null)
-          const payload = parsePayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'))
+          const payload = readPayload(e)
           if (payload)
             void applyDrop(props.root.id, payload)
         }}
@@ -374,10 +379,7 @@ function FolderBlock(p: {
   const inKb = p.enclosingKbOf(node.id) != null
 
   function startDrag(e: DragEvent, payload: ProjectDragPayload) {
-    const raw = JSON.stringify(payload)
-    e.dataTransfer.setData(DND_MIME, raw)
-    e.dataTransfer.setData('text/plain', raw)
-    e.dataTransfer.effectAllowed = 'move'
+    writeTreeDragPayload(e, DND_MIME, payload)
   }
 
   if (p.renamingId === node.id) {
@@ -419,7 +421,7 @@ function FolderBlock(p: {
           e.preventDefault()
           e.stopPropagation()
           p.onDropTarget(null)
-          const payload = parsePayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'))
+          const payload = readPayload(e)
           if (payload)
             void p.onApplyDrop(node.id, payload)
         }}
@@ -583,10 +585,7 @@ function FolderChildren(p: {
   const { node, depth } = p
 
   function startDrag(e: DragEvent, payload: ProjectDragPayload) {
-    const raw = JSON.stringify(payload)
-    e.dataTransfer.setData(DND_MIME, raw)
-    e.dataTransfer.setData('text/plain', raw)
-    e.dataTransfer.effectAllowed = 'move'
+    writeTreeDragPayload(e, DND_MIME, payload)
   }
 
   return (

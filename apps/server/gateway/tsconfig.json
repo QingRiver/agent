@@ -5,5 +5,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src", "shared", "scripts"]
+  "include": ["src", "shared", "scripts", "../../../types/global.d.ts"]
 }

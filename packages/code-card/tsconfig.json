@@ -5,6 +5,6 @@
     "types": ["react", "react-dom", "vite/client"],
     "noEmit": true
   },
-  "include": ["src", ".storybook"],
+  "include": ["src", ".storybook", "../../types/global.d.ts"],
   "exclude": ["src/**/*.stories.tsx"]
 }

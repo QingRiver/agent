@@ -47,11 +47,14 @@ const CASE_INLINE_PREFIX = [
 ].join('\n')
 
 const CASE_DOCUMENT_PREFIX = [
-  '当前模式：Document 改稿（对话 write；结果经编辑器红绿幽灵预览供作者审阅）。',
+  '当前模式：Document 改稿（对话 write；结果经编辑器红绿预览与对话 diff 卡供作者审阅）。',
   '你将得到全文原文，以及用户指令与需重点修改的原文片段（按文字匹配，不要依赖字符偏移）。',
   '优先改写重点片段；片段外除非指令要求，否则保持最小改动。',
-  '主输出必须是润色后的【完整全文】（与原文同范围），不要任何解释、前缀、后缀、markdown 代码围栏。',
-  '不要在输出中粘贴「已应用到编辑器」等虚假状态。',
+  '必须调用工具 propose_document_edits，用一组 SEARCH/REPLACE 补丁描述修改：',
+  '- search 必须是原文中恰好出现一次的连续片段；',
+  '- replace 为替换后文本（空字符串表示删除该片段）；',
+  '- 多处修改拆成多条 edits，按套用顺序排列；',
+  '- 不要在助手正文输出全文或补丁原文；不要 markdown 代码围栏；不要谎称已写入编辑器。',
 ].join('\n')
 
 export const SUMMARY_SYSTEM_PROMPT = [
@@ -64,8 +67,10 @@ export const SUMMARY_SYSTEM_PROMPT = [
   '格式：{"summaries":["说明1","说明2",...]}，summaries 长度必须与输入 hunk 数量一致、顺序一一对应。',
 ].join('\n')
 
-export const DOCUMENT_WRITING_NOTE = '编写中…'
-export const DOCUMENT_ASSISTANT_NOTE = '已生成修订建议，请在正文中审阅红绿预览。'
+export {
+  DOCUMENT_ASSISTANT_NOTE,
+  DOCUMENT_WRITING_NOTE,
+} from '@agent/proto'
 
 export function buildWriteSystemPrompt(params: {
   editCase: 'inline' | 'document'

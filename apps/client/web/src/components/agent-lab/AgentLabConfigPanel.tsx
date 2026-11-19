@@ -1,9 +1,11 @@
 import type { ReactAgentLabConfig } from './agentLabConfig'
 import {
-  composeReactAgentSystemPrompt,
-  KB_SEARCH_SYSTEM_PROMPT,
   REACT_AGENT_MAX_STEPS_MAX,
   REACT_AGENT_MAX_STEPS_MIN,
+} from '@agent/graph/react-agent-config'
+import {
+  composeReactAgentSystemPrompt,
+  KB_SEARCH_SYSTEM_PROMPT,
 } from '@agent/graph/react-agent-prompts'
 import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
 import { Button } from '@components/ui/button'

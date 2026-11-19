@@ -23,7 +23,7 @@ describe('flattenLangChainMessage', () => {
     expect(flattenLangChainMessage(message)).toMatchObject({
       id: 'ai-1',
       type: 'ai',
-      content: '北京晴',
+      content: message.contentBlocks,
       tool_calls: [{
         id: 'call-1',
         name: 'weather_current',
@@ -54,28 +54,17 @@ describe('flattenLangChainMessage', () => {
     }])
   })
 
-  it('把 reasoning_content 收成 assistant-ui 的 reasoning 块', () => {
-    const message = new AIMessage({
+  it('aI 消息发标准 contentBlocks，思考成 reasoning 块', () => {
+    const message = new AIMessageChunk({
       id: 'ai-1',
       content: '北京晴',
       additional_kwargs: { reasoning_content: '先确认城市' },
+      response_metadata: { model_provider: 'deepseek' },
     })
 
     expect(flattenLangChainMessage(message)?.content).toEqual([
       { type: 'reasoning', reasoning: '先确认城市' },
       { type: 'text', text: '北京晴' },
-    ])
-  })
-
-  it('思考增量单独成块，空正文不补 text', () => {
-    const message = new AIMessageChunk({
-      id: 'ai-1',
-      content: '',
-      additional_kwargs: { reasoning_content: '先' },
-    })
-
-    expect(flattenLangChainMessage(message)?.content).toEqual([
-      { type: 'reasoning', reasoning: '先' },
     ])
   })
 
@@ -97,23 +86,7 @@ describe('flattenLangChainMessage', () => {
 })
 
 describe('projectLangGraphChunk', () => {
-  it('writer_reasoning 收成可累加的 reasoning 消息', () => {
-    const events = projectLangGraphChunk([
-      'custom',
-      { name: 'writer_reasoning', payload: { id: 'think-1', delta: '先看空域' } },
-    ])
-
-    expect(events).toEqual([{
-      event: 'messages',
-      data: [{
-        type: 'ai',
-        id: 'think-1',
-        content: [{ type: 'reasoning', reasoning: '先看空域' }],
-      }, {}],
-    }])
-  })
-
-  it('其它 custom 原样转发', () => {
+  it('custom 原样转发', () => {
     const events = projectLangGraphChunk([
       'custom',
       { name: 'writer_change_summaries', payload: { polished: '改后' } },
@@ -134,7 +107,7 @@ describe('projectLangGraphChunk', () => {
     expect(events).toEqual([{
       event: 'messages',
       data: [
-        { id: 'ai-1', type: 'ai', content: '你好' },
+        { id: 'ai-1', type: 'ai', content: [{ type: 'text', text: '你好' }] },
         { langgraph_node: 'agent_weather' },
       ],
     }])

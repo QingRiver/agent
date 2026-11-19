@@ -5,6 +5,7 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
+    "./react-agent-config": "./src/config/reactAgent.ts",
     "./react-agent-prompts": "./src/prompts/reactAgentPrompts.ts"
   },
   "scripts": {
@@ -17,8 +18,8 @@
     "@agent/proto": "workspace:*",
     "@agent/tools": "workspace:*",
     "@langchain/core": "catalog:",
+    "@langchain/deepseek": "catalog:",
     "@langchain/langgraph": "catalog:",
-    "@langchain/openai": "catalog:",
     "diff-match-patch": "catalog:",
     "zod": "catalog:"
   },

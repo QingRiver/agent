@@ -1,7 +1,8 @@
-import { WRITER_REASONING_EVENT } from '@agent/proto'
 import { AIMessage, BaseMessage, ToolMessage } from '@langchain/core/messages'
+import { z } from 'zod'
 
-export type FlatMessageType = 'human' | 'ai' | 'system' | 'tool'
+export const FlatMessageTypeSchema = z.enum(['human', 'ai', 'system', 'tool'])
+export type FlatMessageType = z.infer<typeof FlatMessageTypeSchema>
 
 /** assistant-ui `convertLangChainMessages` 认的扁平消息，不是 LangChain `lc/kwargs`。 */
 export interface FlatLangGraphMessage {
@@ -25,12 +26,6 @@ export interface LangGraphInterrupt {
 export interface LangGraphWireEvent {
   event: 'messages' | 'updates' | 'custom' | 'error'
   data: unknown
-}
-
-const FLAT_TYPES = new Set<FlatMessageType>(['human', 'ai', 'system', 'tool'])
-
-function isFlatType(value: string): value is FlatMessageType {
-  return FLAT_TYPES.has(value as FlatMessageType)
 }
 
 function contentToText(content: unknown): string {
@@ -87,13 +82,15 @@ function copyToolCallFields(flat: FlatLangGraphMessage, source: object) {
 }
 
 function flattenBaseMessage(message: BaseMessage): FlatLangGraphMessage | null {
-  const type = message.getType()
-  if (!isFlatType(type))
+  const parsed = FlatMessageTypeSchema.safeParse(message.type)
+  if (!parsed.success)
     return null
+  const type = parsed.data
 
   const flat: FlatLangGraphMessage = {
     type,
-    content: message.content,
+    // AI 消息发标准块：思考在 reasoning 块里，assistant-ui 原生渲染
+    content: AIMessage.isInstance(message) ? message.contentBlocks : message.content,
   }
   if (message.id)
     flat.id = message.id
@@ -108,39 +105,7 @@ function flattenBaseMessage(message: BaseMessage): FlatLangGraphMessage | null {
     if (message.status === 'success' || message.status === 'error')
       flat.status = message.status
   }
-  applyReasoningContent(flat)
   return flat
-}
-
-function reasoningText(additional: Record<string, unknown> | undefined): string | undefined {
-  const value = additional?.reasoning_content
-  return typeof value === 'string' && value.length > 0 ? value : undefined
-}
-
-function hasReasoningBlock(content: unknown): boolean {
-  return Array.isArray(content) && content.some((part) => {
-    return part != null && typeof part === 'object' && (part as { type?: unknown }).type === 'reasoning'
-  })
-}
-
-/**
- * DeepSeek 把思考放在 `additional_kwargs.reasoning_content`。
- * assistant-ui 只渲染 content 里的 `{ type: "reasoning", reasoning }`。
- */
-function applyReasoningContent(flat: FlatLangGraphMessage) {
-  const reasoning = reasoningText(flat.additional_kwargs)
-  if (!reasoning || hasReasoningBlock(flat.content))
-    return
-
-  const blocks: unknown[] = [{ type: 'reasoning', reasoning }]
-  if (typeof flat.content === 'string') {
-    if (flat.content.length > 0)
-      blocks.push({ type: 'text', text: flat.content })
-  }
-  else if (Array.isArray(flat.content)) {
-    blocks.push(...flat.content)
-  }
-  flat.content = blocks
 }
 
 export function normalizeLangGraphInterrupt(raw: unknown): LangGraphInterrupt | null {
@@ -197,38 +162,8 @@ export function projectLangGraphChunk(chunk: unknown): LangGraphWireEvent[] {
   if (mode === 'updates')
     return projectUpdates(data)
   if (mode === 'custom')
-    return projectCustom(data)
+    return [{ event: 'custom', data }]
   return []
-}
-
-/** 改稿思考增量改成 assistant-ui 能累加的 reasoning 块。正文仍留在节点里。 */
-function projectCustom(data: unknown): LangGraphWireEvent[] {
-  const reasoning = reasoningMessageFromCustom(data)
-  if (reasoning)
-    return [reasoning]
-  return [{ event: 'custom', data }]
-}
-
-function reasoningMessageFromCustom(data: unknown): LangGraphWireEvent | null {
-  if (data == null || typeof data !== 'object')
-    return null
-  const record = data as { name?: unknown, payload?: unknown }
-  if (record.name !== WRITER_REASONING_EVENT)
-    return null
-  const payload = record.payload
-  if (payload == null || typeof payload !== 'object')
-    return null
-  const { id, delta } = payload as { id?: unknown, delta?: unknown }
-  if (typeof id !== 'string' || id === '' || typeof delta !== 'string' || delta === '')
-    return null
-  return {
-    event: 'messages',
-    data: [{
-      type: 'ai',
-      id,
-      content: [{ type: 'reasoning', reasoning: delta }],
-    }, {}],
-  }
 }
 
 function projectMessagesTuple(data: unknown): LangGraphWireEvent[] {

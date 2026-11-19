@@ -31,5 +31,5 @@
     "erasableSyntaxOnly": true,
     "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": ["src", "../../../types/global.d.ts"]
 }

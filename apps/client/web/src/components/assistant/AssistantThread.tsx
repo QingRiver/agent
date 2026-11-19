@@ -1,5 +1,5 @@
 import type { ToolCallMessagePartProps } from '@assistant-ui/react'
-import type { ReactNode } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import { WEATHER_CURRENT_TOOL_NAME } from '@agent/ui'
 import {
   ComposerPrimitive,
@@ -8,10 +8,10 @@ import {
 } from '@assistant-ui/react'
 import { useLangGraphInterruptState } from '@assistant-ui/react-langgraph'
 import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown'
-import { narrowLangGraphInterrupt } from '@lib/langgraphInterrupt'
+import { toInterruptRequest } from '@lib/langgraphInterrupt'
 import { use } from 'react'
 import { HideAssistantTextContext } from './assistantContexts'
-import { DevInterruptUi } from './DevInterruptUi'
+import { LangGraphInterruptUi } from './LangGraphInterruptUi'
 import { WeatherCurrentToolRender } from './WeatherCurrentTool'
 
 function isHiddenAssistant(
@@ -70,6 +70,8 @@ function ToolCallFallback({
   )
 }
 
+export type AssistantToolRenderer = ComponentType<ToolCallMessagePartProps>
+
 export interface AssistantThreadProps {
   placeholder?: string
   emptyHint?: string
@@ -77,6 +79,8 @@ export interface AssistantThreadProps {
   blockInputHint?: string
   hideAssistantText?: (text: string) => boolean
   interrupt?: ReactNode
+  /** 额外工具 UI，合并进 by_name（可覆盖同名） */
+  toolRenderers?: Record<string, AssistantToolRenderer>
 }
 
 export function AssistantThread({
@@ -86,6 +90,7 @@ export function AssistantThread({
   blockInputHint = '请先完成上方确认',
   hideAssistantText,
   interrupt,
+  toolRenderers,
 }: AssistantThreadProps) {
   const inputBlocked = blocked
   return (
@@ -114,6 +119,7 @@ export function AssistantThread({
                       tools: {
                         by_name: {
                           [WEATHER_CURRENT_TOOL_NAME]: WeatherCurrentToolRender,
+                          ...toolRenderers,
                         },
                         Fallback: ToolCallFallback,
                       },
@@ -151,14 +157,14 @@ export function AssistantThread({
 export function AssistantLangGraphThread(props: Omit<AssistantThreadProps, 'blocked' | 'interrupt'> & {
   blocked?: boolean
 }) {
-  const pending = narrowLangGraphInterrupt(useLangGraphInterruptState()) != null
+  const pending = toInterruptRequest(useLangGraphInterruptState()) != null
   return (
     <AssistantThread
       {...props}
       blocked={props.blocked || pending}
       interrupt={(
         <div className="px-4 pb-2">
-          <DevInterruptUi />
+          <LangGraphInterruptUi />
         </div>
       )}
     />

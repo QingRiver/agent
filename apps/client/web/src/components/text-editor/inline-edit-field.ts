@@ -26,12 +26,19 @@ export interface InlineEditActions {
   cancelFollowUp: () => void
 }
 
-/** Session / React 注入；Widget 点击时调用 */
-let inlineEditActions: InlineEditActions | null = null
+export const setInlineEditActionsEffect = StateEffect.define<InlineEditActions | null>()
 
-export function setInlineEditActions(actions: InlineEditActions | null): void {
-  inlineEditActions = actions
-}
+/** 行内改写回调挂在 EditorState 上，避免模块全局 */
+export const inlineEditActionsField = StateField.define<InlineEditActions | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setInlineEditActionsEffect))
+        return e.value
+    }
+    return value
+  },
+})
 
 export const startInlineEditEffect = StateEffect.define<Omit<InlineEditState, 'aiText' | 'streaming' | 'editingInstruction'> & {
   aiText?: string
@@ -64,7 +71,8 @@ class GhostPreviewWidget extends WidgetType {
       && other.editingInstruction === this.editingInstruction
   }
 
-  toDOM() {
+  toDOM(view: EditorView) {
+    const actions = () => view.state.field(inlineEditActionsField)
     const root = document.createElement('div')
     root.className = 'cm-inline-edit-preview'
     root.setAttribute('contenteditable', 'false')
@@ -91,11 +99,11 @@ class GhostPreviewWidget extends WidgetType {
           e.preventDefault()
           const next = input.value.trim()
           if (next)
-            inlineEditActions?.submitFollowUp(next)
+            actions()?.submitFollowUp(next)
         }
         else if (e.key === 'Escape') {
           e.preventDefault()
-          inlineEditActions?.cancelFollowUp()
+          actions()?.cancelFollowUp()
         }
       })
       input.addEventListener('mousedown', e => e.stopPropagation())
@@ -135,22 +143,22 @@ class GhostPreviewWidget extends WidgetType {
     }
 
     if (this.streaming) {
-      addBtn('停止', 'cm-inline-edit-btn cm-inline-edit-btn-stop', () => inlineEditActions?.stop())
+      addBtn('停止', 'cm-inline-edit-btn cm-inline-edit-btn-stop', () => actions()?.stop())
     }
     else if (this.editingInstruction) {
       addBtn('确认', 'cm-inline-edit-btn cm-inline-edit-btn-accept', () => {
         const input = root.querySelector('.cm-inline-edit-instruction-input') as HTMLInputElement | null
         const next = input?.value.trim() ?? ''
         if (next)
-          inlineEditActions?.submitFollowUp(next)
+          actions()?.submitFollowUp(next)
       })
-      addBtn('取消', 'cm-inline-edit-btn', () => inlineEditActions?.cancelFollowUp())
+      addBtn('取消', 'cm-inline-edit-btn', () => actions()?.cancelFollowUp())
     }
     else {
-      addBtn('重新生成', 'cm-inline-edit-btn', () => inlineEditActions?.regenerate())
-      addBtn('补充', 'cm-inline-edit-btn', () => inlineEditActions?.followUp())
-      addBtn('接受 y', 'cm-inline-edit-btn cm-inline-edit-btn-accept', () => inlineEditActions?.accept())
-      addBtn('拒绝 j', 'cm-inline-edit-btn cm-inline-edit-btn-reject', () => inlineEditActions?.reject())
+      addBtn('重新生成', 'cm-inline-edit-btn', () => actions()?.regenerate())
+      addBtn('补充', 'cm-inline-edit-btn', () => actions()?.followUp())
+      addBtn('接受 y', 'cm-inline-edit-btn cm-inline-edit-btn-accept', () => actions()?.accept())
+      addBtn('拒绝 j', 'cm-inline-edit-btn cm-inline-edit-btn-reject', () => actions()?.reject())
     }
 
     root.appendChild(toolbar)

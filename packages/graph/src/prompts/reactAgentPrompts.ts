@@ -1,5 +1,11 @@
 import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
 import { z } from 'zod'
+import {
+  REACT_AGENT_MAX_STEPS_DEFAULT,
+  REACT_AGENT_MAX_STEPS_MAX,
+  REACT_AGENT_MAX_STEPS_MIN,
+  REACT_AGENT_USER_PROMPT_MAX,
+} from '../config/reactAgent'
 
 /** 产品路径：只传配置 id；服务端 middleware 再装 RuntimeBundle */
 export const AGENT_CONFIG_ID_PROPS_KEY = 'agentConfigId' as const
@@ -24,12 +30,6 @@ export const DEFAULT_REACT_AGENT_USER_PROMPT = [
   '## 回答风格',
   '- 简洁、可执行；有引用时写标准 Markdown 链接，不要脚注。',
 ].join('\n')
-
-export const REACT_AGENT_USER_PROMPT_MAX = 32_000
-/** 图节点转移上限（= LangGraph recursionLimit）；默认高于框架自带 25 */
-export const REACT_AGENT_MAX_STEPS_DEFAULT = 50
-export const REACT_AGENT_MAX_STEPS_MIN = 1
-export const REACT_AGENT_MAX_STEPS_MAX = 200
 
 /** 请求级运行配置（不含 Lab UI 元数据） */
 export const ReactAgentRuntimeConfigSchema = z.object({

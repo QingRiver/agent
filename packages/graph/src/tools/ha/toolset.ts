@@ -1,27 +1,20 @@
 import type { HaMcp } from '@agent/tools'
 import type { StructuredToolInterface } from '@langchain/core/tools'
-import process from 'node:process'
 import { createHaMcp } from '@agent/tools'
-import { ChatOpenAI } from '@langchain/openai'
 import { ASK_TOOLS } from '../ask-tools'
 import { mcpToolsToLangchainTools } from '../mcpToLangchain'
 
 export interface HaToolset {
   tools: StructuredToolInterface[]
-  llmWithTools: ReturnType<ChatOpenAI['bindTools']>
 }
 
 export async function buildHaToolset(mcp: HaMcp): Promise<HaToolset> {
-  const tools = [
-    ...mcpToolsToLangchainTools(mcp),
-    ...ASK_TOOLS,
-  ]
-  const llm = new ChatOpenAI({
-    model: process.env.OPENAI_MODEL ?? '',
-    temperature: 0,
-  })
-  const llmWithTools = llm.bindTools(tools)
-  return { tools, llmWithTools }
+  return {
+    tools: [
+      ...mcpToolsToLangchainTools(mcp),
+      ...ASK_TOOLS,
+    ],
+  }
 }
 
 /**

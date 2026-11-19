@@ -2,6 +2,7 @@ export {
   answerWithMarkdownLinks,
   buildContextFromChunks,
   type CitationValidationResult,
+  formatChunksWithCitationHints,
   formatClarifyMarkdown,
   kbCitationHref,
   validateCitations,
@@ -16,3 +17,9 @@ export {
   retrieveAndRerank,
 } from './reranker'
 export { type RouteDecision, routeIntent } from './router'
+export {
+  KB_NOT_FOUND_MESSAGE,
+  type KbSearchOutcome,
+  searchKnowledgeBase,
+  type SearchKnowledgeBaseOptions,
+} from './search'

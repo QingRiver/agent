@@ -6,18 +6,16 @@ import { describe, expect, it, vi } from 'vitest'
 import { getAIMessageContent } from '../utils/index'
 import { kbGraph } from './kb'
 
-const { mockInvoke, retrieveAndRerank } = vi.hoisted(() => ({
+const { mockInvoke, searchKnowledgeBase } = vi.hoisted(() => ({
   mockInvoke: vi.fn(async () => new AIMessageClass({
     id: 'stream-msg-1',
     content: '登录企业门户申请电子发票 [1]。',
   })),
-  retrieveAndRerank: vi.fn(),
+  searchKnowledgeBase: vi.fn(),
 }))
 
-vi.mock('@langchain/openai', () => ({
-  ChatOpenAI: class {
-    invoke = mockInvoke
-  },
+vi.mock('../utils/chatModel', () => ({
+  createChatModel: () => ({ invoke: mockInvoke }),
 }))
 
 vi.mock('@agent/kb', async (importOriginal) => {
@@ -25,7 +23,7 @@ vi.mock('@agent/kb', async (importOriginal) => {
   return {
     ...actual,
     rewriteQuery: vi.fn(async (q: string) => [q]),
-    retrieveAndRerank,
+    searchKnowledgeBase,
     validateCitations: vi.fn(() => ({
       ok: true,
       citations: [{
@@ -66,13 +64,10 @@ describe('kbGraph', () => {
     })).not.toThrow()
   })
 
-  it('首轮空检索有回复；第二轮命中后不因 routeRejected 残留而静默结束', async () => {
-    retrieveAndRerank
-      .mockResolvedValueOnce({
-        chunks: [],
-        fallback: { decision: 'reject', message: '知识库中未找到相关内容。' },
-      })
-      .mockResolvedValueOnce({ chunks: [chunk] })
+  it('首轮空检索有回复；第二轮命中后仍能正常生成', async () => {
+    searchKnowledgeBase
+      .mockResolvedValueOnce({ kind: 'empty' })
+      .mockResolvedValueOnce({ kind: 'hits', chunks: [chunk] })
 
     const threadId = `kb-${randomUUID()}`
     const app = kbGraph.compile({

@@ -1,4 +1,5 @@
 import type { DirDto } from '@apis/dir-api'
+import { findEnclosingDirId } from '@agent/project'
 
 /** 自 dirId 沿 parent 向上找最近已绑定知识库根；无则 null */
 export function findEnclosingKbDirId(
@@ -6,15 +7,7 @@ export function findEnclosingKbDirId(
   kbsByDirId: Map<string, unknown>,
   dirId: string,
 ): string | null {
-  let cur: string | null = dirId
-  const guard = new Set<string>()
-  while (cur && !guard.has(cur)) {
-    if (kbsByDirId.has(cur))
-      return cur
-    guard.add(cur)
-    cur = dirsById.get(cur)?.parentId ?? null
-  }
-  return null
+  return findEnclosingDirId(dirsById, dirId, id => kbsByDirId.has(id))
 }
 
 /** 新建 kb 文档名：无扩展名则补 .md；非 md/markdown 则强制改成 .md */

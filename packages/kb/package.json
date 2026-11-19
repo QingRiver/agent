@@ -12,7 +12,7 @@
   "dependencies": {
     "@agent/env": "workspace:*",
     "@langchain/core": "catalog:",
-    "@langchain/openai": "catalog:",
+    "@langchain/deepseek": "catalog:",
     "@langchain/textsplitters": "catalog:",
     "@qdrant/js-client-rest": "catalog:",
     "zod": "catalog:"

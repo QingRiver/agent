@@ -2,7 +2,7 @@ import type { AppEnv } from '../types'
 import { SyncRequestSchema } from '@agent/gtd'
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
-import { GtdSyncHandlers } from '../handlers/gtd-sync'
+import { syncGtdHandler } from '../handlers/gtd-sync'
 import { handleAppError } from '../http/errors'
 import { requireAuth } from '../middleware/authMiddleware'
 
@@ -13,5 +13,5 @@ export const gtdRoutes = new Hono<AppEnv>()
   .post(
     '/sync',
     zValidator('json', SyncRequestSchema),
-    c => GtdSyncHandlers.sync(c, c.get('user')!, c.req.valid('json')),
+    c => syncGtdHandler(c, c.get('user')!, c.req.valid('json')),
   )

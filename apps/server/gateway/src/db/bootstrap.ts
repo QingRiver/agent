@@ -1,4 +1,5 @@
 import { getMigrations } from 'better-auth/db/migration'
+import { initGraphRuntime } from '../agent/graphRuntime'
 import { getAuth } from '../auth/auth'
 import { setupCheckpointer } from './checkpointer'
 import { migrateAppSchema } from './migrate'
@@ -15,6 +16,9 @@ async function runDatabaseBootstrap(): Promise<void> {
 
   // 3. LangGraph checkpoint 表
   await setupCheckpointer()
+
+  // 4. 图运行时（skill 文件加载等，显式初始化避免 import 副作用）
+  initGraphRuntime()
 
   console.log('[db] postgres ready (auth + drizzle + checkpoints)')
 }

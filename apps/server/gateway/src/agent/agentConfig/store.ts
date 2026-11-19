@@ -31,6 +31,7 @@ export interface UpsertAgentConfigInput {
   skillCodes?: string[] | undefined
 }
 
+/** 单进程内存缓存；多实例部署需改短 TTL 或不缓存 */
 const cache = new Map<string, AgentConfigRecord>()
 
 function cacheKey(userId: string, id: string) {

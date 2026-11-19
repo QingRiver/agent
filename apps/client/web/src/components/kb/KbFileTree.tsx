@@ -1,6 +1,7 @@
 import type { DirTree } from '@agent/project'
 import type { DragEvent, FormEvent, KeyboardEvent } from 'react'
 import type { KbTreeNode } from './kbTree'
+import { allowMoveDrop, readTreeDragPayload, writeTreeDragPayload } from '@components/dir-tree/dnd'
 import { cn } from '@lib/utils'
 import { isDocDirty } from '@stores/kb-store'
 import {
@@ -46,8 +47,7 @@ function parseDragPayload(raw: string): KbTreeDragPayload | null {
 }
 
 function readPayload(e: DragEvent): KbTreeDragPayload | null {
-  const raw = e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain')
-  return raw ? parseDragPayload(raw) : null
+  return readTreeDragPayload(e, DND_MIME, parseDragPayload)
 }
 
 export interface KbFileTreeProps {
@@ -106,10 +106,7 @@ export function KbFileTree({
   }
 
   function onDragStart(e: DragEvent, payload: KbTreeDragPayload) {
-    const raw = JSON.stringify(payload)
-    e.dataTransfer.setData(DND_MIME, raw)
-    e.dataTransfer.setData('text/plain', raw)
-    e.dataTransfer.effectAllowed = 'move'
+    writeTreeDragPayload(e, DND_MIME, payload)
   }
 
   function onDragEnd() {
@@ -117,9 +114,7 @@ export function KbFileTree({
   }
 
   function onFolderDragOver(e: DragEvent, folderId: string) {
-    e.preventDefault()
-    e.stopPropagation()
-    e.dataTransfer.dropEffect = 'move'
+    allowMoveDrop(e)
     setDropTarget(folderId)
   }
 

@@ -1,24 +1,20 @@
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
 import type { KbStateType } from '../../state/kbState'
-import process from 'node:process'
 import {
   answerWithMarkdownLinks,
   buildContextFromChunks,
-  kbCitationHref,
+  formatChunksWithCitationHints,
   validateCitations,
 } from '@agent/kb'
 import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages'
-import { ChatOpenAI } from '@langchain/openai'
+import { Command, END } from '@langchain/langgraph'
 import { MAX_CITATION_RETRIES } from '../../state/kbState'
 import { getAIMessageContent } from '../../utils'
+import { createChatModel } from '../../utils/chatModel'
 import { lastHumanMessageText } from '../../utils/messageText'
 
-const llm = new ChatOpenAI({
-  model: process.env.OPENAI_MODEL ?? '',
-  temperature: 0.2,
-  // 与对话一致：DeepSeek V4 开着思考，正文仍走模型 SSE。
-  modelKwargs: { thinking: { type: 'enabled' } },
-})
+// 与对话一致：DeepSeek V4 开着思考，正文仍走模型 SSE。
+const llm = createChatModel({ temperature: 0.2, thinking: 'enabled' })
 
 function buildGenerateSystemPrompt(context: string): string {
   return [
@@ -31,33 +27,14 @@ function buildGenerateSystemPrompt(context: string): string {
   ].join('\n')
 }
 
-/** 与 reactAgent 工具侧一致：上下文里带上可粘贴的 MD 链接 */
-function buildLinkedContext(state: KbStateType): string {
-  return state.retrievedChunks
-    .map((c, i) => {
-      const index = i + 1
-      const href = kbCitationHref({
-        index,
-        chunk_id: c.chunk_id,
-        source_doc_id: c.source_doc_id,
-        heading_path: c.heading_path,
-        excerpt: '',
-        ...(c.page_number !== undefined ? { page_number: c.page_number } : {}),
-      })
-      const heading = c.heading_path.length ? c.heading_path.join(' > ') : '正文'
-      return `[${index}] (${heading}) 引用请写 \`${`[${index}](${href})`}\`\n${c.raw_text}`
-    })
-    .join('\n\n')
-}
-
-/** 生成答案；流式输出标准 Markdown；若仍残留裸 [n] 则在落盘时补链接 */
+/** 生成答案；流式输出标准 Markdown；引文失败时用 Command 自环重试 */
 export async function kbGenerateNode(
   state: KbStateType,
   config: LangGraphRunnableConfig,
 ) {
   const userQuery = lastHumanMessageText(state.messages)
   const context = state.retrievedChunks.length
-    ? buildLinkedContext(state)
+    ? formatChunksWithCitationHints(state.retrievedChunks)
     : buildContextFromChunks(state.retrievedChunks)
   const correction = state.citationRetries > 0
     ? state.messages.at(-1)?.content
@@ -76,25 +53,36 @@ export async function kbGenerateNode(
   const validation = validateCitations(answer, state.retrievedChunks)
 
   if (!validation.ok && state.citationRetries < MAX_CITATION_RETRIES) {
-    return {
-      messages: [new HumanMessage(validation.correctionPrompt ?? '请修正引用后重答。')],
-      citationRetries: state.citationRetries + 1,
-    }
+    return new Command({
+      update: {
+        messages: [new HumanMessage(validation.correctionPrompt ?? '请修正引用后重答。')],
+        citationRetries: state.citationRetries + 1,
+      },
+      goto: 'generate',
+    })
   }
 
   if (!validation.ok) {
-    return {
-      messages: [new AIMessage('抱歉，无法生成通过引文校验的答案，请换个问法重试。')],
-    }
+    return new Command({
+      update: {
+        messages: [new AIMessage('抱歉，无法生成通过引文校验的答案，请换个问法重试。')],
+      },
+      goto: END,
+    })
   }
 
   // 流式已发出模型原文；落盘时把残留裸 [n] 收成链接。同 id 的消息通道不会再改已流出的字。
   const markdown = answerWithMarkdownLinks(answer, validation.citations)
   const messageId = (response as AIMessage).id
-  return {
-    messages: [new AIMessage({
-      content: markdown,
-      ...(messageId != null ? { id: messageId } : {}),
-    })],
-  }
+  return new Command({
+    update: {
+      messages: [new AIMessage({
+        content: markdown,
+        ...(messageId != null ? { id: messageId } : {}),
+      })],
+    },
+    goto: END,
+  })
 }
+
+export const KB_GENERATE_ENDS = ['generate', END] as const

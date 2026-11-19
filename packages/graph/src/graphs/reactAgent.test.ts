@@ -2,17 +2,17 @@ import type { AIMessage as AIMessageType, BaseMessage } from '@langchain/core/me
 import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages'
 import { MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it, vi } from 'vitest'
-import { KB_SEARCH_TOOL_NAME } from '../tools/kb'
-import { getAIMessageContent } from '../utils/index'
 import {
   clampMaxSteps,
   composeReactAgentSystemPrompt,
   DEFAULT_REACT_AGENT_USER_PROMPT,
-  reactAgentGraph,
   readReactAgentRuntimeConfig,
   sanitizeKbId,
   sanitizeUserPrompt,
-} from './reactAgent'
+} from '../prompts/reactAgentPrompts'
+import { KB_SEARCH_TOOL_NAME } from '../tools/kb'
+import { getAIMessageContent } from '../utils/index'
+import { reactAgentGraph } from './reactAgent'
 
 const { mockInvoke } = vi.hoisted(() => ({
   mockInvoke: vi.fn(async () => new AIMessage({
@@ -21,14 +21,10 @@ const { mockInvoke } = vi.hoisted(() => ({
   })),
 }))
 
-vi.mock('@langchain/openai', () => ({
-  ChatOpenAI: class {
-    bindTools() {
-      return this
-    }
-
-    invoke = mockInvoke
-  },
+vi.mock('../utils/chatModel', () => ({
+  createChatModel: () => ({
+    bindTools: () => ({ invoke: mockInvoke }),
+  }),
 }))
 
 describe('reactAgent prompts / sanitizers', () => {
