@@ -16,7 +16,7 @@ import {
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '../db/drizzle'
 import { dirs, kbDocuments, kbs, skills, versionTexts } from '../db/schema'
-import { hasTasksMountedIn } from '../gtd/txn-log'
+import { hasTasksMountedIn } from './gtd'
 import { ancestorIdsOf, assertMoveAllowed, SkillService } from './skill'
 
 /**

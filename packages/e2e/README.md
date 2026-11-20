@@ -64,7 +64,7 @@ pnpm exec tsx packages/e2e/src/runner.ts tags
 
 1. 通过 `/tags/create` 新建公共标签
 2. 通过 `/kb/documents/create` 新建两篇文档并绑定 `tagIds`
-3. 通过 `/gtd/sync`（`GtdDevice`，写入由 `@agent/gtd` 的 `emitWrites` 生成）新建两个 task + `task_tag`
+3. 通过 `/gtd/apply`（`GtdDevice`）新建两个 task + `task_tag`
 4. `untag`：dryRun 返回文档/GTD 列表；执行后资源保留、绑定消失
 5. `delete_entities` 部分删除：选中一篇文档删除、一个 task 移进回收站，其余资源保留并解绑
 6. `delete_entities` 全部删除：使用 dryRun 返回的完整列表删除文档、把 task 移进回收站

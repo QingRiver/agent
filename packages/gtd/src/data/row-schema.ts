@@ -1,17 +1,8 @@
 /**
- * 行模型与本地意图（命令 / 字段补丁）的 Zod 契约。
+ * 行模型与意图（命令 / 字段补丁）的 Zod 契约。
  *
- * EntityRow 是领域读路径的行模型（由副本 materialize 得到）；同步 wire 是事务，见 sync/txn.ts。
- * 命令与补丁只在设备本地执行（sync/intent.ts），结果经 sync/emit.ts 变成事务写入。
+ * EntityRow 是领域读路径的行模型；服务端与客户端通过 applyIntents 在行上执行命令/补丁。
  * 导入导出见 data/serialize.ts（行级 JSON v2.0.0）。
- * 复用 ./schema 的实体子对象（TaskSchema/RepeatRuleSchema 等，.omit 派生行 data）
- * 与 ./types 枚举（经 schema.ts 的 z.enum 派生）。
- *
- * （统一 dirs 树）：folder/project entity 退出 sync（归属改 dirs 表 + 在线 API）；
- * task 加 mountDirId（权威挂载，LWW）；标签目录已退出 sync（REST /tags + 外部 catalog）；
- * task↔标签绑定仍走 task_tag。projectId 已从行/库移除（目录投影经 CatalogProjection 注入）。
- * task 移动走 moveTask command（parentId 变更自带拉回）；删 delete_folder/delete_project
- * command（删 dir 走在线 API）。
  */
 import { z } from 'zod'
 import {
@@ -82,7 +73,7 @@ export const TaskTagEntityRowSchema = z
     message: 'task_tag EntityRow.id 必须等于 taskId|tagId',
   })
 
-export const SyncEntitySchema = z.enum([
+export const GtdEntitySchema = z.enum([
   'task',
   'perspective',
   'attachment',
@@ -242,10 +233,10 @@ export const GtdCommandSchema = z.discriminatedUnion('type', [
 
 // ---------------- 派生类型 ----------------
 
-export type SyncEntity = z.infer<typeof SyncEntitySchema>
+export type GtdEntity = z.infer<typeof GtdEntitySchema>
 export type EntityRow = z.infer<typeof EntityRowSchema>
-export type EntityRowOf<E extends SyncEntity> = Extract<EntityRow, { entity: E }>
-export type EntityDataOf<E extends SyncEntity> = EntityRowOf<E>['data']
+export type EntityRowOf<E extends GtdEntity> = Extract<EntityRow, { entity: E }>
+export type EntityDataOf<E extends GtdEntity> = EntityRowOf<E>['data']
 
 export type GtdMutation = z.infer<typeof GtdMutationSchema>
 export type UpsertMutation = Extract<GtdMutation, { op: 'upsert' }>

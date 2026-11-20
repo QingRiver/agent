@@ -8,7 +8,7 @@
  * 设计原则：场景数据稳定可重现（固定 NOW、固定 ISO），不依赖随机（makeTask 的
  * 随机 id 在场景里用固定 id 覆盖）。Storybook 故事与单测同源，避免双份数据漂移。
  */
-import type { EntityRow } from '../data/sync-schema'
+import type { EntityRow } from '../data/row-schema'
 import { RowStore } from '../data/rows'
 import { GROUP_TYPE } from '../data/types'
 import { DUE_SOON_MS, isoFromNow, NOW } from './constants'

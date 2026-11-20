@@ -1,4 +1,4 @@
-import type { LocalIntent } from '@agent/gtd'
+import type { GtdIntent } from '@agent/gtd'
 import type { Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
@@ -29,14 +29,14 @@ function iso(d: Date): string {
   return d.toISOString()
 }
 
-function createTask(taskId: string, name: string, order: number, ts: string): LocalIntent {
+function createTask(taskId: string, name: string, order: number, ts: string): GtdIntent {
   return {
     kind: 'command',
     command: { id: randomUUID(), type: 'create_task', taskId, name, parentId: null, order, mountDirId: null, clientTs: ts },
   }
 }
 
-function patchTask(taskId: string, patch: Record<string, unknown>, ts: string): LocalIntent {
+function patchTask(taskId: string, patch: Record<string, unknown>, ts: string): GtdIntent {
   return {
     kind: 'mutation',
     mutation: { id: randomUUID(), entity: 'task', entityId: taskId, op: 'upsert', patch, clientTs: ts },
@@ -46,7 +46,7 @@ function patchTask(taskId: string, patch: Record<string, unknown>, ts: string): 
 /** 本次创建的任务：移进回收站再永久删除。 */
 async function removeTasks(device: GtdDevice, taskIds: string[]): Promise<void> {
   const ts = new Date().toISOString()
-  await device.act(taskIds.flatMap((taskId): LocalIntent[] => [
+  await device.act(taskIds.flatMap((taskId): GtdIntent[] => [
     { kind: 'command', command: { id: randomUUID(), type: 'delete', taskId, clientTs: ts } },
     { kind: 'purge', taskId },
   ]))

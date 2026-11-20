@@ -1,4 +1,4 @@
-import type { EntityRow, EntityRowOf } from '../data/sync-schema'
+import type { EntityRow, EntityRowOf } from '../data/row-schema'
 import type { RenderContext } from './perspective'
 import { describe, expect, it } from 'vitest'
 import { RowStore } from '../data/rows'
@@ -616,8 +616,8 @@ describe('builtinPerspectives', () => {
 // SP-COLLAPSE: 渲染层塌陷——纯结构中间层（非 matched 且子树含 matched 后代）不占行，
 // 孙任务透传挂最近可见祖先下、与该祖先的其他可见子同级缩进、同级 sortBy 排序。
 // B 非 matched 用 filter flagged:false（matchFilter 排除），不能用 HOLD/deferDate——
-// availability.computeStatus 上溯祖先：终态(HOLD/COMPLETED)或 effectiveDefer 未来都会 block 后代 C。
-// flagged 不影响 computeStatus，B status=ACTIVE 不 block C。
+// availability.computeAvailability 上溯祖先：终态(HOLD/COMPLETED)或 effectiveDefer 未来都会 block 后代 C。
+// flagged 不影响 computeAvailability，B status=ACTIVE 不 block C。
 describe('渲染层塌陷 [SP-COLLAPSE]', () => {
   const dueSoon = new Date(NOW.getTime() + DUE_SOON_MS / 2).toISOString()
 

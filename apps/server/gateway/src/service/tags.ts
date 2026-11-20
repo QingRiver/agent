@@ -1,4 +1,4 @@
-import type { EntityRow, LocalIntent } from '@agent/gtd'
+import type { EntityRow, GtdIntent } from '@agent/gtd'
 import type { SharedTagRow } from '../db/schema/tags'
 import { randomUUID } from 'node:crypto'
 import { EXPLICIT_STATUS } from '@agent/gtd'
@@ -12,7 +12,7 @@ import {
   skillTags,
   tags,
 } from '../db/schema'
-import { appendServerIntents, tasksTaggedWith } from '../gtd/txn-log'
+import { applyGtdIntents, tasksTaggedWith } from './gtd'
 import { KbService } from './kb'
 import { SkillService } from './skill'
 
@@ -75,10 +75,10 @@ function toDto(row: SharedTagRow): TagDto {
  * 删除标签时对 GTD 的操作：选中的任务移进回收站（已在回收站的跳过），所有任务解绑这个标签。
  * rows 是加锁后的当前状态，只对其中存在的行生成意图。
  */
-function tagRemovalIntents(rows: EntityRow[], tagId: string, trashTaskIds: string[]): LocalIntent[] {
+function tagRemovalIntents(rows: EntityRow[], tagId: string, trashTaskIds: string[]): GtdIntent[] {
   const clientTs = new Date().toISOString()
   const trash = new Set(trashTaskIds)
-  const intents: LocalIntent[] = []
+  const intents: GtdIntent[] = []
   for (const row of rows) {
     if (row.entity === 'task' && trash.has(row.id) && row.data.status !== EXPLICIT_STATUS.DELETED)
       intents.push({ kind: 'command', command: { type: 'delete', id: randomUUID(), clientTs, taskId: row.id } })
@@ -312,7 +312,7 @@ export class TagsService {
 
     await tx.delete(kbDocTags).where(eq(kbDocTags.tagId, tagId))
 
-    await appendServerIntents(tx, userId, rows => tagRemovalIntents(rows, tagId, []))
+    await applyGtdIntents(tx, userId, rows => tagRemovalIntents(rows, tagId, []))
 
     const skillTagRows = await tx
       .select({ skillId: skillTags.skillId })
@@ -389,7 +389,7 @@ export class TagsService {
       await KbService.removeDoc(docId)
 
     await db.transaction(async (tx) => {
-      await appendServerIntents(tx, userId, rows => tagRemovalIntents(rows, tagId, taskIdsToDelete))
+      await applyGtdIntents(tx, userId, rows => tagRemovalIntents(rows, tagId, taskIdsToDelete))
 
       if (remainingDocIds.length) {
         await tx

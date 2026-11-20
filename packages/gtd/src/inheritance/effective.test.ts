@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { COMPUTED_STATUS, EXPLICIT_STATUS, PLANNED_MODE } from '../data/types'
-import { computeStatus } from '../derived/availability'
+import { computeAvailability } from '../derived/availability'
 import { DUE_SOON_MS, makeTaskRow, NOW } from '../fixtures'
 import { buildTaskTree } from '../structure/tree'
 import {
@@ -71,12 +71,12 @@ describe('计划日 coalesce 继承 [SP-INH-PLAN]', () => {
   // SP-INH-PLAN-3: 计划日不影响 computed 着色与 blocked
   it('plannedMode=on + plannedDate 不改变 ComputedStatus（无约束→AVAILABLE）[SP-INH-PLAN-3]', () => {
     const t = makeTaskRow('t1', { plannedMode: PLANNED_MODE.ON, plannedDate: new Date(NOW.getTime() - 86400000).toISOString() })
-    expect(computeStatus(t, NOW, buildTaskTree([t]), DUE_SOON_MS)).toBe(COMPUTED_STATUS.AVAILABLE)
+    expect(computeAvailability(t, NOW, buildTaskTree([t]), DUE_SOON_MS)).toBe(COMPUTED_STATUS.AVAILABLE)
   })
   it('继承的 plannedDate 过期仍不触发 overdue [SP-INH-PLAN-3]', () => {
     const p = makeTaskRow('p', { plannedMode: PLANNED_MODE.ON, plannedDate: new Date(NOW.getTime() - 86400000).toISOString() })
     const c = makeTaskRow('c', { parentId: 'p' })
-    expect(computeStatus(c, NOW, buildTaskTree([p, c]), DUE_SOON_MS)).toBe(COMPUTED_STATUS.AVAILABLE)
+    expect(computeAvailability(c, NOW, buildTaskTree([p, c]), DUE_SOON_MS)).toBe(COMPUTED_STATUS.AVAILABLE)
   })
 
   // SP-INH-PLAN-4: 计划日不参与 defer≤due 窗口规范化

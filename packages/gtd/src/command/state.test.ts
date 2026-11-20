@@ -1,11 +1,12 @@
 /**
  * 状态机行为规约（SP-STATE-*）。
  * 每条 `it` 上方 `// SP-STATE-N` 与 `wiki/draft/gtd行为规约.md` 一一对应。
- * 实现在 `command/state-machine.ts`（complete/drop/reopen/restore/deleteTask，经 sync/intent.ts 驱动）；
+ * 实现在 `command/state-machine.ts`（complete/drop/reopen/restore/deleteTask，经 apply/intent.ts 驱动）；
  * 级联计划委托 L3 `inheritance/cascade.ts`（complete/drop/delete 不改子任务自身状态；reopen/restore 仅自身）。
  */
-import type { EntityRow, EntityRowOf, GtdCommand, GtdMutation } from '../data/sync-schema'
+import type { EntityRow, EntityRowOf, GtdCommand, GtdMutation } from '../data/row-schema'
 import { describe, expect, it } from 'vitest'
+import { applyCommand, applyMutation } from '../apply/intent'
 import { EXPLICIT_STATUS, GROUP_TYPE } from '../data/types'
 import {
   field,
@@ -17,7 +18,6 @@ import {
 } from '../fixtures'
 import { effectiveStatus } from '../inheritance/effective'
 import { buildTaskTree } from '../structure/tree'
-import { applyCommand, applyMutation } from '../sync/intent'
 
 interface State {
   rows: EntityRow[]

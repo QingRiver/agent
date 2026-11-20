@@ -3,7 +3,7 @@
  * 栏位正交：只决定本栏有/无；互不整单封杀。
  * Due / Defer / Plan 归块看 **effective** 日期（wiki/GTD_New.md §时间联动）；`tree` 缺省退回物理字段。
  */
-import type { EntityRowOf } from '../../data/sync-schema'
+import type { EntityRowOf } from '../../data/row-schema'
 import type { TaskTree } from '../../structure/tree'
 import type { ForecastOptions, LaneHit } from './types'
 import { match } from 'ts-pattern'
@@ -26,7 +26,7 @@ import { dayBlockKey } from './block-key'
 
 /**
  * 逾期 / 截止栏（wiki §1.1.1「逾期/截止」mermaid）。
- * 归块按 **effectiveDue** 日历日相对 timeslice（对齐 OF）；墙钟 overdue 着色仍由 computeStatus 负责。
+ * 归块按 **effectiveDue** 日历日相对 timeslice（对齐 OF）；墙钟 overdue 着色仍由 computeAvailability 负责。
  * **禁止**与 `COMPUTED_STATUS.OVERDUE`（due < now）合并：栏位 overdue = 截止日 < timeslice.start。
  * - 无 effective due → 两栏皆空
  * - 已截止（截止日 `< start`）且 `includeOverdue`+`includePast` → 逾期→过去；否则逾期空

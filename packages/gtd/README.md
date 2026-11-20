@@ -1,103 +1,102 @@
 # @agent/gtd
 
-GTD 领域核心包：实体模型、派生状态、同步、透视与时间工具。
+GTD 领域核心包：行模型、树与继承、声明式状态转换、意图执行（apply）、透视与 Forecast。
+
+## 分层
+
+```
+data → structure → inheritance → command → apply
+                 ↘ derived → view
+```
+
+- **data**：行模型、契约、过滤 DSL 持久化类型、读路径 `normalizeRows`
+- **structure**：任务树与分数序
+- **inheritance**：有效态与级联计划（`CascadeStep[]`，不执行）
+- **command**：`STATUS_TRANSITIONS` + runner；重复；`create` / `move` / `complete` 副作用
+- **apply**：`applyIntents` 执行 command / mutation / purge
+- **derived**：可用性（`computeAvailability`）、不变量、Forecast、压制祖先查询
+- **view**：透视、过滤求值、兄弟重排资格
 
 ## 目录（不含测试）
 
 ```
-command/                          # 命令：状态机 / 重复
-├── state-machine.ts              # 完成/放弃等状态流转
+command/
+├── transitions.ts                # STATUS_TRANSITIONS + canTransition / availableStatusActions
+├── state-machine.ts              # runner 薄封装 + complete / create / move
 └── repeat.ts                     # 重复规则生成下一实例
 
-data/                             # 数据模型与行存储
+data/
 ├── types.ts                      # 枚举常量与中文文案
 ├── schema.ts                     # Zod 实体 schema
-├── sync-schema.ts                # 行级同步 mutation/command
-├── shared.ts                     # mutation/command 类型守卫
+├── row-schema.ts                 # EntityRow / GtdCommand / GtdMutation / GtdEntity
+├── filter-schema.ts              # 持久化 FilterNode / LOGIC_OP / LEAF_OP
+├── normalize-rows.ts             # 读路径投影（标签/挂载过滤）
 ├── rows.ts                       # RowStore 行级查询投影
 └── serialize.ts                  # 行级 JSON 导入导出（v2.0.0）
 
-structure/                        # 树与排序
+structure/
 ├── tree.ts                       # Task 父子树构建
 └── order.ts                      # 分数排序与重排
 
-inheritance/                      # 继承与级联
-├── effective.ts                  # 有效 defer/due/标签
-└── cascade.ts                    # 完成/删除等级联步骤
+inheritance/
+├── effective.ts                  # 有效 defer/due/status/挂载
+└── cascade.ts                    # 重开/恢复/删除等 cascade 计划（complete/drop 恒空，不公开导出）
 
-derived/                          # 派生状态（不落库）
-├── availability.ts               # 可用性 / due_soon 等
+derived/
+├── availability.ts               # computeAvailability / due_soon 等
+├── suppressing-ancestor.ts       # UI 压制祖先提示
 ├── invariant.ts                  # 不变量校验
 └── forecast/                     # Forecast 预测栏
-    ├── types.ts                  # Forecast 类型与选项
-    ├── strip.ts                  # 预设条 → 时间片
-    ├── strip-offsets.ts          # 今日相对日偏移表
-    ├── block-key.ts              # 日块键（今/明/后）
-    ├── lanes.ts                  # 逾期/推迟等车道命中
-    ├── assign.ts                 # 多车道择优归属
-    └── render.ts                 # 渲染 Forecast 结果
 
-sync/                             # 事务重放同步（wiki/GTD-事务重放.md）
-├── txn.ts                        # 写入与事务 schema、整组写入的列
-├── replica.ts                    # 副本状态与 materialize（读时规则）
-├── replay.ts                     # 按 seq 重放事务
-├── snapshot.ts                   # 快照序列化
-├── log.ts                        # 服务器：编号、拉取、压缩
-├── local.ts                      # 设备：已确认 + 未确认
-├── intent.ts                     # 本地命令 / 字段补丁执行器
-├── emit.ts                       # 本地操作 → 事务写入
-└── wire.ts                       # /gtd/sync 请求与响应
+apply/
+├── intent.ts                     # 命令 / 字段补丁执行器
+└── apply.ts                      # applyIntents + ApplyRequest / GtdIntent schema
 
-time/                             # 时间工具
-├── clock.ts                      # 墙钟 defer 解锁判断
-├── calendar.ts                   # 时区日历日与时间片
-├── date-math.ts                  # 重复终止与日期运算
-└── normalize.ts                  # defer/due 成对规范化
+time/                             # 墙钟 / 日历 / 日期运算 / normalize
 
-view/                             # 透视与过滤视图
+view/
 ├── perspective.ts                # 透视匹配与内置透视
-├── perspective-input.ts          # 透视输入校验解析
-├── perspective-prompt.ts         # Agent 透视提示词
-├── collapse.ts                   # 树塌陷可见性
-└── filter/                       # 过滤 DSL
-    ├── schema.ts                 # 字段/算子与 FilterNode
-    ├── engine.ts                 # 过滤树求值引擎
-    ├── validate.ts               # 过滤树校验与实体解析
-    └── helpers.ts                # 空值等过滤辅助
+├── reorder-eligibility.ts        # 当前屏可手动排序的兄弟组
+└── filter/                       # 过滤求值 / 校验（schema 从 data/filter-schema re-export）
 
-fixtures/                         # 场景夹具（测/故事书）
-├── constants.ts                  # 固定 NOW 与阈值
-├── factories.ts                  # 实体行工厂函数
-├── scenarios.ts                  # 具名行为场景集
-├── sync.ts                       # 命令 / 补丁构造助手
-├── txn.ts                        # 事务构造助手
-├── perspective-prompt.ts         # 透视 prompt 样例
-└── forecast.ts                   # Forecast 单测日期锚点与 opts
-
-prompts/
-└── perspective.md                # 透视 Agent 指南原文
+fixtures/
+├── intents.ts                    # 命令 / 补丁构造助手
+└── …                             # factories / scenarios / forecast 等
 ```
+
+## 状态转换表
+
+权威边表在 `command/transitions.ts`（`STATUS_TRANSITIONS`）。对外命令是薄封装；UI 用 `canTransition` / `availableStatusActions`，不要散落 `status === ACTIVE` 判断。
+
+| action | from | to | cascade |
+|--------|------|-----|---------|
+| complete | ACTIVE | COMPLETED | 无（克隆下一实例等副作用在 `completeTask`） |
+| drop | ACTIVE | HOLD | 无 |
+| reopen | COMPLETED | ACTIVE | `planReopenCascade` |
+| restore | HOLD | ACTIVE | `planRestoreCascade` |
+| delete | ACTIVE/COMPLETED/HOLD | DELETED | `planDeleteCascade` |
+| restore_from_trash | DELETED | ACTIVE | `planRestoreFromTrashCascade` |
+
+`createTask` / `moveTask` 不进状态图（改树拓扑）。DB 列仍为 `sync_id`（行修订号）；领域字段可继续叫 `syncId`。
 
 ## 状态级联与不变量 INV
 
 任务状态四种：`ACTIVE` / `COMPLETED` / `HOLD` / `DELETED`（回收站）；后三种为终态。
 
 **不变量 INV**：终态节点不能有 `ACTIVE` 后代 ≡ 任一 `ACTIVE` 节点的祖先链必须全 `ACTIVE`。
-`derived/invariant.ts` 校验此不变量，所有状态命令的级联设计都为维持它。
-
-状态模型（逐层继承 / 自身状态保真）以源码与测试为准，不在此展开易过时的具体规则：见 `inheritance/effective.ts`（有效状态逐层继承）、`inheritance/cascade.ts`（向上拉回 `planUpwardActivation`：重开/恢复子向上翻链路上**已完成**祖先→ACTIVE，祖先是搁置/删除时不向上翻）、`inheritance/cascade.test.ts` [SP-LINK-STATE]。
+`derived/invariant.ts` 校验此不变量。细节见 `inheritance/effective.ts`、`inheritance/cascade.ts`、`inheritance/cascade.test.ts` [SP-LINK-STATE]。
 
 ## 模块一览
 
 | 目录 | 职责 |
 |------|------|
-| `command` | 高风险业务命令（状态、重复） |
-| `data` | 实体 schema、行存储、行级导入导出 |
+| `command` | 转换表 + 状态命令 + 重复 |
+| `data` | 行模型、契约、过滤 DSL 类型、normalizeRows |
 | `structure` | Task 树与 order |
-| `inheritance` | 有效字段继承与级联 |
-| `derived` | 可用性、不变量、Forecast |
-| `sync` | 事务重放：编号、重放、快照、本地意图 → 写入 |
+| `inheritance` | 有效字段继承与级联计划 |
+| `derived` | 可用性、不变量、Forecast、压制祖先 |
+| `apply` | 意图执行（服务端权威 + 客户端乐观预览） |
 | `time` | 墙钟 / 日历 / 日期运算 |
-| `view` | 透视、过滤 DSL |
+| `view` | 透视、过滤求值、重排资格 |
 | `fixtures` | 可复现场景数据 |
 | `prompts` | Agent 提示词素材 |

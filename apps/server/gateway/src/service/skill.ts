@@ -12,7 +12,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { invalidateAgentConfigCache } from '../agent/agentConfig/store'
 import { db } from '../db/drizzle'
 import { agentConfigs, dirs, kbDocuments, kbs, skills, skillTags, versionTexts } from '../db/schema'
-import { hasTasksMountedIn } from '../gtd/txn-log'
+import { hasTasksMountedIn } from './gtd'
 
 export class SkillConflictError extends Error {
   readonly status: 400 | 409

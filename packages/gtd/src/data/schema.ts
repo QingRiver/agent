@@ -1,4 +1,4 @@
-import type { FilterNode } from '../view/filter/schema'
+import type { FilterNode } from './filter-schema'
 import type {
   COMPUTED_STATUS,
 } from './types'
@@ -163,7 +163,7 @@ export const PerspectiveSchema = z
     id: uuid,
     name: z.string().describe('透视名'),
     icon: z.string().nullable().describe('图标标识'),
-    // data 层不依赖 FilterNodeSchema（避免 data↔view 循环）；边界用 validateFilterNode 解析
+    // zod 存 unknown；边界用 view/filter validateFilterNode 解析为 FilterNode
     filter: z.unknown().nullable().describe('可嵌套 JSON DSL 过滤树；null=无过滤；运行时经 view/filter 校验'),
     groupBy: z.array(GroupKeySchema).describe('分组键，多级'),
     sortBy: z.array(SortKeySchema).describe('组内排序，多级'),
@@ -179,7 +179,7 @@ export type RepeatRule = z.infer<typeof RepeatRuleSchema>
 export type Attachment = z.infer<typeof AttachmentSchema>
 export type Task = z.infer<typeof TaskSchema>
 export type SortKey = z.infer<typeof SortKeySchema>
-/** filter 在边界校验后为 FilterNode；zod 存 unknown 避免 data→view 值导入 */
+/** filter 在边界校验后为 FilterNode；zod 存 unknown */
 export type Perspective = Omit<z.infer<typeof PerspectiveSchema>, 'filter'> & {
   filter: FilterNode | null
 }

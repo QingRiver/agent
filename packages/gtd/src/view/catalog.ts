@@ -2,7 +2,7 @@
  * 目录投影（project / dir / tag 名称）：真相在 DirStore / TagsStore，
  * 注入 FilterEvalContext / RenderContext，不挂在 RowStore 上。
  */
-import type { EntityRowOf } from '../data/sync-schema'
+import type { EntityRowOf } from '../data/row-schema'
 
 export interface CatalogProjection {
   /** task 所属 project 根 id；client 注入 walkToProjectRoot(mountDirId) */

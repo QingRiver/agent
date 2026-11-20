@@ -1,4 +1,4 @@
-import type { EntityRow, EntityRowOf } from '../data/sync-schema'
+import type { EntityRow, EntityRowOf } from '../data/row-schema'
 import { describe, expect, it } from 'vitest'
 import { RowStore } from '../data/rows'
 import { REPEAT_ANCHOR, REPEAT_CYCLE } from '../data/types'

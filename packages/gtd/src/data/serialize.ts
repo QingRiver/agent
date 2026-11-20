@@ -2,11 +2,11 @@
  * 行级导入导出：EntityRow[] ↔ JSON（version 2.0.0）。
  * 替代已废的 GtdDocument materialize/dematerialize 边界。
  */
-import type { FilterNode } from '../view/filter'
-import type { EntityRow, EntityRowOf, SyncEntity } from './sync-schema'
+import type { FilterNode } from './filter-schema'
+import type { EntityRow, EntityRowOf, GtdEntity } from './row-schema'
 import { match } from 'ts-pattern'
 import { z } from 'zod'
-import { EntityRowSchema } from './sync-schema'
+import { EntityRowSchema } from './row-schema'
 
 export const EXPORT_FILE_VERSION = '2.0.0' as const
 
@@ -115,7 +115,7 @@ export function remapRowIds(rows: EntityRow[], userId: string): EntityRow[] {
 
 /** 导入拓扑序：perspectives → tasks(父先子) → task_tag → attachments */
 export function orderImportRows(rows: EntityRow[]): EntityRow[] {
-  const byEntity = <E extends SyncEntity>(e: E): EntityRowOf<E>[] =>
+  const byEntity = <E extends GtdEntity>(e: E): EntityRowOf<E>[] =>
     rows.filter((r): r is EntityRowOf<E> => r.entity === e)
 
   const perspectives = byEntity('perspective')

@@ -1,15 +1,15 @@
-import type { EntityRow } from './sync-schema'
+import type { EntityRow } from './row-schema'
 import { describe, expect, it } from 'vitest'
 import { makeRepeatRule, makeTaskRow, makeTaskTagRow } from '../fixtures'
 import { NOW_ISO } from '../fixtures/constants'
-import { FILTER_FIELD, LEAF_OP, LOGIC_OP } from '../view/filter'
+import { LEAF_OP, LOGIC_OP } from './filter-schema'
 import {
   orderImportRows,
   parseRows,
   remapRowIds,
   serializeRows,
 } from './serialize'
-import { ATTACHMENT_KIND } from './types'
+import { ATTACHMENT_KIND, FILTER_FIELD } from './types'
 
 function makePerspectiveRow(
   id: string,

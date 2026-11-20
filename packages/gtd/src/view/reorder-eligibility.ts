@@ -1,4 +1,4 @@
-import type { EntityRowOf } from '../data/sync-schema'
+import type { EntityRowOf } from '../data/row-schema'
 
 /** 兄弟序作用域：同挂载 + 同父（根任务 parentId=null 时靠 mountDirId 分桶）。 */
 export function taskSiblingKey(task: {

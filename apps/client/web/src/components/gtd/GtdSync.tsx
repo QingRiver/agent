@@ -2,7 +2,7 @@ import { useAuth } from '@hooks/useAuth'
 import { GtdStore } from '@stores/gtd-store'
 import { useEffect } from 'react'
 
-/** 挂在 /gtd 页内：登录后启动 SyncEngine 拉取行库（rows） */
+/** 挂在 /gtd 页内：登录后 list 进内存 */
 export function GtdSync() {
   const { user } = useAuth()
   const userId = user?.id

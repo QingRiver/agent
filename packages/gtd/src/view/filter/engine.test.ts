@@ -1,4 +1,4 @@
-import type { EntityRow, EntityRowOf } from '../../data/sync-schema'
+import type { EntityRow, EntityRowOf } from '../../data/row-schema'
 import type { FilterEvalContext } from './engine'
 import type { FilterNode } from './schema'
 import { describe, expect, it } from 'vitest'

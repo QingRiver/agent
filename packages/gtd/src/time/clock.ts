@@ -2,7 +2,7 @@
  * 墙钟瞬时比较（wiki §1.1.1）：不切日界，纯 UTC 瞬时 now 比较。
  *
  * 与 `calendar.ts` 的日历日界/TimeSlice 几何正交：
- * - 墙钟：defer 是否已过、dueSoon、computeStatus overdue、墙钟已解锁 —— 瞬时 now。
+ * - 墙钟：defer 是否已过、dueSoon、computeAvailability overdue、墙钟已解锁 —— 瞬时 now。
  * - 日历日：Forecast 窗、相对日期 token —— 用户 timeZone 半开日窗。
  * 勿混用。
  *

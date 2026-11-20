@@ -1,9 +1,9 @@
-import type { EntityRow, EntityRowOf, SyncEntity } from './sync-schema'
+import type { EntityRow, EntityRowOf, GtdEntity } from './row-schema'
 
 /**
  * RowStore：EntityRow[] 的封装，作为领域纯函数的输入。
  *
- * 领域纯函数输入：renderPerspective / computeStatus /
+ * 领域纯函数输入：renderPerspective / computeAvailability /
  * validateInvariants 等吃 RowStore。
  *
  * 类型收窄：liveTasks() 等用类型谓词 filter 返回具体 EntityRowOf<E>，
@@ -42,7 +42,7 @@ export class RowStore {
   }
 
   /** 按 entity + id 查找 live 行 */
-  findLive<E extends SyncEntity>(entity: E, id: string): EntityRowOf<E> | undefined {
+  findLive<E extends GtdEntity>(entity: E, id: string): EntityRowOf<E> | undefined {
     return this.rows.find(
       (r): r is EntityRowOf<E> => r.entity === entity && r.id === id && !r.deleted,
     )
@@ -68,7 +68,7 @@ export class RowStore {
   }
 
   /** 内部：按 entity 类型谓词 filter */
-  private live<E extends SyncEntity>(entity: E): EntityRowOf<E>[] {
+  private live<E extends GtdEntity>(entity: E): EntityRowOf<E>[] {
     return this.rows.filter(
       (r): r is EntityRowOf<E> => r.entity === entity && !r.deleted,
     )

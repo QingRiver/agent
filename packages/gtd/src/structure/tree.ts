@@ -1,4 +1,4 @@
-import type { EntityRowOf } from '../data/sync-schema'
+import type { EntityRowOf } from '../data/row-schema'
 
 /** Task 树节点（action group 自引用） */
 export interface TaskNode {

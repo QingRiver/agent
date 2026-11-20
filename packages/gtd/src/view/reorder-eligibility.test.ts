@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeTaskRow } from '../fixtures'
-import { fullyVisibleSiblingReorderIds, taskSiblingKey } from './sibling-reorder'
+import { fullyVisibleSiblingReorderIds, taskSiblingKey } from './reorder-eligibility'
 
 describe('taskSiblingKey', () => {
   it('根任务按 mountDirId 分桶', () => {

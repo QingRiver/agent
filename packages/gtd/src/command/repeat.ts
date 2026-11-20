@@ -1,5 +1,5 @@
+import type { EntityRow, EntityRowOf } from '../data/row-schema'
 import type { RepeatCycle, RepeatRule, Task } from '../data/schema'
-import type { EntityRow, EntityRowOf } from '../data/sync-schema'
 import { match, P } from 'ts-pattern'
 import { EXPLICIT_STATUS, REPEAT_ANCHOR, REPEAT_CYCLE } from '../data/types'
 import { orderBetween, shouldReindex } from '../structure/order'

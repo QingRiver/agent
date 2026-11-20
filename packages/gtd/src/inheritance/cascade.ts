@@ -32,17 +32,15 @@ export interface CascadeStep {
 }
 
 /**
- * 完成计划：父完成时子的有效状态跟随完成——只改自身状态为完成（子的有效状态由 effectiveStatus
- * 派生为完成，不改子任务自身状态）。故 plan 恒返回空（自身由 completeTask 命令直接写）。
- * 物理不变量 INV「物理完成 ∧ 有效活跃直接子」自动维护：complete(P) 后子有效变完成，无有效活跃直接子。
+ * 完成计划（内部）：恒 `[]`——完成只改自身，子靠有效态跟随；不经公开 barrel 导出。
+ * 保留供 cascade 单测断言「完成/搁置无向下 cascade step」。
  */
 export function planCompleteCascade(_taskId: string, _tree: TaskTree): CascadeStep[] {
   return []
 }
 
 /**
- * 搁置计划：父搁置时子的有效状态跟随搁置（不改子任务自身状态；子有效变搁置，自身状态保留待恢复）。
- * 搁置只改自身状态为搁置。恒返回空（自身由命令直接写）。
+ * 搁置计划（内部）：恒 `[]`——搁置只改自身，子靠有效态跟随；不经公开 barrel 导出。
  */
 export function planDropCascade(_taskId: string, _tree: TaskTree): CascadeStep[] {
   return []

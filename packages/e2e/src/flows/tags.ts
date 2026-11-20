@@ -1,4 +1,4 @@
-import type { EntityRow, LocalIntent } from '@agent/gtd'
+import type { EntityRow, GtdIntent } from '@agent/gtd'
 import { randomUUID } from 'node:crypto'
 import { EXPLICIT_STATUS } from '@agent/gtd'
 import { e2eFetch, e2eRequest, GtdDevice, signInE2E } from '../client'
@@ -50,7 +50,7 @@ function jsonBody(value: unknown): RequestInit {
   }
 }
 
-async function actGtd(gtd: Gtd, intents: LocalIntent[]): Promise<void> {
+async function actGtd(gtd: Gtd, intents: GtdIntent[]): Promise<void> {
   await gtd.device.act(intents)
 }
 
@@ -124,7 +124,7 @@ async function createScenario(
 
   const now = new Date().toISOString()
   const taskIds = [randomUUID(), randomUUID()]
-  const intents: LocalIntent[] = []
+  const intents: GtdIntent[] = []
   for (const [index, taskId] of taskIds.entries()) {
     intents.push({
       kind: 'command',
@@ -314,11 +314,11 @@ async function cleanupFlow(gtd: Gtd, state: CleanupState): Promise<void> {
   try {
     const rows = await gtdRows(gtd)
     const now = new Date().toISOString()
-    const intents = [...state.taskIds].flatMap((taskId): LocalIntent[] => {
+    const intents = [...state.taskIds].flatMap((taskId): GtdIntent[] => {
       const status = taskStatus(rows, taskId)
       if (status === undefined)
         return []
-      const purge: LocalIntent = { kind: 'purge', taskId }
+      const purge: GtdIntent = { kind: 'purge', taskId }
       if (status === EXPLICIT_STATUS.DELETED)
         return [purge]
       return [{ kind: 'command', command: { id: randomUUID(), type: 'delete', taskId, clientTs: now } }, purge]

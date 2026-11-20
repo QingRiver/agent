@@ -1,5 +1,5 @@
+import type { EntityRowOf } from '../../data/row-schema'
 import type { RowStore } from '../../data/rows'
-import type { EntityRowOf } from '../../data/sync-schema'
 import type { TaskTree } from '../../structure/tree'
 import type { CatalogProjection } from '../catalog'
 import type { FilterNode, LeafOp } from './schema'

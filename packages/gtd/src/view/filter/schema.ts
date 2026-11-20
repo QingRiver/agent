@@ -1,73 +1,20 @@
+/**
+ * 可嵌套 JSON DSL：view 侧 field×op 矩阵、输入原语与校验辅助。
+ * 持久化类型（FilterNode / LOGIC_OP / LEAF_OP）真相在 data/filter-schema。
+ */
 import { z } from 'zod'
+import { LEAF_OP } from '../../data/filter-schema'
 import { FILTER_FIELD } from '../../data/types'
 
-/** re-export：filter 模块作为统一导入面 */
-export { FILTER_FIELD }
-
-/** 字段枚举真相在 data/types FILTER_FIELD；此处仅作 zod 约束。 */
-const FilterFieldSchema = z.enum(FILTER_FIELD)
-
-/**
- * 可嵌套 JSON DSL 的 schema 与类型定义。
- *
- * 设计要点：
- * - 节点用 `op` 判别：逻辑节点（and/or/not）与叶子节点（LeafOp）取值不相交。
- * - 叶子 value 为 `unknown`，op 专属 value 形态由 {@link ./validate.ts} 强校验
- *   （与旧 FilterRule 的 `value: unknown` 同策略）。
- * - 输入树与运行时树共用同一 schema：解析阶段把 EntityRef/TemporalValue 解析为
- *   id/ISO 字符串后，仍符合本 schema（value 为 unknown）。
- * - EntityRef / TemporalValue 原属 perspective-input，迁入此处以避免与
- *   {@link ../perspective-input.ts} 互导产生的循环依赖。
- */
-
-// ===== 逻辑操作符 =====
-
-export const LOGIC_OP = {
-  /** 与（全部子节点命中） */
-  AND: 'and',
-  /** 或（任一子节点命中） */
-  OR: 'or',
-  /** 非（单子节点取反） */
-  NOT: 'not',
-} as const
-
-export const LOGIC_OP_TEXT = {
-  [LOGIC_OP.AND]: '且',
-  [LOGIC_OP.OR]: '或',
-  [LOGIC_OP.NOT]: '非',
-} as const
-
-// ===== 叶子操作符 =====
-
-export const LEAF_OP = {
-  /** 等于（status / flagged / estimate 标量） */
-  IS: 'is',
-  /** 不等于 */
-  IS_NOT: 'is_not',
-  /** 包含：与目标集合有交集（project / tag） */
-  SOME: 'some',
-  /** 为空：未打任何标签 / 无项目（project / tag） */
-  EMPTY: 'empty',
-  /** 早于（日期 / 数值） */
-  BEFORE: 'before',
-  /** 晚于（日期 / 数值） */
-  AFTER: 'after',
-  /** 区间内（日期 / 数值） */
-  WITHIN: 'within',
-  /** 已设置（非空） */
-  EXIST: 'exist',
-} as const
-
-export const LEAF_OP_TEXT = {
-  [LEAF_OP.IS]: '等于',
-  [LEAF_OP.IS_NOT]: '不等于',
-  [LEAF_OP.SOME]: '属于',
-  [LEAF_OP.EMPTY]: '为空',
-  [LEAF_OP.BEFORE]: '早于',
-  [LEAF_OP.AFTER]: '晚于',
-  [LEAF_OP.WITHIN]: '在区间',
-  [LEAF_OP.EXIST]: '已设置',
-} as const
+export {
+  FilterNodeSchema,
+  LEAF_OP,
+  LEAF_OP_TEXT,
+  LOGIC_OP,
+  LOGIC_OP_TEXT,
+} from '../../data/filter-schema'
+export type { FilterNode, LeafOp } from '../../data/filter-schema'
+export { FILTER_FIELD } from '../../data/types'
 
 // ===== field × op 矩阵（Zod 校验 / UI / Prompt 共用，单一事实源） =====
 
@@ -200,38 +147,6 @@ export function isRelativeDateToken(token: string): token is RelativeDateToken {
     return true
   return RELATIVE_DATE_TOKEN_REGEX.test(token)
 }
-
-// ===== FilterNode =====
-
-export type LeafOp = (typeof LEAF_OP)[keyof typeof LEAF_OP]
-
-export type FilterNode
-  = | { op: typeof LOGIC_OP.AND | typeof LOGIC_OP.OR, children: FilterNode[] }
-    | { op: typeof LOGIC_OP.NOT, child: FilterNode }
-    | { op: LeafOp, field: z.infer<typeof FilterFieldSchema>, value?: unknown }
-
-/** 递归 schema：用 z.lazy + z.union 表达任意嵌套。 */
-export const FilterNodeSchema: z.ZodType<FilterNode> = z.lazy(() =>
-  z.union([
-    z.object({
-      op: z.literal(LOGIC_OP.AND),
-      children: z.array(FilterNodeSchema),
-    }),
-    z.object({
-      op: z.literal(LOGIC_OP.OR),
-      children: z.array(FilterNodeSchema),
-    }),
-    z.object({
-      op: z.literal(LOGIC_OP.NOT),
-      child: FilterNodeSchema,
-    }),
-    z.object({
-      op: z.enum(LEAF_OP),
-      field: FilterFieldSchema,
-      value: z.unknown().optional(),
-    }),
-  ]),
-)
 
 /** DSL 结构约束（SPEC：深度 ≤ 5、节点数 ≤ 32） */
 export const FILTER_LIMITS = {

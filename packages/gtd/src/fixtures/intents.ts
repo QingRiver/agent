@@ -1,23 +1,23 @@
-/**
- * 本地意图测试助手（mutation / command）。
- * 行级工厂见 factories.ts；事务构造见 txn.ts。
- */
-import type { Task } from '../data/schema'
 import type {
   CompleteCommand,
   DropCommand,
   EntityRow,
   GtdCommand,
+  GtdEntity,
   GtdMutation,
-  SyncEntity,
   TaskDeleteMutation,
   TaskTagDeleteMutation,
   TaskTagUpsertMutation,
   TaskUpsertMutation,
-} from '../data/sync-schema'
+} from '../data/row-schema'
+/**
+ * 意图测试助手（mutation / command）。
+ * 行级工厂见 factories.ts。
+ */
+import type { Task } from '../data/schema'
 import { NOW_ISO } from './constants'
 
-/** sync 测试里常用的「当前时刻」别名（= NOW_ISO）。 */
+/** 意图/命令测试里常用的「当前时刻」别名（= NOW_ISO）。 */
 export const SYNC_NOW = NOW_ISO
 
 /** mutation：按 entity×op 重载，返回具体 union 成员（默认 task upsert）。 */
@@ -50,7 +50,7 @@ export function makeCommand(cmd: Partial<GtdCommand>): GtdCommand {
   return { id, clientTs, type, ...rest } as GtdCommand
 }
 
-export function findRow(rows: EntityRow[], entity: SyncEntity, id: string): EntityRow | undefined {
+export function findRow(rows: EntityRow[], entity: GtdEntity, id: string): EntityRow | undefined {
   return rows.find(r => r.entity === entity && r.id === id)
 }
 

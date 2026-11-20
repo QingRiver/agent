@@ -9,7 +9,7 @@
  * 子不能单独恢复（重开/继续/移出回收站）：单 restore 自身无效（挡住在祖先），须从压制祖先操作让子树恢复。
  * 旧版 `trashRestoreTargets`/`holdRestoreTargets`（restore 路由到祖先链）已回退——改置灰替代路由。
  */
-import type { EntityRowOf } from '../data/sync-schema'
+import type { EntityRowOf } from '../data/row-schema'
 import type { TaskTree } from '../structure/tree'
 import { effectiveStatus } from '../inheritance/effective'
 import { ancestors } from '../structure/tree'

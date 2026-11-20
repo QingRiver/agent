@@ -1,6 +1,6 @@
-import type { PerspectiveEntityRef } from '@agent/gtd'
+import type { PerspectiveEntityRef, StatusAction } from '@agent/gtd'
 import type { DirDto } from '@apis/dir-api'
-import { effectiveStatus, EXPLICIT_STATUS, FILTER_FIELD, GROUP_TYPE, PLANNED_MODE, suppressingAncestor } from '@agent/gtd'
+import { availableStatusActions, effectiveStatus, EXPLICIT_STATUS, FILTER_FIELD, GROUP_TYPE, PLANNED_MODE, suppressingAncestor } from '@agent/gtd'
 import { GTD_TIME_END_OF_DAY, GTD_TIME_START_OF_DAY, startOfLocalDayIso } from '@components/gtd/gtd-datetime'
 import { GtdDateTimeField } from '@components/gtd/GtdDateTimeField'
 import { GtdRepeatEditor } from '@components/gtd/GtdRepeatEditor'
@@ -52,12 +52,11 @@ export function GtdInspector() {
   const dir = dirId ? dirsById.get(dirId) ?? null : null
 
   if (task) {
-    // 读侧用 effectiveStatus：删父/搁置父/完成父的子有效态被洪水压，徽标/按钮门控跟随有效态（第 4 点）
+    // 读侧用 effectiveStatus：删父/搁置父/完成父的子有效态被洪水压，徽标/按钮门控跟随有效态
     const effStatus = effectiveStatus(task, tree)
-    const done = effStatus === EXPLICIT_STATUS.COMPLETED
-    const dropped = effStatus === EXPLICIT_STATUS.HOLD
-    const trashed = effStatus === EXPLICIT_STATUS.DELETED
-    // 被祖先连带压制（有效≠物理）→ 终态按钮置灰 + hover 提示从压制祖先操作（子不能单独恢复/重开）
+    // 状态动作按钮：只查转换表（物理态 + guard），不散落 status === …
+    const statusActions = availableStatusActions(task)
+    // 被祖先连带压制（有效≠物理）→ 终态按钮置灰 + hover 提示从压制祖先操作
     const suppressor = effStatus !== task.data.status ? suppressingAncestor(task, tree) : null
     const suppressed = suppressor != null
     const suppressVerb = suppressor
@@ -76,6 +75,39 @@ export function GtdInspector() {
     // projectId 退出 LWW（server 派生），此处按 mountDirId 派生展示；改项目 = 改 mountDirId
     const derivedProjectId = DirStore.projectOf(dirsById, task.data.mountDirId)
     const mounted = task.data.mountDirId != null
+
+    const runStatusAction = (action: StatusAction) => {
+      switch (action) {
+        case 'complete':
+          completeTask(task.id)
+          break
+        case 'drop':
+          dropTask(task.id)
+          break
+        case 'reopen':
+          reopenTask(task.id)
+          break
+        case 'restore':
+          restoreTask(task.id)
+          break
+        case 'delete':
+          deleteTaskLogical(task.id)
+          break
+        case 'restore_from_trash':
+          restoreFromTrash(task.id)
+          break
+      }
+    }
+    const statusActionLabel: Record<StatusAction, string> = {
+      complete: '完成',
+      drop: '放弃',
+      reopen: '重开',
+      restore: '恢复',
+      delete: '移到回收站',
+      restore_from_trash: '移出回收站',
+    }
+    const statusActionVariant = (action: StatusAction): 'outline' | 'ghost' =>
+      action === 'delete' ? 'ghost' : 'outline'
 
     return (
       <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card">
@@ -283,91 +315,31 @@ export function GtdInspector() {
             <Button type="button" className="h-9" variant="outline" onClick={() => toggleFlag(task.id)}>
               {task.data.flagged ? '取消旗标' : '旗标'}
             </Button>
-            {trashed
-              ? (
-                  <>
-                    <Button
-                      type="button"
-                      className="h-9"
-                      variant="outline"
-                      disabled={suppressed}
-                      {...(suppressed ? { title: suppressHint } : {})}
-                      onClick={() => restoreFromTrash(task.id)}
-                    >
-                      移出回收站
-                    </Button>
-                    <Button
-                      type="button"
-                      className="h-9"
-                      variant="ghost"
-                      disabled={suppressed}
-                      {...(suppressed ? { title: suppressHint } : {})}
-                      onClick={() => purgeTrash([task.id])}
-                    >
-                      永久删除
-                    </Button>
-                  </>
-                )
-              : done
-                ? (
-                    <Button
-                      type="button"
-                      className="h-9"
-                      variant="outline"
-                      disabled={suppressed}
-                      {...(suppressed ? { title: suppressHint } : {})}
-                      onClick={() => reopenTask(task.id)}
-                    >
-                      重开
-                    </Button>
-                  )
-                : dropped
-                  ? (
-                      <Button
-                        type="button"
-                        className="h-9"
-                        variant="outline"
-                        disabled={suppressed}
-                        {...(suppressed ? { title: suppressHint } : {})}
-                        onClick={() => restoreTask(task.id)}
-                      >
-                        恢复
-                      </Button>
-                    )
-                  : (
-                      <>
-                        <Button
-                          type="button"
-                          className="h-9"
-                          variant="outline"
-                          disabled={suppressed}
-                          {...(suppressed ? { title: suppressHint } : {})}
-                          onClick={() => completeTask(task.id)}
-                        >
-                          完成
-                        </Button>
-                        <Button
-                          type="button"
-                          className="h-9"
-                          variant="outline"
-                          disabled={suppressed}
-                          {...(suppressed ? { title: suppressHint } : {})}
-                          onClick={() => dropTask(task.id)}
-                        >
-                          放弃
-                        </Button>
-                        <Button
-                          type="button"
-                          className="h-9"
-                          variant="ghost"
-                          disabled={suppressed}
-                          {...(suppressed ? { title: suppressHint } : {})}
-                          onClick={() => deleteTaskLogical(task.id)}
-                        >
-                          移到回收站
-                        </Button>
-                      </>
-                    )}
+            {statusActions.map(action => (
+              <Button
+                key={action}
+                type="button"
+                className="h-9"
+                variant={statusActionVariant(action)}
+                disabled={suppressed}
+                {...(suppressed ? { title: suppressHint } : {})}
+                onClick={() => runStatusAction(action)}
+              >
+                {statusActionLabel[action]}
+              </Button>
+            ))}
+            {statusActions.includes('restore_from_trash') && (
+              <Button
+                type="button"
+                className="h-9"
+                variant="ghost"
+                disabled={suppressed}
+                {...(suppressed ? { title: suppressHint } : {})}
+                onClick={() => purgeTrash([task.id])}
+              >
+                永久删除
+              </Button>
+            )}
           </div>
         </div>
       </aside>

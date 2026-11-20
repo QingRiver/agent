@@ -246,11 +246,11 @@ erDiagram
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/gtd/sync` | 上传本机未确认事务 + 拉取服务器新事务（或快照），一次往返 |
+| POST | `/gtd/list` | 拉取当前用户全部行 |
+| POST | `/gtd/apply` | `{ intents }`：服务端执行命令/补丁/purge，返回全量行 |
 
-契约：`@agent/gtd` 的 `SyncRequestSchema` / `SyncResponseSchema`；原理见 [wiki/GTD-事务重放.md](../../../wiki/GTD-事务重放.md)。
-服务器只按设备 clientSeq 去重查缺号、分配连续 seq、用 `@agent/gtd` 的 `appendToHead` 重放，不做业务裁决。
-删除标签时选「删除关联任务」由服务器生成一条事务（设备 id `server`）把任务移进回收站。
+契约：`@agent/gtd` 的 `ApplyRequestSchema` / `GtdRowsResponseSchema`；见 [wiki/GTD.md](../../../wiki/GTD.md)。
+删除标签时选「删除关联任务」由服务器在同一事务里 `applyGtdIntents` 把任务移进回收站并解绑。
 
 ### curl 示例
 

@@ -1,3 +1,4 @@
+import type { EntityRowOf } from '../data/row-schema'
 /**
  * 透视渲染管线（通用路径）：
  * 1. 可用性 base filter（View Options）
@@ -15,7 +16,6 @@ import type {
   Perspective,
   SortKey,
 } from '../data/schema'
-import type { EntityRowOf } from '../data/sync-schema'
 import type { AvailabilityFilter, BuiltinPerspectiveId } from '../data/types'
 import type { ForecastOptions } from '../derived/forecast'
 import type { TaskNode, TaskTree } from '../structure/tree'
@@ -33,7 +33,7 @@ import {
   SORT_DIR,
   SORT_FIELD,
 } from '../data/types'
-import { computeStatus } from '../derived/availability'
+import { computeAvailability } from '../derived/availability'
 import { defaultForecastOptions, renderForecast } from '../derived/forecast'
 import { effectiveDefer, effectiveDue, effectiveStatus } from '../inheritance/effective'
 import { ancestors, buildTaskTree } from '../structure/tree'
@@ -161,7 +161,7 @@ export function matchesAvailability(
 }
 
 function taskComputed(task: EntityRowOf<'task'>, ctx: RenderContext): ComputedStatus {
-  return computeStatus(
+  return computeAvailability(
     task,
     ctx.now,
     ctx.tree,

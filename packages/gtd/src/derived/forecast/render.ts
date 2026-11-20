@@ -1,8 +1,8 @@
+import type { EntityRowOf } from '../../data/row-schema'
 import type { RowStore } from '../../data/rows'
-import type { EntityRowOf } from '../../data/sync-schema'
 /**
  * Forecast 渲染：按 timeslice 吸顶分块 + 块内树序（保层级）。
- * `computeStatus` / depth 用全量 liveTasks 树；`tasks` 仅作归桶列表（已 applyBaseFilter）。
+ * `computeAvailability` / depth 用全量 liveTasks 树；`tasks` 仅作归桶列表（已 applyBaseFilter）。
  */
 import type { RenderContext, RenderGroup, RenderItem } from '../../view/perspective'
 import type { ForecastBlockKey, ForecastOptions } from './types'
@@ -19,7 +19,7 @@ import {
   startOfZonedYmd,
 } from '../../time/calendar'
 import { flattenInTreeOrder } from '../../view/perspective'
-import { computeStatus } from '../availability'
+import { computeAvailability } from '../availability'
 import { assignForecastBlock } from './assign'
 import { dayBlockKey } from './block-key'
 import { dayStartAtOffset, NAMED_DAY_OFFSETS } from './strip-offsets'
@@ -72,7 +72,7 @@ function forecastBlockLabel(key: ForecastBlockKey, timeZone: string): string {
 }
 
 function toItem(task: EntityRowOf<'task'>, ctx: RenderContext): RenderItem {
-  const computed = computeStatus(
+  const computed = computeAvailability(
     task,
     ctx.now,
     ctx.tree,

@@ -1,3 +1,4 @@
+import type { EntityRow, EntityRowOf } from '../data/row-schema'
 /**
  * 领域级 + 行级数据工厂（共享：单测 + 未来 client Storybook）。
  *
@@ -11,7 +12,6 @@ import type {
   Tag,
   Task,
 } from '../data/schema'
-import type { EntityRow, EntityRowOf } from '../data/sync-schema'
 import { randomUUID } from 'node:crypto'
 import {
   EXPLICIT_STATUS,

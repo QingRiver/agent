@@ -1,9 +1,9 @@
+import type { EntityRowOf } from '../data/row-schema'
 /**
  * 可用性计算。派生状态不持久化，实时计算。
  */
 import type { RowStore } from '../data/rows'
 import type { ComputedStatus } from '../data/schema'
-import type { EntityRowOf } from '../data/sync-schema'
 import type { TaskTree } from '../structure/tree'
 import { COMPUTED_STATUS, EXPLICIT_STATUS, GROUP_TYPE } from '../data/types'
 import { effectiveDefer, effectiveDue } from '../inheritance/effective'
@@ -24,7 +24,7 @@ interface ComputeContext {
   visiting: Set<string>
 }
 
-function computeStatusInner(task: EntityRowOf<'task'>, ctx: ComputeContext): ComputedStatus {
+function computeAvailabilityInner(task: EntityRowOf<'task'>, ctx: ComputeContext): ComputedStatus {
   /* 缓命中直接返回 */
   const cached = ctx.cache.get(task.id)
   if (cached) {
@@ -61,7 +61,7 @@ function computeStatusInner(task: EntityRowOf<'task'>, ctx: ComputeContext): Com
    */
   let ancestor = ctx.tree.byId.get(task.id)?.parent ?? null
   while (ancestor) {
-    const ancStatus = computeStatusInner(ancestor.task, ctx)
+    const ancStatus = computeAvailabilityInner(ancestor.task, ctx)
     if (ancStatus === COMPUTED_STATUS.BLOCKED) {
       ctx.cache.set(task.id, COMPUTED_STATUS.BLOCKED)
       ctx.visiting.delete(task.id)
@@ -118,14 +118,14 @@ function computeStatusInner(task: EntityRowOf<'task'>, ctx: ComputeContext): Com
 /**
  * 计算单个 Task 的 ComputedStatus。
  */
-export function computeStatus(
+export function computeAvailability(
   task: EntityRowOf<'task'>,
   now: Date,
   tree: TaskTree,
   dueSoonIntervalMs: number,
   cache?: Map<string, ComputedStatus>,
 ): ComputedStatus {
-  return computeStatusInner(task, {
+  return computeAvailabilityInner(task, {
     now,
     tree,
     dueSoonIntervalMs,
@@ -145,7 +145,7 @@ export function computeAll(
   const cache = new Map<string, ComputedStatus>()
   const result: Record<string, ComputedStatus> = {}
   for (const t of tasks) {
-    result[t.id] = computeStatus(t, now, tree, dueSoonIntervalMs, cache)
+    result[t.id] = computeAvailability(t, now, tree, dueSoonIntervalMs, cache)
   }
   return result
 }

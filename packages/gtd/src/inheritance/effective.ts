@@ -15,7 +15,7 @@
  *
  * SoT：wiki/GTD_New.md §时间联动。
  */
-import type { EntityRowOf } from '../data/sync-schema'
+import type { EntityRowOf } from '../data/row-schema'
 import type { ExplicitStatusValue } from '../data/types'
 import type { TaskTree } from '../structure/tree'
 import { EXPLICIT_STATUS, PLANNED_MODE } from '../data/types'

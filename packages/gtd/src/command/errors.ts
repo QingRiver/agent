@@ -1,7 +1,7 @@
 /**
  * 命令被拒绝时的报错。消息直接展示给用户：用任务名称指代任务，不带 id 与规约编号。
  */
-import type { EntityRowOf } from '../data/sync-schema'
+import type { EntityRowOf } from '../data/row-schema'
 import type { ExplicitStatusValue } from '../data/types'
 import { EXPLICIT_STATUS } from '../data/types'
 

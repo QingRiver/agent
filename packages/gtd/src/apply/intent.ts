@@ -1,6 +1,6 @@
 /**
- * 本地意图的执行器：在设备当前看见的行上原地执行命令（状态机）或字段补丁。
- * 只在本机用，产出的行变化由 emit.ts 整理成事务写入；服务器不执行这些函数。
+ * 意图执行器：在当前行上原地执行命令（状态机）或字段补丁。
+ * 服务端 apply 与客户端乐观预览共用。
  */
 import type { ApplyResult } from '../command/state-machine'
 import type {
@@ -8,17 +8,17 @@ import type {
   EntityRow,
   EntityRowOf,
   GtdCommand,
+  GtdEntity,
   GtdMutation,
-  SyncEntity,
   UpsertMutation,
-} from '../data/sync-schema'
+} from '../data/row-schema'
 import { match } from 'ts-pattern'
 import { taskNotFound } from '../command/errors'
 import { completeTask, createTask, deleteTask, dropTask, moveTask, reopenTask, restoreFromTrash, restoreTask } from '../command/state-machine'
 import { EXPLICIT_STATUS } from '../data/types'
 import { normalizeDeferDue } from '../time/normalize'
 
-function findLive<E extends SyncEntity>(rows: EntityRow[], entity: E, id: string): EntityRowOf<E> | undefined {
+function findLive<E extends GtdEntity>(rows: EntityRow[], entity: E, id: string): EntityRowOf<E> | undefined {
   return rows.find(r => r.entity === entity && r.id === id && !r.deleted) as EntityRowOf<E> | undefined
 }
 
@@ -80,7 +80,6 @@ function applyMutationUpsert(
   const row = rows.find(r => r.entity === mut.entity && r.id === mut.entityId)
   if (row) {
     if (row.entity === 'task') {
-      // 回收站里的任务不接受字段修改；移出回收站走 restore_from_trash
       if (row.data.status === EXPLICIT_STATUS.DELETED)
         return 'noop'
       const before = { deferDate: row.data.deferDate ?? null, dueDate: row.data.dueDate ?? null }
