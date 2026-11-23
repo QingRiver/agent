@@ -6,7 +6,7 @@
  * - `effectiveDefer` = 地板：`max(自身 deferDate, 父 effectiveDefer)`，再钳 `min(它, effectiveDue)`；null 视为 −∞（无下界）。
  * - `effectivePlannedDate` / `effectivePlannedMode` = OF4 coalesce：自身有直接赋值则用自身，否则取最近祖先；
  *   **无** min/max 约束（计划日不制造可用性限制）。
- * 标签不走读时继承：OF4 Inherited Tags Assignment 为入组时写复制（client `copyTagMutsFromParent`）。
+ * 标签不走读时继承：OF4 Inherited Tags Assignment 为入组时写复制（`command/ops` 的 `copyTagsFromParentOp`）。
  *
  * 实现等价说明：因 `effectiveDue` 沿父子链单调不增（子 = min(自身, 父) ≤ 父），各祖先层的 defer 钳制
  * 被最末（当前任务）的钳制 ceiling 收紧——故 `max` 沿链取原始 deferDate 后只钳一次 `effectiveDue` 与

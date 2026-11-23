@@ -6,21 +6,16 @@ import type { ApplyResult } from '../command/state-machine'
 import type {
   DeleteMutation,
   EntityRow,
-  EntityRowOf,
   GtdCommand,
-  GtdEntity,
   GtdMutation,
   UpsertMutation,
 } from '../data/row-schema'
 import { match } from 'ts-pattern'
 import { taskNotFound } from '../command/errors'
 import { completeTask, createTask, deleteTask, dropTask, moveTask, reopenTask, restoreFromTrash, restoreTask } from '../command/state-machine'
+import { findLive } from '../data/rows'
 import { EXPLICIT_STATUS } from '../data/types'
 import { normalizeDeferDue } from '../time/normalize'
-
-function findLive<E extends GtdEntity>(rows: EntityRow[], entity: E, id: string): EntityRowOf<E> | undefined {
-  return rows.find(r => r.entity === entity && r.id === id && !r.deleted) as EntityRowOf<E> | undefined
-}
 
 export function applyCommand(
   cmd: GtdCommand,

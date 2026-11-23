@@ -1,6 +1,7 @@
 import type { EntityRow, EntityRowOf } from '../data/row-schema'
 import type { RepeatCycle, RepeatRule, Task } from '../data/schema'
 import { match, P } from 'ts-pattern'
+import { liveTasks, liveTaskTags } from '../data/rows'
 import { EXPLICIT_STATUS, REPEAT_ANCHOR, REPEAT_CYCLE } from '../data/types'
 import { orderBetween, shouldReindex } from '../structure/order'
 
@@ -100,9 +101,9 @@ export function repeatSuccessorId(repeatRuleId: string, occurrence: number): str
 /** 新实例紧跟在旧实例之后；与下一兄弟之间已无空隙时排到同级末尾。同级 order 必须唯一。 */
 function successorOrder(task: EntityRowOf<'task'>, nextTaskId: string, rows: EntityRow[]): number {
   const { mountDirId, parentId, order } = task.data
-  const siblingOrders = rows
-    .filter((r): r is EntityRowOf<'task'> =>
-      r.entity === 'task' && !r.deleted && r.id !== task.id && r.id !== nextTaskId
+  const siblingOrders = liveTasks(rows)
+    .filter(r =>
+      r.id !== task.id && r.id !== nextTaskId
       && r.data.mountDirId === mountDirId && r.data.parentId === parentId)
     .map(r => r.data.order)
   const after = siblingOrders.filter(o => o > order).sort((a, b) => a - b)[0] ?? null
@@ -160,9 +161,7 @@ export function cloneNextInstance(
   }
 
   // 复制旧实例 task_tag → 新实例（保持标签继承）
-  /** 旧实例上未软删的 task_tag，用于复制到新实例。 */
-  const sourceTaskTags = rows.filter((r): r is EntityRowOf<'task_tag'> =>
-    r.entity === 'task_tag' && r.data.taskId === taskId && !r.deleted)
+  const sourceTaskTags = liveTaskTags(rows).filter(r => r.data.taskId === taskId)
   for (const tt of sourceTaskTags) {
     const tagId = tt.data.tagId
     if (typeof tagId !== 'string') {

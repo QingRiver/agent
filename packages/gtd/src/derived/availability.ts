@@ -7,7 +7,6 @@ import type { ComputedStatus } from '../data/schema'
 import type { TaskTree } from '../structure/tree'
 import { COMPUTED_STATUS, EXPLICIT_STATUS, GROUP_TYPE } from '../data/types'
 import { effectiveDefer, effectiveDue } from '../inheritance/effective'
-import { buildTaskTree } from '../structure/tree'
 import { isWallClockUnlocked } from '../time/clock'
 
 /** 可用性计算上下文 */
@@ -141,7 +140,7 @@ export function computeAll(
   dueSoonIntervalMs: number,
 ): Record<string, ComputedStatus> {
   const tasks = rowStore.liveTasks()
-  const tree = buildTaskTree(tasks)
+  const tree = rowStore.taskTree()
   const cache = new Map<string, ComputedStatus>()
   const result: Record<string, ComputedStatus> = {}
   for (const t of tasks) {

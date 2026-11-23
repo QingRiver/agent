@@ -10,7 +10,7 @@ import {
   FORECAST_STRIP,
   FORECAST_STRIP_TEXT,
 } from '../../data/types'
-import { buildTaskTree, taskDepth } from '../../structure/tree'
+import { taskDepth } from '../../structure/tree'
 import {
   formatZonedYmd,
   inTimeSlice,
@@ -104,7 +104,7 @@ function blockSortKey(key: ForecastBlockKey, now: Date, timeZone: string): numbe
 /**
  * 渲染 Forecast：按 timeslice 吸顶分块。
  * `tasks` 须由调用方先经 applyBaseFilter（通常 REMAINING）；本函数不再自行按 status 过滤。
- * 树与 status 基于 `rowStore.liveTasks()` 全量，避免过滤子集丢祖先导致 computed 失真。
+ * 树与 status 基于 `rowStore.taskTree()` 全量，避免过滤子集丢祖先导致 computed 失真。
  */
 export function renderForecast(
   rowStore: RowStore,
@@ -114,7 +114,7 @@ export function renderForecast(
   tasks: EntityRowOf<'task'>[],
   timeZone: string,
 ): RenderGroup[] {
-  const tree = buildTaskTree(rowStore.liveTasks())
+  const tree = rowStore.taskTree()
   const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map(), collapsibleSet: new Set() }
 
   const buckets = new Map<ForecastBlockKey, EntityRowOf<'task'>[]>()

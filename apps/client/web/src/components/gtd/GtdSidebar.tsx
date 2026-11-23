@@ -25,14 +25,12 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useGtd } from '@hooks/useGtd'
-import { downloadFile } from '@lib/downloadFile'
 import { cn } from '@lib/utils'
 import { DirStore } from '@stores/dir-store'
 import { TagsStore } from '@stores/tags-store'
 import { useAtomValue } from 'jotai'
 import {
   CalendarDays,
-  Download,
   GripVertical,
   Layers,
   Plus,
@@ -40,9 +38,8 @@ import {
   Sparkles,
   Tag,
   Trash2,
-  Upload,
 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import {
   selectPerspective,
   selectProjectFocus,
@@ -165,15 +162,12 @@ export function GtdSidebar() {
     removePerspective,
     syncStatus,
     error,
-    exportDocument,
-    importDocument,
   } = useGtd()
   const [projectName, setProjectName] = useState('')
   const [tagName, setTagName] = useState('')
   const [tagManagerOpen, setTagManagerOpen] = useState(false)
   const [projectManagerOpen, setProjectManagerOpen] = useState(false)
   const [perspectiveEditorId, setPerspectiveEditorId] = useState<string | 'new' | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -243,48 +237,8 @@ export function GtdSidebar() {
       <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">GTD</span>
-          <div className="flex items-center gap-2">
-            {syncLabel && <span className="text-[10px] text-muted-foreground">{syncLabel}</span>}
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground"
-              title="导出 JSON"
-              onClick={() => {
-                const json = exportDocument()
-                downloadFile(
-                  json,
-                  `gtd-export-${new Date().toISOString().slice(0, 10)}.json`,
-                  'application/json',
-                )
-              }}
-            >
-              <Download className="size-3.5" />
-            </button>
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground"
-              title="导入 JSON（仅新建，不覆盖）"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="size-3.5" />
-            </button>
-          </div>
+          {syncLabel && <span className="text-[10px] text-muted-foreground">{syncLabel}</span>}
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (!file)
-              return
-            void file.text().then((text) => {
-              importDocument(text)
-            })
-            e.target.value = ''
-          }}
-        />
 
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
           <div className="mb-1 flex items-center justify-between px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

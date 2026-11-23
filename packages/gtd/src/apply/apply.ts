@@ -1,13 +1,14 @@
 /**
  * 在当前行上执行用户意图，返回新的行集合（服务端与客户端乐观预览共用）。
  */
-import type { EntityRow, EntityRowOf, GtdCommand, GtdMutation } from '../data/row-schema'
+import type { EntityRow, GtdCommand, GtdMutation } from '../data/row-schema'
 import { z } from 'zod'
 import { taskLabel, taskNotFound } from '../command/errors'
 import { repeatSuccessorId } from '../command/repeat'
 import { EntityRowSchema, GtdCommandSchema, GtdMutationSchema } from '../data/row-schema'
+import { findLive, taskTree } from '../data/rows'
 import { EXPLICIT_STATUS } from '../data/types'
-import { buildTaskTree, subtree } from '../structure/tree'
+import { subtree } from '../structure/tree'
 import { applyCommand, applyMutation } from './intent'
 
 export type GtdIntent
@@ -36,8 +37,8 @@ export type GtdRowsResponse = z.infer<typeof GtdRowsResponseSchema>
 function withSuccessorId(command: GtdCommand, rows: EntityRow[]): GtdCommand {
   if (command.type !== 'complete')
     return command
-  const task = rows.find(r => r.entity === 'task' && r.id === command.taskId && !r.deleted)
-  if (task?.entity !== 'task')
+  const task = findLive(rows, 'task', command.taskId)
+  if (!task)
     return command
   const { repeatRuleId, repeatRule } = task.data
   if (repeatRuleId == null || repeatRule == null)
@@ -47,8 +48,8 @@ function withSuccessorId(command: GtdCommand, rows: EntityRow[]): GtdCommand {
 }
 
 function assertPurgeable(rows: EntityRow[], taskId: string): void {
-  const task = rows.find(r => r.entity === 'task' && r.id === taskId && !r.deleted)
-  if (task?.entity !== 'task')
+  const task = findLive(rows, 'task', taskId)
+  if (!task)
     throw taskNotFound()
   if (task.data.status !== EXPLICIT_STATUS.DELETED)
     throw new Error(`${taskLabel(task)}不在回收站中，不能永久删除；请从回收站里的上级任务操作`)
@@ -65,8 +66,7 @@ function maxSyncId(rows: EntityRow[]): number {
 
 /** 永久删除任务及其子孙，以及挂在它们上面的 task_tag / attachment。 */
 function purgeTaskTree(rows: EntityRow[], taskId: string): void {
-  const tasks = rows.filter((r): r is EntityRowOf<'task'> => r.entity === 'task' && !r.deleted)
-  const tree = buildTaskTree(tasks)
+  const tree = taskTree(rows)
   if (!tree.byId.has(taskId))
     throw taskNotFound()
   const purged = new Set([taskId, ...subtree(tree, taskId).map(t => t.id)])

@@ -36,7 +36,7 @@ import {
 import { computeAvailability } from '../derived/availability'
 import { defaultForecastOptions, renderForecast } from '../derived/forecast'
 import { effectiveDefer, effectiveDue, effectiveStatus } from '../inheritance/effective'
-import { ancestors, buildTaskTree } from '../structure/tree'
+import { ancestors } from '../structure/tree'
 import { formatZonedYmdHm } from '../time/calendar'
 import { computeCollapsibleSet, effectiveVisibleChildren } from './collapse'
 import { FILTER_FIELD, LEAF_OP, LOGIC_OP, matchFilter, rawValue } from './filter'
@@ -101,7 +101,7 @@ export function renderPerspective(
   const catalog = catalogFromOptions(options)
 
   const tasks = rowStore.liveTasks()
-  const tree = buildTaskTree(tasks)
+  const tree = rowStore.taskTree()
   // ctx 先建（applyBaseFilter 需 ctx）；forecast 传空 collapsibleSet 不塌陷 [SP-COLLAPSE-FORECAST-NOOP]，通用路径 filter 后重算
   const ctx: RenderContext = {
     rowStore,

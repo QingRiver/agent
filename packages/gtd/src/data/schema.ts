@@ -20,7 +20,7 @@ import {
  * @agent/gtd 数据结构 spec —— zod schema 为唯一来源。
  *
  * 设计原则：
- * - 运行时真相为行级 EntityRow[]；导入导出见 data/serialize.ts（v2.0.0）。
+ * - 运行时真相为行级 EntityRow[]。
  * - 实体扁平存储 + id 引用（不深嵌套），运行时按 parentId/mountDirId 构建树。
  * - 不涉及 DB / UI；派生状态（COMPUTED_STATUS）不落 JSON，由 availability 实时计算。
  * - 枚举值从 {@link ./types.ts} 的 `as const` 对象派生（语义 key + JSDoc + 中文 TEXT），

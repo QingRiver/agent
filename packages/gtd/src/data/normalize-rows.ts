@@ -4,6 +4,7 @@
 import type { EntityRow, EntityRowOf } from './row-schema'
 import { effectiveMountDirId } from '../inheritance/effective'
 import { buildTaskTree } from '../structure/tree'
+import { liveTasks } from './rows'
 
 export interface NormalizeRowsOptions {
   /** 标签目录里仍存在的标签；返回 false 的 task_tag 不输出。缺省视为都存在。 */
@@ -28,7 +29,7 @@ function compareCodeUnits(a: string, b: string): number {
  */
 export function normalizeRows(rows: EntityRow[], options: NormalizeRowsOptions = {}): EntityRow[] {
   const isTagLive = options.isTagLive ?? (() => true)
-  const byTask = new Set(rows.filter(r => r.entity === 'task' && !r.deleted).map(r => r.id))
+  const byTask = new Set(liveTasks(rows).map(r => r.id))
   const out: EntityRow[] = []
   for (const row of rows) {
     if (row.deleted && row.entity !== 'task')
@@ -44,6 +45,7 @@ export function normalizeRows(rows: EntityRow[], options: NormalizeRowsOptions =
       data: { ...row.data },
     } as EntityRow)
   }
+  // 含软删 task：挂载继承需看见回收站祖先；不可用 liveTaskTree
   const tasks = out.filter((r): r is EntityRowOf<'task'> => r.entity === 'task')
   const tree = buildTaskTree(tasks)
   const mounts = new Map(tasks.map(t => [t.id, effectiveMountDirId(t, tree, options.isMountValid)]))

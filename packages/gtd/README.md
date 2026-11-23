@@ -2,28 +2,31 @@
 
 GTD 领域核心包：行模型、树与继承、声明式状态转换、意图执行（apply）、透视与 Forecast。
 
-## 分层
+## 分层（自底向上）
 
 ```
-data → structure → inheritance → command → apply
-                 ↘ derived → view
+L0  data          types / row-schema / rows / normalize-rows / GtdReader
+L1  structure     tree / order（descendantTaskIds = subtree ids）
+L2  projection    GtdReader（RowStore 读口 + 缓存 taskTree + effective/availability 便捷方法）
+L3  inheritance   effective(读) / cascade(plan)
+L4  view          perspective / filter / forecast
+L5  command       state-machine(执行) + transitions + repeat
+        └── ops/  planXxxOp(reader, input): GtdIntent[]  ← UI Store 只触发
 ```
 
-- **data**：行模型、契约、过滤 DSL 持久化类型、读路径 `normalizeRows`
-- **structure**：任务树与分数序
-- **inheritance**：有效态与级联计划（`CascadeStep[]`，不执行）
-- **command**：`STATUS_TRANSITIONS` + runner；重复；`create` / `move` / `complete` 副作用
-- **apply**：`applyIntents` 执行 command / mutation / purge
-- **derived**：可用性（`computeAvailability`）、不变量、Forecast、压制祖先查询
-- **view**：透视、过滤求值、兄弟重排资格
+- **ops**：编排多意图批次（move/indent/tags…）；**state-machine**：执行单条命令
+- **GtdReader**：读侧门面；`taskTree` 实例内惰性缓存
+- **apply**：`applyIntents` 跑 command / mutation / purge
+- 客户端 `GtdStore`：atoms / sync / debounce；方法体调用 `planXxxOp`
 
 ## 目录（不含测试）
 
 ```
 command/
 ├── transitions.ts                # STATUS_TRANSITIONS + canTransition / availableStatusActions
-├── state-machine.ts              # runner 薄封装 + complete / create / move
-└── repeat.ts                     # 重复规则生成下一实例
+├── state-machine.ts              # 执行：complete / create / move / …
+├── repeat.ts                     # 重复规则生成下一实例
+└── ops/                          # 编排：planXxxOp → GtdIntent[]
 
 data/
 ├── types.ts                      # 枚举常量与中文文案
@@ -31,11 +34,11 @@ data/
 ├── row-schema.ts                 # EntityRow / GtdCommand / GtdMutation / GtdEntity
 ├── filter-schema.ts              # 持久化 FilterNode / LOGIC_OP / LEAF_OP
 ├── normalize-rows.ts             # 读路径投影（标签/挂载过滤）
-├── rows.ts                       # RowStore 行级查询投影
-└── serialize.ts                  # 行级 JSON 导入导出（v2.0.0）
+├── rows.ts                       # 查询面：live*/findLive/taskTree + RowStore
+└── reader.ts                     # GtdReader（缓存 tree）
 
 structure/
-├── tree.ts                       # Task 父子树构建
+├── tree.ts                       # Task 树原语 + descendantTaskIds
 └── order.ts                      # 分数排序与重排
 
 inheritance/
@@ -90,9 +93,9 @@ fixtures/
 
 | 目录 | 职责 |
 |------|------|
-| `command` | 转换表 + 状态命令 + 重复 |
-| `data` | 行模型、契约、过滤 DSL 类型、normalizeRows |
-| `structure` | Task 树与 order |
+| `command` | 转换表 + 状态执行 + ops 编排 + 重复 |
+| `data` | 行模型、契约、rows / GtdReader、normalizeRows |
+| `structure` | Task 树原语与 order |
 | `inheritance` | 有效字段继承与级联计划 |
 | `derived` | 可用性、不变量、Forecast、压制祖先 |
 | `apply` | 意图执行（服务端权威 + 客户端乐观预览） |

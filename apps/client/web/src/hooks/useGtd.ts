@@ -25,8 +25,6 @@ export function useGtd() {
     syncStatus,
     error,
     load: GtdStore.load,
-    exportDocument: GtdStore.exportDocument,
-    importDocument: GtdStore.importDocument,
     setSelection: GtdStore.setSelection,
     toggleForecastStripSegment: GtdStore.toggleForecastStripSegment,
     patchForecastSignals: GtdStore.patchForecastSignals,

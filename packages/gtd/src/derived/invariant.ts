@@ -1,8 +1,7 @@
 import type { RowStore } from '../data/rows'
-import type { TaskTree } from '../structure/tree'
 import { EXPLICIT_STATUS, PLANNED_MODE } from '../data/types'
 import { effectiveStatus } from '../inheritance/effective'
-import { buildTaskTree, children } from '../structure/tree'
+import { children } from '../structure/tree'
 
 type InvariantCode
   = | 'broken_reference'
@@ -215,7 +214,7 @@ export function validateInvariants(rowStore: RowStore): InvariantViolation[] {
   // 物理不变量：禁止「物理完成 ∧ 有效活跃直接子」。父完成时子有效状态跟随完成——已完成父让子有效
   // 变完成（非活跃），故此态由 effectiveStatus 派生层自动保证合法，此处静态检查恒不触发
   // （保留作 effectiveStatus 演化/缓存失效防御）。只看直接子、看有效态。
-  const tree: TaskTree = buildTaskTree(tasks)
+  const tree = rowStore.taskTree()
   for (const t of tasks) {
     if (t.data.status !== EXPLICIT_STATUS.COMPLETED) {
       continue

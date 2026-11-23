@@ -1,51 +1,51 @@
 import type {
   EntityRow,
-  EntityRowOf,
   ForecastSignalOptions,
   ForecastStripKey,
   GroupType,
-  GtdCommand,
-  GtdEntity,
   GtdIntent,
-  GtdMutation,
   InvariantViolation,
   NormalizeRowsOptions,
   Perspective,
   PerspectiveInput,
-  RepeatRule,
+  RepeatRuleInput,
   Task,
 } from '@agent/gtd'
 import type { GtdSelection, PerspectiveViewOptions } from '../gtd/view-options'
 import {
   applyIntents,
-  buildTaskTree,
   BUILTIN_PERSPECTIVE_ID,
   BUILTIN_PERSPECTIVE_IDS,
   builtinPerspectives,
   DEFAULT_FORECAST_SIGNALS,
   DEFAULT_FORECAST_STRIP,
-  effectiveStatus,
   entityFocusFilter,
-  EXPLICIT_STATUS,
   FORECAST_STRIP_ORDER,
-  GROUP_TYPE,
+  GtdReader,
   INVARIANT_TEXT,
   isBuiltinPerspectiveId,
   mergeFilter,
-  normalizeDeferDue,
   normalizeRows,
-  orderBetween,
-  orderImportRows,
-  parseRows,
+  planAddChildTaskOp,
+  planAddInboxTaskOp,
+  planAddPerspectiveOp,
+  planAddProjectTaskOp,
+  planIndentTaskOp,
+  planMoveTaskOp,
   PLANNED_MODE,
-  reindexSiblings,
-  remapRowIds,
-  REPEAT_ANCHOR,
+  planOutdentTaskOp,
+  planPatchPerspectiveOp,
+  planPatchTaskOp,
+  planPurgeTasksOp,
+  planRemovePerspectiveOp,
+  planReorderTaskOp,
+  planSetTaskGroupTypeOp,
+  planSetTaskRepeatOp,
+  planSetTaskTagsOp,
+  planStatusCommandOp,
+  planToggleFlagOp,
   RowStore,
-  serializeRows,
-  shouldReindex,
   validateInvariants,
-  validatePerspectiveInput,
 } from '@agent/gtd'
 import { GtdApi } from '@apis/gtd-api'
 import { atom, getDefaultStore } from 'jotai'
@@ -72,102 +72,9 @@ const LS_FORECAST_STRIP = 'gtd.forecastStrip'
 const LS_FORECAST_SIGNALS = 'gtd.forecastSignals'
 const LS_VIEW_OPTIONS = 'gtd.viewOptions'
 
-// ---------------- 本地意图构造小工具 ----------------
-
-function newId(): string {
-  return crypto.randomUUID()
-}
-
-function nowIso(): string {
-  return new Date().toISOString()
-}
-
-function upsertMut(entity: GtdEntity, entityId: string, patch: Record<string, unknown>): GtdIntent {
-  const mutation = { id: newId(), entity, entityId, op: 'upsert', patch, clientTs: nowIso() } as GtdMutation
-  return { kind: 'mutation', mutation }
-}
-
-function deleteMut(entity: GtdEntity, entityId: string): GtdIntent {
-  const mutation = { id: newId(), entity, entityId, op: 'delete', clientTs: nowIso() } as GtdMutation
-  return { kind: 'mutation', mutation }
-}
-
-/** OF4 Inherited Tags Assignment：目标无标时复制父 task_tag（新建可传 ownTagIds=[]）；已有标不覆盖。 */
-function copyTagMutsFromParent(
-  store: RowStore,
-  taskId: string,
-  parentId: string | null | undefined,
-  ownTagIds?: readonly string[],
-): GtdIntent[] {
-  if (parentId == null)
-    return []
-  const own = ownTagIds ?? store.tagIdsOf(taskId)
-  if (own.length > 0)
-    return []
-  return store.tagIdsOf(parentId).map(tagId =>
-    upsertMut('task_tag', `${taskId}|${tagId}`, { taskId, tagId }),
-  )
-}
-
-// command 构造：输入为分支字段（type/taskId/payload/...），自动补 id+clientTs。
-// 用 Record 入参 + GtdCommand 出参，避开 Omit<discriminated-union> 丢变体字段。
-function cmd(c: Record<string, unknown>): GtdIntent {
-  return { kind: 'command', command: { ...c, id: newId(), clientTs: nowIso() } as GtdCommand }
-}
-
-// ---------------- 顺序工具 ----------------
-
-function nextOrder(items: Array<{ order: number }>): number {
-  if (items.length === 0)
-    return 0
-  return Math.max(...items.map(i => i.order)) + 1
-}
-
-function collectDescendantIds(store: RowStore, rootId: string): string[] {
-  const out: string[] = []
-  const visit = (pid: string) => {
-    for (const t of store.liveTasks()) {
-      if (t.data.parentId === pid) {
-        out.push(t.id)
-        visit(t.id)
-      }
-    }
-  }
-  visit(rootId)
-  return out
-}
-
-function sortedByOrder<T extends { order: number }>(items: T[]): T[] {
-  return [...items].sort((a, b) => a.order - b.order)
-}
-
-function targetOrder<T extends { id: string, order: number }>(
-  siblings: T[],
-  beforeId: string | null,
-  afterId: string | null,
-): { order: number, reindexed: Map<string, number> } {
-  const before = beforeId ? siblings.find(item => item.id === beforeId) : null
-  const after = afterId ? siblings.find(item => item.id === afterId) : null
-  if (beforeId && !before)
-    throw new Error(`找不到前一个同级项 ${beforeId}`)
-  if (afterId && !after)
-    throw new Error(`找不到后一个同级项 ${afterId}`)
-  if (before && after && shouldReindex(before.order, after.order)) {
-    const reindexed = reindexSiblings(siblings)
-    return {
-      order: orderBetween(reindexed.get(before.id)!, reindexed.get(after.id)!),
-      reindexed,
-    }
-  }
-  return {
-    order: orderBetween(before?.order ?? null, after?.order ?? null),
-    reindexed: new Map(),
-  }
-}
+export type { RepeatRuleInput }
 
 // ---------------- 选择 ----------------
-
-export type RepeatRuleInput = Omit<RepeatRule, 'id' | 'completedOccurrences'>
 
 function readSelection(): GtdSelection {
   try {
@@ -320,12 +227,6 @@ export function resolvePerspectiveAvailability(
   return resolveAvailabilityFilter(scope, viewOptionsMap[scope])
 }
 
-// ---------------- row 形状小工具 ----------------
-
-function tShape(s: EntityRowOf<'task'>) {
-  return { id: s.id, ...s.data }
-}
-
 function violationKeys(rows: EntityRow[]): Set<string> {
   return new Set(validateInvariants(new RowStore(rows)).map(v => `${v.code}|${v.entityId ?? ''}|${v.message}`))
 }
@@ -388,8 +289,9 @@ export class GtdStore {
   static readonly rowsAtom = atom(get => normalizeRows(get(GtdStore.rawRowsAtom), get(GtdStore.displayOptionsAtom)))
 
   static readonly rowStoreAtom = atom(get => new RowStore(get(GtdStore.rowsAtom)))
-  /** 派生 TaskTree（live tasks 建树）；供 UI 读 effectiveStatus（洪水继承：删父/搁置父的子有效态被压） */
-  static readonly treeAtom = atom(get => buildTaskTree(get(GtdStore.rowStoreAtom).liveTasks()))
+  static readonly readerAtom = atom(get => new GtdReader(get(GtdStore.rowsAtom)))
+  /** 派生 TaskTree（GtdReader 缓存）；供 UI 读 effectiveStatus */
+  static readonly treeAtom = atom(get => get(GtdStore.readerAtom).taskTree())
 
   static readonly selectionAtom = atom<GtdSelection>(readSelection())
   static readonly forecastStripAtom = atom<ForecastStripKey[]>(readForecastStrip())
@@ -551,7 +453,7 @@ export class GtdStore {
    * 一次操作：乐观改内存 →（可选防抖）POST /gtd/apply → 成功用服务端行覆盖；失败 list 盖回。
    */
   private static applyLocal(
-    build: (store: RowStore) => GtdIntent[],
+    build: (reader: GtdReader) => GtdIntent[],
     options: { debounce?: boolean } = {},
   ): boolean {
     const s = GtdStore.store()
@@ -570,7 +472,7 @@ export class GtdStore {
     let intents: GtdIntent[]
     let after: EntityRow[]
     try {
-      intents = build(new RowStore(normalizeRows(before, s.get(GtdStore.displayOptionsAtom))))
+      intents = build(new GtdReader(normalizeRows(before, s.get(GtdStore.displayOptionsAtom))))
       if (intents.length === 0)
         return false
       after = applyIntents(before, intents, userId)
@@ -643,240 +545,80 @@ export class GtdStore {
     await GtdStore.applyChain
   }
 
-  // ---------- Tasks ----------
+  // ---------- Tasks（领域编排在 @agent/gtd command/ops） ----------
 
   static addInboxTask(name: string): void {
-    const trimmed = name.trim()
-    if (!trimmed)
-      return
-    GtdStore.applyLocal((store) => {
-      const id = newId()
-      const order = nextOrder(store.liveTasks().filter(t => t.data.mountDirId == null && t.data.parentId == null).map(tShape))
-      return [cmd({ type: 'create_task', taskId: id, name: trimmed, parentId: null, order, mountDirId: null })]
-    })
+    GtdStore.applyLocal(reader => planAddInboxTaskOp(reader, name))
   }
 
   static addProjectTask(mountDirId: string, name: string): void {
-    const trimmed = name.trim()
-    if (!trimmed)
-      return
-    GtdStore.applyLocal((store) => {
-      const id = newId()
-      const siblings = store.liveTasks().filter(t => t.data.mountDirId === mountDirId && t.data.parentId == null).map(tShape)
-      return [cmd({ type: 'create_task', taskId: id, name: trimmed, parentId: null, order: nextOrder(siblings), mountDirId })]
-    })
+    GtdStore.applyLocal(reader => planAddProjectTaskOp(reader, mountDirId, name))
   }
 
   static addChildTask(parentId: string, name: string): void {
-    const trimmed = name.trim()
-    if (!trimmed)
-      return
-    GtdStore.applyLocal((store) => {
-      const parent = store.findLive('task', parentId)
-      if (!parent)
-        throw new Error('父任务不存在')
-      if (!parent.data.mountDirId)
-        throw new Error('Inbox 任务需先移入项目，才能添加子任务')
-      const tree = buildTaskTree(store.liveTasks())
-      if (effectiveStatus(parent, tree) !== EXPLICIT_STATUS.ACTIVE)
-        throw new Error('父任务非活跃状态，不允许添加子任务')
-      const now = nowIso()
-      const id = newId()
-      const children = store.liveTasks().filter(t => t.data.parentId === parentId).map(tShape)
-      const items: GtdIntent[] = [
-        cmd({ type: 'create_task', taskId: id, name: trimmed, parentId, order: nextOrder(children), mountDirId: parent.data.mountDirId }),
-        ...copyTagMutsFromParent(store, id, parentId, []),
-      ]
-      if (!parent.data.groupType)
-        items.push(upsertMut('task', parentId, { groupType: GROUP_TYPE.PARALLEL, updatedAt: now }))
-      return items
-    })
+    GtdStore.applyLocal(reader => planAddChildTaskOp(reader, parentId, name))
   }
 
   static indentTask(taskId: string): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      if (!task.data.mountDirId)
-        throw new Error('Inbox 任务不能缩进')
-      const tree = buildTaskTree(store.liveTasks())
-      if (effectiveStatus(task, tree) !== EXPLICIT_STATUS.ACTIVE)
-        throw new Error('任务非活跃状态，不允许缩进')
-      const siblings = sortedByOrder(store.liveTasks().filter(t =>
-        t.data.mountDirId === task.data.mountDirId && t.data.parentId === task.data.parentId,
-      ).map(tShape))
-      const index = siblings.findIndex(t => t.id === taskId)
-      const parent = index > 0 ? siblings[index - 1]! : null
-      if (!parent)
-        throw new Error('当前任务前面没有可作为父级的任务')
-      const now = nowIso()
-      const children = store.liveTasks().filter(t => t.data.parentId === parent.id && t.id !== taskId).map(tShape)
-      // parentId/order 走 move_task 命令（自带拉回）；mountDirId 不变（同 project 内缩进）；updatedAt 走 upsert
-      const items: GtdIntent[] = [
-        cmd({ type: 'move_task', taskId, parentId: parent.id, order: nextOrder(children) }),
-        upsertMut('task', taskId, { updatedAt: now }),
-        ...copyTagMutsFromParent(store, taskId, parent.id),
-      ]
-      if (!parent.groupType)
-        items.push(upsertMut('task', parent.id, { groupType: GROUP_TYPE.PARALLEL, updatedAt: now }))
-      return items
-    })
+    GtdStore.applyLocal(reader => planIndentTaskOp(reader, taskId))
   }
 
   static outdentTask(taskId: string): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      const parentId = task.data.parentId
-      const parent = parentId ? store.findLive('task', parentId) : null
-      if (!task || !parent)
-        throw new Error('当前任务已经是项目顶层任务')
-      const tree = buildTaskTree(store.liveTasks())
-      if (effectiveStatus(task, tree) !== EXPLICIT_STATUS.ACTIVE)
-        throw new Error('任务非活跃状态，不允许移出')
-      const parentSiblings = sortedByOrder(store.liveTasks().filter(t =>
-        t.data.mountDirId === parent.data.mountDirId && t.data.parentId === parent.data.parentId && t.id !== taskId,
-      ).map(tShape))
-      const parentIndex = parentSiblings.findIndex(t => t.id === parent.id)
-      const after = parentIndex >= 0 ? parentSiblings[parentIndex + 1] ?? null : null
-      const remainingChildren = store.liveTasks().filter(t => t.data.parentId === parent.id && t.id !== taskId)
-      const now = nowIso()
-      const items: GtdIntent[] = [
-        cmd({ type: 'move_task', taskId, parentId: parent.data.parentId, order: orderBetween(parent.data.order, after?.order ?? null) }),
-        upsertMut('task', taskId, { updatedAt: now }),
-      ]
-      if (remainingChildren.length === 0)
-        items.push(upsertMut('task', parent.id, { groupType: null, updatedAt: now }))
-      return items
-    })
+    GtdStore.applyLocal(reader => planOutdentTaskOp(reader, taskId))
   }
 
   static setTaskGroupType(taskId: string, type: GroupType | null): void {
-    GtdStore.applyLocal((store) => {
-      const hasChildren = store.liveTasks().some(t => t.data.parentId === taskId)
-      if (hasChildren && type == null)
-        throw new Error('有子任务的任务组不能转换为普通任务')
-      return [upsertMut('task', taskId, { groupType: type, updatedAt: nowIso() })]
-    })
+    GtdStore.applyLocal(reader => planSetTaskGroupTypeOp(reader, taskId, type))
   }
 
   static reorderTask(
     taskId: string,
     target: { beforeId: string | null, afterId: string | null },
   ): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      const siblings = store.liveTasks().filter(t =>
-        t.id !== taskId
-        && t.data.mountDirId === task.data.mountDirId
-        && t.data.parentId === task.data.parentId,
-      ).map(tShape)
-      const result = targetOrder(siblings, target.beforeId, target.afterId)
-      const now = nowIso()
-      const items: GtdIntent[] = [
-        upsertMut('task', taskId, { order: result.order, updatedAt: now }),
-      ]
-      for (const sib of siblings) {
-        const order = result.reindexed.get(sib.id)
-        if (order != null)
-          items.push(upsertMut('task', sib.id, { order, updatedAt: now }))
-      }
-      return items
-    })
+    GtdStore.applyLocal(reader => planReorderTaskOp(reader, taskId, target))
   }
 
   static completeTask(taskId: string): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      // 重复任务的后继 id 由 applyIntents 按规则 id 与次数确定
-      return [cmd({ type: 'complete', taskId })]
-    })
+    GtdStore.applyLocal(reader => planStatusCommandOp(reader, 'complete', taskId))
   }
 
   static dropTask(taskId: string): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      return [cmd({ type: 'drop', taskId })]
-    })
+    GtdStore.applyLocal(reader => planStatusCommandOp(reader, 'drop', taskId))
   }
 
   static reopenTask(taskId: string): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      return [cmd({ type: 'reopen', taskId })]
-    })
+    GtdStore.applyLocal(reader => planStatusCommandOp(reader, 'reopen', taskId))
   }
 
-  /**
-   * 恢复搁置：HOLD → ACTIVE。只发自身 command（物理保真模型下 restore 仅作用于物理 HOLD 项）。
-   * 被祖先 hold 压制的子（物理仍 ACTIVE）按钮已置灰——单 restore 自身是 noop（阻断在父），
-   * 须从压制祖先操作让洪水退去；故 UI 不对该子暴露此操作（GtdInspector/GtdTaskRow 置灰）。
-   */
+  /** 恢复搁置：HOLD → ACTIVE。压制子的 UI 置灰见 Inspector/TaskRow。 */
   static restoreTask(taskId: string): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      return [cmd({ type: 'restore', taskId })]
-    })
+    GtdStore.applyLocal(reader => planStatusCommandOp(reader, 'restore', taskId))
   }
 
   static deleteTaskLogical(taskId: string): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      // delete → 进回收站；仅 ACTIVE（SP-STATE-6）
-      return [cmd({ type: 'delete', taskId })]
-    })
+    GtdStore.applyLocal(reader => planStatusCommandOp(reader, 'delete', taskId))
   }
 
-  /**
-   * 移出回收站：DELETED → ACTIVE。只发自身 command（物理保真模型下 restore_from_trash 仅作用于物理 DELETED 项）。
-   * 被祖先 deleted 压制的子（物理仍 ACTIVE）按钮已置灰——单 restore_from_trash 自身是 noop（阻断在父），
-   * 须从压制祖先操作让洪水退去；故 UI 不对该子暴露此操作（GtdInspector/GtdTaskRow 置灰）。
-   */
+  /** 移出回收站：DELETED → ACTIVE。压制子的 UI 置灰见 Inspector/TaskRow。 */
   static restoreFromTrash(taskId: string): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      return [cmd({ type: 'restore_from_trash', taskId })]
-    })
+    GtdStore.applyLocal(reader => planStatusCommandOp(reader, 'restore_from_trash', taskId))
   }
 
-  /** 永久删除回收站里的任务（连同子树）。和其他操作一样离线可用，同步后各设备都删除。 */
+  /** 永久删除回收站任务（含子树）。 */
   static purgeTrash(taskIds: string[]): void {
     const s = GtdStore.store()
-    const ok = GtdStore.applyLocal(() => taskIds.map(taskId => ({ kind: 'purge', taskId }) as const))
+    const ok = GtdStore.applyLocal(() => planPurgeTasksOp(taskIds))
     const sel = s.get(GtdStore.selectedTaskIdAtom)
     if (ok && sel && taskIds.includes(sel))
       s.set(GtdStore.selectedTaskIdAtom, null)
   }
 
   static toggleFlag(taskId: string): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      return [upsertMut('task', taskId, { flagged: !task.data.flagged, updatedAt: nowIso() })]
-    })
+    GtdStore.applyLocal(reader => planToggleFlagOp(reader, taskId))
   }
 
   /**
-   * 换容器（项目 / 父任务）。order 是同级坐标，不能跟着旧值进新列表；
-   * 默认插到目标同级末尾，算法与拖拽相同（orderBetween / 必要时 reindex）。
-   * `parentId` 省略则保留原父子；仅显式传 `null` 才变根。
+   * 换容器（项目 / 父任务）。`parentId` 省略保留原父子；显式 `null` 变根。
    */
   static moveTask(
     taskId: string,
@@ -887,135 +629,21 @@ export class GtdStore {
       afterId?: string | null
     },
   ): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      const nextMount = dest.mountDirId
-      // 省略 parentId → 保留原父子；仅显式 null 才变根（Inspector 换项目只传 mountDirId）
-      const nextParent = dest.parentId !== undefined ? dest.parentId : task.data.parentId
-      if (nextParent && !nextMount)
-        throw new Error('Inbox 不能有子任务')
-      const descendantIds = collectDescendantIds(store, taskId)
-      if (nextMount == null && descendantIds.length > 0)
-        throw new Error('有子任务的任务不能移回收件箱')
-      if (nextParent === taskId || (nextParent != null && descendantIds.includes(nextParent)))
-        throw new Error('不能移到自己的子树下')
-      if (
-        task.data.mountDirId === nextMount
-        && task.data.parentId === nextParent
-        && dest.beforeId === undefined
-        && dest.afterId === undefined
-      ) {
-        return []
-      }
-      const siblings = store.liveTasks()
-        .filter(t => t.id !== taskId && t.data.mountDirId === nextMount && t.data.parentId === nextParent)
-        .map(tShape)
-      const placed = dest.beforeId !== undefined || dest.afterId !== undefined
-        ? targetOrder(siblings, dest.beforeId ?? null, dest.afterId ?? null)
-        : targetOrder(siblings, sortedByOrder(siblings).at(-1)?.id ?? null, null)
-      const now = nowIso()
-      const parentChanged = nextParent !== task.data.parentId
-      // parentId/order 走 move_task 命令（自带拉回 + 防环；patch 已剥离 parentId）；
-      // mountDirId 走 upsert。挂载读时取自根任务，子孙不用写。
-      const items: GtdIntent[] = [
-        cmd({ type: 'move_task', taskId, parentId: nextParent, order: placed.order }),
-        upsertMut('task', taskId, { mountDirId: nextMount, updatedAt: now }),
-      ]
-      // 换父且自身无标 → 复制新父标签（OF Inherited Tags Assignment）
-      if (parentChanged)
-        items.push(...copyTagMutsFromParent(store, taskId, nextParent))
-      for (const sib of siblings) {
-        const order = placed.reindexed.get(sib.id)
-        if (order != null)
-          items.push(upsertMut('task', sib.id, { order, updatedAt: now }))
-      }
-      return items
-    })
+    GtdStore.applyLocal(reader => planMoveTaskOp(reader, taskId, dest))
   }
 
   static patchTask(taskId: string, patch: Partial<Task>): void {
     const keys = Object.keys(patch).filter(k => k !== 'updatedAt')
     const textOnly = keys.length > 0 && keys.every(k => k === 'name' || k === 'note')
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      if (Object.hasOwn(patch, 'mountDirId') || Object.hasOwn(patch, 'parentId') || Object.hasOwn(patch, 'order'))
-        throw new Error('换项目或排序请用 moveTask / reorderTask')
-      const rule = task.data.repeatRuleId != null ? task.data.repeatRule : null
-      if (rule?.anchor === REPEAT_ANCHOR.DUE && patch.dueDate === null)
-        throw new Error('按截止日重复的任务不能清空截止日期')
-      if (rule?.anchor === REPEAT_ANCHOR.DEFER && patch.deferDate === null)
-        throw new Error('按推迟日重复的任务不能清空推迟日期')
-      // 行模型：标签走 task_tag；repeatRule/repeatRuleId 由 setTaskRepeat 维护
-      const { id: _id, repeatRuleId: _rid, ...rest } = patch
-      const datePatch: { deferDate?: string | null, dueDate?: string | null } = {}
-      if (Object.hasOwn(patch, 'deferDate'))
-        datePatch.deferDate = patch.deferDate ?? null
-      if (Object.hasOwn(patch, 'dueDate'))
-        datePatch.dueDate = patch.dueDate ?? null
-      const dates = Object.keys(datePatch).length > 0
-        ? normalizeDeferDue(
-            { deferDate: task.data.deferDate, dueDate: task.data.dueDate },
-            datePatch,
-          )
-        : null
-      return [upsertMut('task', taskId, {
-        ...rest,
-        ...(dates ?? {}),
-        updatedAt: nowIso(),
-      })]
-    }, { debounce: textOnly })
+    GtdStore.applyLocal(reader => planPatchTaskOp(reader, taskId, patch), { debounce: textOnly })
   }
 
   static setTaskRepeat(taskId: string, input: RepeatRuleInput | null): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      if (input?.anchor === REPEAT_ANCHOR.DUE && !task.data.dueDate)
-        throw new Error('按截止日重复前，请先设置截止日期')
-      if (input?.anchor === REPEAT_ANCHOR.DEFER && !task.data.deferDate)
-        throw new Error('按推迟日重复前，请先设置推迟日期')
-      const now = nowIso()
-      if (!input) {
-        return [upsertMut('task', taskId, { repeatRuleId: null, repeatRule: null, updatedAt: now })]
-      }
-      const existing = task.data.repeatRule
-      const shared = existing
-        ? store.liveTasks().some(t => t.id !== taskId && t.data.repeatRuleId === existing.id)
-        : false
-      const id = existing && !shared ? existing.id : newId()
-      const rule: RepeatRule = {
-        ...input,
-        id,
-        completedOccurrences: existing?.completedOccurrences ?? 0,
-      }
-      return [upsertMut('task', taskId, { repeatRuleId: id, repeatRule: rule, updatedAt: now })]
-    })
+    GtdStore.applyLocal(reader => planSetTaskRepeatOp(reader, taskId, input))
   }
 
-  /** 设置任务的标签集合：diff 出 add/remove 的 task_tag 行（行模型 tagIds 不在 task 字段，走独立行） */
   static setTaskTags(taskId: string, tagIds: string[]): void {
-    GtdStore.applyLocal((store) => {
-      const task = store.findLive('task', taskId)
-      if (!task)
-        throw new Error('任务不存在')
-      const current = store.tagIdsOf(taskId)
-      const next = new Set(tagIds)
-      const items: GtdIntent[] = []
-      for (const tagId of tagIds) {
-        if (!current.includes(tagId))
-          items.push(upsertMut('task_tag', `${taskId}|${tagId}`, { taskId, tagId }))
-      }
-      for (const tagId of current) {
-        if (!next.has(tagId))
-          items.push(deleteMut('task_tag', `${taskId}|${tagId}`))
-      }
-      return items
-    })
+    GtdStore.applyLocal(reader => planSetTaskTagsOp(reader, taskId, tagIds))
   }
 
   // ---------- Perspectives ----------
@@ -1023,102 +651,21 @@ export class GtdStore {
   static addPerspective(input: PerspectiveInput): boolean {
     const dirs = GtdStore.store().get(DirStore.validationRefsAtom)
     const tags = GtdStore.store().get(TagsStore.tagRefsAtom)
-    return GtdStore.applyLocal((_store) => {
-      const result = validatePerspectiveInput(
-        input,
-        perspectiveValidationContext(dirs, tags),
-        { mode: 'persist' },
-      )
-      if (!result.ok)
-        throw new Error(result.errors.map(error => error.message).join('; '))
-      const now = nowIso()
-      const id = newId()
-      const data = {
-        name: result.value.name!,
-        icon: result.value.icon ?? null,
-        filter: result.value.filter,
-        groupBy: result.value.groupBy,
-        sortBy: result.value.sortBy,
-        createdAt: now,
-        updatedAt: null,
-      }
-      return [upsertMut('perspective', id, data)]
-    })
+    return GtdStore.applyLocal(() => planAddPerspectiveOp(input, perspectiveValidationContext(dirs, tags)))
   }
 
   static patchPerspective(id: string, input: PerspectiveInput): boolean {
     const dirs = GtdStore.store().get(DirStore.validationRefsAtom)
     const tags = GtdStore.store().get(TagsStore.tagRefsAtom)
-    return GtdStore.applyLocal((store) => {
-      if (!store.livePerspectives().some(p => p.id === id))
-        throw new Error('自定义透视不存在')
-      const result = validatePerspectiveInput(
-        input,
-        perspectiveValidationContext(dirs, tags),
-        { mode: 'persist', perspectiveId: id },
-      )
-      if (!result.ok)
-        throw new Error(result.errors.map(error => error.message).join('; '))
-      return [upsertMut('perspective', id, {
-        name: result.value.name!,
-        icon: result.value.icon ?? null,
-        filter: result.value.filter,
-        groupBy: result.value.groupBy,
-        sortBy: result.value.sortBy,
-        updatedAt: nowIso(),
-      })]
-    })
+    return GtdStore.applyLocal(reader =>
+      planPatchPerspectiveOp(reader, id, input, perspectiveValidationContext(dirs, tags)))
   }
 
   static removePerspective(id: string): void {
     const s = GtdStore.store()
-    GtdStore.applyLocal(() => [deleteMut('perspective', id)])
+    GtdStore.applyLocal(() => planRemovePerspectiveOp(id))
     const selection = s.get(GtdStore.selectionAtom)
     if (selection.perspectiveId === id)
       GtdStore.setSelection(selectPerspective(BUILTIN_PERSPECTIVE_ID.FORECAST))
-  }
-
-  // ---------- 导入 / 导出（行级 JSON v2.0.0） ----------
-
-  /** 导出：live rows → serializeRows（仅新建快照，syncId 归零） */
-  static exportDocument(): string {
-    const s = GtdStore.store()
-    const rows = s.get(GtdStore.rowsAtom)
-    return serializeRows(rows, new Date())
-  }
-
-  /**
-   * 导入：JSON → parseRows → remapRowIds（全量换新 id）→ create_task / upsert 意图。
-   */
-  static importDocument(json: string): boolean {
-    const s = GtdStore.store()
-    const userId = s.get(GtdStore.userIdAtom)
-    if (!userId || !s.get(GtdStore.loadedAtom)) {
-      s.set(GtdStore.errorAtom, 'GTD 数据尚未加载')
-      return false
-    }
-    return GtdStore.applyLocal(() => {
-      const rows = orderImportRows(remapRowIds(parseRows(json), userId)).filter(r => !r.deleted)
-      const intents: GtdIntent[] = []
-      for (const row of rows) {
-        if (row.entity === 'task') {
-          intents.push(cmd({
-            type: 'create_task',
-            taskId: row.id,
-            name: row.data.name,
-            parentId: row.data.parentId,
-            order: row.data.order,
-            mountDirId: row.data.mountDirId,
-          }))
-          const { name: _n, parentId: _p, order: _o, mountDirId: _m, status: _s, ...rest } = row.data
-          if (Object.keys(rest).length > 0)
-            intents.push(upsertMut('task', row.id, { ...rest, updatedAt: nowIso() }))
-        }
-        else {
-          intents.push(upsertMut(row.entity, row.id, { ...row.data }))
-        }
-      }
-      return intents
-    })
   }
 }

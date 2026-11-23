@@ -125,6 +125,11 @@ export function subtree(tree: TaskTree, taskId: string): EntityRowOf<'task'>[] {
   return result
 }
 
+/** 后代 task id 列表（不含自身）；等价于 `subtree(...).map(t => t.id)` */
+export function descendantTaskIds(tree: TaskTree, taskId: string): string[] {
+  return subtree(tree, taskId).map(t => t.id)
+}
+
 /** 沿祖先链找最近一个满足 predicate 的 Task */
 export function nearestAncestor(
   tree: TaskTree,

@@ -2,7 +2,6 @@
  * 行模型与意图（命令 / 字段补丁）的 Zod 契约。
  *
  * EntityRow 是领域读路径的行模型；服务端与客户端通过 applyIntents 在行上执行命令/补丁。
- * 导入导出见 data/serialize.ts（行级 JSON v2.0.0）。
  */
 import { z } from 'zod'
 import {

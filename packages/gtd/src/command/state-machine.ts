@@ -13,18 +13,18 @@ import type {
   DropCommand,
   EntityRow,
   EntityRowOf,
-  GtdEntity,
   MoveTaskCommand,
   ReopenCommand,
   RestoreCommand,
   RestoreFromTrashCommand,
 } from '../data/row-schema'
 import type { CascadeStep } from '../inheritance/cascade'
-import type { TaskTree } from '../structure/tree'
 import type { StatusAction } from './transitions'
+import { match } from 'ts-pattern'
+import { findLive, taskTree } from '../data/rows'
 import { EXPLICIT_STATUS, PLANNED_MODE } from '../data/types'
 import { planUpwardActivation } from '../inheritance/cascade'
-import { ancestors, buildTaskTree } from '../structure/tree'
+import { ancestors } from '../structure/tree'
 import { shouldStop } from '../time/date-math'
 import { parentNotFound, taskLabel, taskNotFound } from './errors'
 import { cloneNextInstance } from './repeat'
@@ -41,18 +41,6 @@ export {
   type StatusAction,
   type TransitionSpec,
 } from './transitions'
-
-function findLive<E extends GtdEntity>(
-  rows: EntityRow[],
-  entity: E,
-  id: string,
-): EntityRowOf<E> | undefined {
-  return rows.find(r => r.entity === entity && r.id === id && !r.deleted) as EntityRowOf<E> | undefined
-}
-
-export function liveTasksOf(rows: EntityRow[]): EntityRowOf<'task'>[] {
-  return rows.filter((r): r is EntityRowOf<'task'> => r.entity === 'task' && !r.deleted)
-}
 
 /**
  * 执行级联计划：翻 status + 按 targetStatus 维护单一终态时间戳 + stamp syncId。
@@ -79,26 +67,28 @@ export function setTaskStatus(
   nextSyncId: () => number,
 ): void {
   task.data.status = targetStatus
-  if (targetStatus === EXPLICIT_STATUS.ACTIVE) {
-    task.data.completedAt = null
-    task.data.heldAt = null
-    task.data.droppedAt = null
-  }
-  else if (targetStatus === EXPLICIT_STATUS.COMPLETED) {
-    task.data.completedAt = ts
-    task.data.heldAt = null
-    task.data.droppedAt = null
-  }
-  else if (targetStatus === EXPLICIT_STATUS.HOLD) {
-    task.data.heldAt = ts
-    task.data.completedAt = null
-    task.data.droppedAt = null
-  }
-  else {
-    task.data.droppedAt = ts
-    task.data.completedAt = null
-    task.data.heldAt = null
-  }
+  match(targetStatus)
+    .with(EXPLICIT_STATUS.ACTIVE, () => {
+      task.data.completedAt = null
+      task.data.heldAt = null
+      task.data.droppedAt = null
+    })
+    .with(EXPLICIT_STATUS.COMPLETED, () => {
+      task.data.completedAt = ts
+      task.data.heldAt = null
+      task.data.droppedAt = null
+    })
+    .with(EXPLICIT_STATUS.HOLD, () => {
+      task.data.heldAt = ts
+      task.data.completedAt = null
+      task.data.droppedAt = null
+    })
+    .with(EXPLICIT_STATUS.DELETED, () => {
+      task.data.droppedAt = ts
+      task.data.completedAt = null
+      task.data.heldAt = null
+    })
+    .exhaustive()
   task.syncId = nextSyncId()
 }
 
@@ -118,8 +108,7 @@ function runStatusTransition(
 
   const spec = STATUS_TRANSITIONS[action]
   if (spec.cascade) {
-    const tree = buildTaskTree(liveTasksOf(rows))
-    applySteps(rows, spec.cascade(cmd.taskId, tree), cmd.clientTs, nextSyncId)
+    applySteps(rows, spec.cascade(cmd.taskId, taskTree(rows)), cmd.clientTs, nextSyncId)
   }
   else {
     setTaskStatus(task, spec.to, cmd.clientTs, nextSyncId)
@@ -174,8 +163,7 @@ export function completeTask(
 
   if (nextTaskId && rule) {
     cloneNextInstance(task, rule, nextTaskId, reviveExisting, cmd.clientTs, rows, nextSyncId)
-    const tree = buildTaskTree(liveTasksOf(rows))
-    applySteps(rows, planUpwardActivation(nextTaskId, tree), cmd.clientTs, nextSyncId)
+    applySteps(rows, planUpwardActivation(nextTaskId, taskTree(rows)), cmd.clientTs, nextSyncId)
   }
 
   return 'applied'
@@ -263,8 +251,7 @@ export function createTask(
     deleted: false,
     data,
   })
-  const tree: TaskTree = buildTaskTree(liveTasksOf(rows))
-  applySteps(rows, planUpwardActivation(taskId, tree), cmd.clientTs, nextSyncId)
+  applySteps(rows, planUpwardActivation(taskId, taskTree(rows)), cmd.clientTs, nextSyncId)
   return 'applied'
 }
 
@@ -281,15 +268,14 @@ export function moveTask(
   if (newParentId != null && !findLive(rows, 'task', newParentId))
     throw parentNotFound()
   if (newParentId != null) {
-    const tree = buildTaskTree(liveTasksOf(rows))
+    const tree = taskTree(rows)
     if (newParentId === taskId || [...ancestors(tree, newParentId)].some(a => a.id === taskId))
       throw new Error(`${taskLabel(task)}不能移到自己或自己的子任务下面`)
   }
   task.data.parentId = newParentId
   task.data.order = cmd.order
   task.syncId = nextSyncId()
-  const tree = buildTaskTree(liveTasksOf(rows))
   if (task.data.status === EXPLICIT_STATUS.ACTIVE)
-    applySteps(rows, planUpwardActivation(taskId, tree), cmd.clientTs, nextSyncId)
+    applySteps(rows, planUpwardActivation(taskId, taskTree(rows)), cmd.clientTs, nextSyncId)
   return 'applied'
 }
