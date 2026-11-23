@@ -23,7 +23,17 @@ import { NOW_ISO } from './constants'
 
 // ---------------- 领域实体 ----------------
 
-export function makeTask(overrides: Partial<Task> = {}): Task {
+type TaskDraft = Partial<Task> & {
+  completedAt?: string | null
+  heldAt?: string | null
+  droppedAt?: string | null
+}
+
+export function makeTask(overrides: TaskDraft = {}): Task {
+  const { completedAt, heldAt, droppedAt, statusChangedAt, ...rest } = overrides
+  const stamp = statusChangedAt !== undefined
+    ? statusChangedAt
+    : (completedAt ?? heldAt ?? droppedAt ?? null)
   return {
     id: randomUUID(),
     name: 'task',
@@ -37,16 +47,14 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     dueDate: null,
     plannedMode: PLANNED_MODE.NONE,
     plannedDate: null,
-    completedAt: null,
-    heldAt: null,
-    droppedAt: null,
     flagged: false,
     estimateMinutes: null,
     repeatRuleId: null,
     repeatedFromTaskId: null,
     createdAt: NOW_ISO,
     updatedAt: NOW_ISO,
-    ...overrides,
+    ...rest,
+    statusChangedAt: stamp,
   }
 }
 
@@ -114,7 +122,7 @@ export function makeRow(opts: Partial<EntityRow> = {}): EntityRow {
  */
 export function makeTaskRow(
   id: string,
-  dataOverrides: Partial<Task> & { repeatRule?: RepeatRule } = {},
+  dataOverrides: TaskDraft & { repeatRule?: RepeatRule | null } = {},
   opts: Partial<Omit<EntityRow, 'entity' | 'id' | 'data'>> = {},
 ): EntityRowOf<'task'> {
   const { repeatRule, ...taskOverrides } = dataOverrides

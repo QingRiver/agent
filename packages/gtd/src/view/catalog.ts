@@ -1,6 +1,6 @@
 /**
  * 目录投影（project / dir / tag 名称）：真相在 DirStore / TagsStore，
- * 注入 FilterEvalContext / RenderContext，不挂在 RowStore 上。
+ * 注入 FilterEvalContext / RenderContext，不挂在 GtdModel 上。
  */
 import type { EntityRowOf } from '../data/row-schema'
 

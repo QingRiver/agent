@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { renderForecast } from '.'
-import { RowStore } from '../../data/rows'
 import { COMPUTED_STATUS, EXPLICIT_STATUS, GROUP_TYPE, PLANNED_MODE } from '../../data/types'
 import {
   DUE_SOON_MS,
@@ -11,6 +10,7 @@ import {
   TODAY,
   TZ,
 } from '../../fixtures'
+import { GtdModel } from '../../state/model'
 
 describe('renderForecast', () => {
   it('产出今日块含 rolling 与 due', () => {
@@ -19,7 +19,7 @@ describe('renderForecast', () => {
       makeTaskRow('d1', { name: '截止', dueDate: TODAY }),
     ]
     const groups = renderForecast(
-      new RowStore(rows),
+      new GtdModel(rows),
       opts([FORECAST_STRIP.NOW]),
       NOW,
       DUE_SOON_MS,
@@ -41,7 +41,7 @@ describe('renderForecast', () => {
     const second = makeTaskRow('c2', { name: '2', parentId: 'p', order: 1 })
     const rows = [second, parent, first]
     const groups = renderForecast(
-      new RowStore(rows),
+      new GtdModel(rows),
       opts([FORECAST_STRIP.NOW]),
       NOW,
       DUE_SOON_MS,
@@ -65,7 +65,7 @@ describe('renderForecast', () => {
     })
     const rows = [available, overdue]
     const groups = renderForecast(
-      new RowStore(rows),
+      new GtdModel(rows),
       opts([FORECAST_STRIP.NOW]),
       NOW,
       DUE_SOON_MS,
@@ -82,7 +82,7 @@ describe('renderForecast', () => {
     const now = new Date('2026-07-16T12:00:00.000Z')
     const tz = 'Asia/Shanghai'
     const groups = renderForecast(
-      new RowStore(rows),
+      new GtdModel(rows),
       opts([FORECAST_STRIP.LATER], undefined, now, tz),
       now,
       DUE_SOON_MS,
@@ -98,7 +98,7 @@ describe('renderForecast', () => {
     const parent = makeTaskRow('parent', {
       name: '父',
       status: EXPLICIT_STATUS.COMPLETED,
-      completedAt: '2026-07-15T00:00:00.000Z',
+      statusChangedAt: '2026-07-15T00:00:00.000Z',
       groupType: GROUP_TYPE.PARALLEL,
       dueDate: TODAY,
     })
@@ -108,7 +108,7 @@ describe('renderForecast', () => {
       dueDate: TODAY,
       order: 1,
     })
-    const store = new RowStore([parent, child])
+    const store = new GtdModel([parent, child])
     // 模拟 applyBaseFilter：仅剩余任务（父已完成不在列表）
     const filtered = [child]
     const groups = renderForecast(
@@ -141,7 +141,7 @@ describe('renderForecast', () => {
       dueDate: TODAY,
       order: 2,
     })
-    const store = new RowStore([parent, first, second])
+    const store = new GtdModel([parent, first, second])
     const filtered = [parent, second]
     const groups = renderForecast(
       store,

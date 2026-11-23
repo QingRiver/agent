@@ -9,20 +9,20 @@
  * 随机 id 在场景里用固定 id 覆盖）。Storybook 故事与单测同源，避免双份数据漂移。
  */
 import type { EntityRow } from '../data/row-schema'
-import { RowStore } from '../data/rows'
 import { GROUP_TYPE } from '../data/types'
+import { GtdModel } from '../state/model'
 import { DUE_SOON_MS, isoFromNow, NOW } from './constants'
 import { makeTaskRow } from './factories'
 
 export interface Scenario {
   rows: EntityRow[]
-  rowStore: RowStore
+  rowStore: GtdModel
   now: Date
   dueSoonMs: number
 }
 
 function scenario(rows: EntityRow[]): Scenario {
-  return { rows, rowStore: new RowStore(rows), now: NOW, dueSoonMs: DUE_SOON_MS }
+  return { rows, rowStore: new GtdModel(rows), now: NOW, dueSoonMs: DUE_SOON_MS }
 }
 
 /**
@@ -49,7 +49,7 @@ export function availabilityMixScenario(): Scenario {
   const overdue = makeTaskRow('avail-overdue', { name: '逾期', dueDate: isoFromNow(-86400000) })
   const dueSoon = makeTaskRow('avail-soon', { name: '临近', dueDate: isoFromNow(DUE_SOON_MS / 2) })
   const deferred = makeTaskRow('avail-deferred', { name: '未解锁', deferDate: isoFromNow(60000) })
-  const completed = makeTaskRow('avail-done', { name: '已完成', status: 'completed' as const, completedAt: NOW.toISOString() })
+  const completed = makeTaskRow('avail-done', { name: '已完成', status: 'completed' as const, statusChangedAt: NOW.toISOString() })
   const available = makeTaskRow('avail-free', { name: '可执行' })
   return scenario([overdue, dueSoon, deferred, completed, available])
 }

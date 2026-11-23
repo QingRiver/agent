@@ -1,7 +1,6 @@
 import type { EntityRow, EntityRowOf } from '../data/row-schema'
 import type { RenderContext } from './perspective'
 import { describe, expect, it } from 'vitest'
-import { RowStore } from '../data/rows'
 import {
   AVAILABILITY_FILTER,
   BUILTIN_PERSPECTIVE_ID,
@@ -18,7 +17,8 @@ import {
   makeTaskTagRow,
   NOW,
 } from '../fixtures'
-import { buildTaskTree } from '../structure/tree'
+import { GtdModel } from '../state/model'
+import { buildTaskTree } from '../state/tree'
 import { FILTER_FIELD, LEAF_OP, LOGIC_OP } from './filter'
 import {
   applyBaseFilter,
@@ -39,11 +39,10 @@ function makeCtx(
 ): RenderContext {
   const tasks = rows.filter((r): r is EntityRowOf<'task'> => r.entity === 'task')
   return {
-    rowStore: new RowStore(rows),
+    rowStore: new GtdModel(rows),
     tree: buildTaskTree(tasks),
     now: NOW,
     dueSoonIntervalMs: DUE_SOON_MS,
-    statusCache: new Map(),
     collapsibleSet: new Set(),
     ...catalog,
   }
@@ -107,7 +106,7 @@ describe('applyBaseFilter', () => {
     const active = makeTaskRow('a')
     const hold = makeTaskRow('h', {
       status: EXPLICIT_STATUS.HOLD,
-      heldAt: NOW.toISOString(),
+      statusChangedAt: NOW.toISOString(),
     })
     const remaining = applyBaseFilter(
       [active, hold],
@@ -125,7 +124,7 @@ describe('applyBaseFilter', () => {
 
   it('all: 含 completed / hold，不含 deleted', () => {
     const completed = makeTaskRow('a', { status: EXPLICIT_STATUS.COMPLETED })
-    const hold = makeTaskRow('h', { status: EXPLICIT_STATUS.HOLD, heldAt: NOW.toISOString() })
+    const hold = makeTaskRow('h', { status: EXPLICIT_STATUS.HOLD, statusChangedAt: NOW.toISOString() })
     const deleted = makeTaskRow('d', { status: EXPLICIT_STATUS.DELETED })
     const parent = makeTaskRow('p', { status: EXPLICIT_STATUS.DELETED })
     const child = makeTaskRow('c', { parentId: 'p' })
@@ -195,7 +194,7 @@ describe('groupBy', () => {
   })
 
   it('status / flagged 分组标题为中文', () => {
-    const a = makeTaskRow('a', { status: EXPLICIT_STATUS.COMPLETED, completedAt: NOW.toISOString(), flagged: true })
+    const a = makeTaskRow('a', { status: EXPLICIT_STATUS.COMPLETED, statusChangedAt: NOW.toISOString(), flagged: true })
     const b = makeTaskRow('b')
     const ctx = makeCtx([a, b])
     expect(groupBy([a, b], [GROUP_KEY.STATUS], ctx).map(g => g.label)).toEqual(['已完成', '活跃'])
@@ -205,7 +204,7 @@ describe('groupBy', () => {
   it('缩进只数同组里的祖先：父任务在别的组时子任务顶格', () => {
     const p = makeTaskRow('p', { groupType: 'parallel', order: 0, mountDirId: 'd' })
     const a = makeTaskRow('a', { parentId: 'p', order: 0, mountDirId: 'd' })
-    const c = makeTaskRow('c', { parentId: 'p', order: 1, mountDirId: 'd', status: EXPLICIT_STATUS.COMPLETED, completedAt: NOW.toISOString() })
+    const c = makeTaskRow('c', { parentId: 'p', order: 1, mountDirId: 'd', status: EXPLICIT_STATUS.COMPLETED, statusChangedAt: NOW.toISOString() })
     const groups = groupBy([p, a, c], [GROUP_KEY.STATUS], makeCtx([p, a, c]))
     const depths = groups.map(g => [g.label, g.children.map(i => 'depth' in i ? [i.taskId, i.depth] : null)])
     expect(depths).toEqual([
@@ -233,7 +232,7 @@ describe('sortTasks', () => {
     const t2 = makeTaskRow('b', { dueDate: new Date('2026-07-20T00:00:00Z').toISOString() })
     const t3 = makeTaskRow('c', { dueDate: new Date('2026-07-10T00:00:00Z').toISOString() })
     const sortBy = [makeSortKey({ field: SORT_FIELD.DUE_DATE, dir: 'asc' })]
-    const out = sortTasks([t1, t2, t3], sortBy, new RowStore([t1, t2, t3]), buildTaskTree([t1, t2, t3]))
+    const out = sortTasks([t1, t2, t3], sortBy, new GtdModel([t1, t2, t3]), buildTaskTree([t1, t2, t3]))
     expect(out.map(r => r.id)).toEqual(['c', 'b', 'a'])
   })
 
@@ -249,7 +248,7 @@ describe('sortTasks', () => {
     const expected = [...rows].sort((x, y) => field === SORT_FIELD.NAME
       ? y.data.name.localeCompare(x.data.name)
       : y.data.createdAt.localeCompare(x.data.createdAt)).map(r => r.id)
-    const out = sortTasks(rows, [makeSortKey({ field, dir: 'desc' })], new RowStore(rows), buildTaskTree(rows))
+    const out = sortTasks(rows, [makeSortKey({ field, dir: 'desc' })], new GtdModel(rows), buildTaskTree(rows))
     expect(out.map(r => r.id)).toEqual(expected)
     expect(expected).not.toEqual(['a', 'b', 'c'])
   })
@@ -264,7 +263,7 @@ describe('flattenInTreeOrder', () => {
     })
     const child = makeTaskRow('d844', { parentId: 'fa54', order: 0 })
     const sortBy = [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })]
-    const store = new RowStore([parent, child])
+    const store = new GtdModel([parent, child])
     const tree = buildTaskTree([parent, child])
     const out = flattenInTreeOrder(tree, [parent, child], sortBy, store)
     expect(out.map(r => r.id)).toEqual(['fa54', 'd844'])
@@ -274,7 +273,7 @@ describe('flattenInTreeOrder', () => {
     const parent = makeTaskRow('p', { groupType: 'parallel', order: 5 })
     const child = makeTaskRow('c', { parentId: 'p', order: 0 })
     const sortBy = [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })]
-    const store = new RowStore([parent, child])
+    const store = new GtdModel([parent, child])
     const tree = buildTaskTree([parent, child])
     const out = flattenInTreeOrder(tree, [parent, child], sortBy, store)
     expect(out.map(r => r.id)).toEqual(['p', 'c'])
@@ -292,7 +291,7 @@ describe('renderPerspective', () => {
     const p = makePerspective({
       sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })],
     })
-    const groups = renderPerspective(new RowStore([parent, child]), p, NOW, DUE_SOON_MS, 'UTC')
+    const groups = renderPerspective(new GtdModel([parent, child]), p, NOW, DUE_SOON_MS, 'UTC')
     const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null)
     expect(ids).toEqual(['fa54', 'd844'])
     expect(groups.flatMap(g => g.children).map(c => 'depth' in c ? c.depth : null)).toEqual([0, 1])
@@ -308,8 +307,8 @@ describe('renderPerspective', () => {
     const child = makeTaskRow('d844', { name: '4', parentId: 'fa54', order: 3 })
     const orphan = makeTaskRow('lonely')
     // 子任务带物理 task_tag（模拟 OF 入组复制后的状态）；未复制的 orphan 不进透视
-    // 标签目录不在 RowStore；分组标题经 tagNameOf 注入（对齐 TagsStore）
-    const store = new RowStore([
+    // 标签目录不在 GtdModel；分组标题经 tagNameOf 注入（对齐 TagsStore）
+    const store = new GtdModel([
       parent,
       child,
       orphan,
@@ -340,7 +339,7 @@ describe('renderPerspective', () => {
     })
     const first = makeTaskRow('c1', { name: '1', parentId: 'p', order: 0 })
     const second = makeTaskRow('c2', { name: '2', parentId: 'p', order: 1 })
-    const store = new RowStore([
+    const store = new GtdModel([
       parent,
       first,
       second,
@@ -380,7 +379,7 @@ describe('renderPerspective', () => {
     const p = makePerspective({
       sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })],
     })
-    const groups = renderPerspective(new RowStore([parent, first, second]), p, NOW, DUE_SOON_MS, 'UTC', {
+    const groups = renderPerspective(new GtdModel([parent, first, second]), p, NOW, DUE_SOON_MS, 'UTC', {
       availabilityFilter: AVAILABILITY_FILTER.AVAILABLE,
     })
     const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null)
@@ -390,7 +389,7 @@ describe('renderPerspective', () => {
   it('端到端产出 RenderGroup[] 且 computed 非硬编码', () => {
     const t = makeTaskRow('a', { dueDate: new Date(NOW.getTime() - 60000).toISOString() })
     const p = makePerspective()
-    const groups = renderPerspective(new RowStore([t]), p, NOW, DUE_SOON_MS, 'UTC')
+    const groups = renderPerspective(new GtdModel([t]), p, NOW, DUE_SOON_MS, 'UTC')
     expect(groups).toBeInstanceOf(Array)
     const item = groups[0]?.children[0]
     expect(item && 'computed' in item && item.computed).toBe('overdue')
@@ -410,7 +409,7 @@ describe('renderPerspective', () => {
         ],
       },
     })
-    const groups = renderPerspective(new RowStore([hit, miss]), p, NOW, DUE_SOON_MS, 'UTC', {
+    const groups = renderPerspective(new GtdModel([hit, miss]), p, NOW, DUE_SOON_MS, 'UTC', {
       availabilityFilter: AVAILABILITY_FILTER.ALL,
     })
     const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null).filter(Boolean)
@@ -420,7 +419,7 @@ describe('renderPerspective', () => {
   it('forecast 默认仅现在：rolling 入现在块', () => {
     const t = makeTaskRow('r', { plannedMode: 'rolling', plannedDate: null })
     const forecast = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.FORECAST)!
-    const groups = renderPerspective(new RowStore([t]), forecast, NOW, DUE_SOON_MS, 'UTC')
+    const groups = renderPerspective(new GtdModel([t]), forecast, NOW, DUE_SOON_MS, 'UTC')
     expect(groups.map(g => g.key)).toEqual(['now'])
     expect(groups[0]?.children).toHaveLength(1)
   })
@@ -431,10 +430,10 @@ describe('renderPerspective', () => {
       plannedMode: 'rolling',
       plannedDate: null,
       status: EXPLICIT_STATUS.COMPLETED,
-      completedAt: NOW.toISOString(),
+      statusChangedAt: NOW.toISOString(),
     })
     const forecast = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.FORECAST)!
-    const groups = renderPerspective(new RowStore([active, done]), forecast, NOW, DUE_SOON_MS, 'UTC')
+    const groups = renderPerspective(new GtdModel([active, done]), forecast, NOW, DUE_SOON_MS, 'UTC')
     const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null)
     expect(ids).toEqual(['a'])
   })
@@ -446,7 +445,7 @@ describe('inbox 透视', () => {
     const child = makeTaskRow('inbox-child', { parentId: 'inbox-parent', mountDirId: null })
     const inProject = makeTaskRow('in-proj', { mountDirId: 'p1' })
     const inbox = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.INBOX)!
-    const store = new RowStore([parent, child, inProject])
+    const store = new GtdModel([parent, child, inProject])
     const groups = renderPerspective(store, inbox, NOW, DUE_SOON_MS, 'UTC', {
       projectOf: t => t.data.mountDirId,
     })
@@ -462,7 +461,7 @@ describe('inbox 透视', () => {
     const parent = makeTaskRow('trash-parent', { status: EXPLICIT_STATUS.DELETED })
     const child = makeTaskRow('trash-child', { parentId: 'trash-parent' }) // 物理 ACTIVE
     const trash = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.TRASH)!
-    const store = new RowStore([parent, child])
+    const store = new GtdModel([parent, child])
     const groups = renderPerspective(store, trash, NOW, DUE_SOON_MS, 'UTC', {
       availabilityFilter: AVAILABILITY_FILTER.ALL,
     })
@@ -473,7 +472,7 @@ describe('inbox 透视', () => {
     const parent = makeTaskRow('hold-parent', { status: EXPLICIT_STATUS.HOLD })
     const child = makeTaskRow('hold-child', { parentId: 'hold-parent' }) // 物理 ACTIVE
     const hold = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.HOLD)!
-    const store = new RowStore([parent, child])
+    const store = new GtdModel([parent, child])
     const groups = renderPerspective(store, hold, NOW, DUE_SOON_MS, 'UTC', {
       availabilityFilter: AVAILABILITY_FILTER.ALL,
     })
@@ -484,7 +483,7 @@ describe('inbox 透视', () => {
     const parent = makeTaskRow('rem-parent', { status: EXPLICIT_STATUS.DELETED })
     const child = makeTaskRow('rem-child', { parentId: 'rem-parent' }) // 物理 ACTIVE 但有效 deleted
     const p = makePerspective({ filter: null, sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })] })
-    const store = new RowStore([parent, child])
+    const store = new GtdModel([parent, child])
     const groups = renderPerspective(store, p, NOW, DUE_SOON_MS, 'UTC', {
       availabilityFilter: AVAILABILITY_FILTER.REMAINING,
     })
@@ -495,7 +494,7 @@ describe('inbox 透视', () => {
   it('all 不含 deleted：内置全部与自定义透视均不可见', () => {
     const deleted = makeTaskRow('del', { status: EXPLICIT_STATUS.DELETED })
     const active = makeTaskRow('act')
-    const store = new RowStore([deleted, active])
+    const store = new GtdModel([deleted, active])
     const allBuiltin = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.ALL)!
     const custom = makePerspective({
       filter: null,
@@ -512,7 +511,7 @@ describe('inbox 透视', () => {
       filter: { op: LEAF_OP.IS, field: FILTER_FIELD.STATUS, value: EXPLICIT_STATUS.DELETED },
       sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })],
     })
-    const store = new RowStore([deleted])
+    const store = new GtdModel([deleted])
     const groups = renderPerspective(store, custom, NOW, DUE_SOON_MS, 'UTC', {
       availabilityFilter: AVAILABILITY_FILTER.ALL,
     })
@@ -523,7 +522,7 @@ describe('inbox 透视', () => {
     const parent = makeTaskRow('done-parent', { status: EXPLICIT_STATUS.COMPLETED })
     const child = makeTaskRow('done-child', { parentId: 'done-parent' }) // 物理 ACTIVE
     const completed = builtinPerspectives().find(x => x.id === BUILTIN_PERSPECTIVE_ID.COMPLETED)!
-    const store = new RowStore([parent, child])
+    const store = new GtdModel([parent, child])
     const groups = renderPerspective(store, completed, NOW, DUE_SOON_MS, 'UTC', {
       availabilityFilter: AVAILABILITY_FILTER.ALL,
     })
@@ -630,7 +629,7 @@ describe('渲染层塌陷 [SP-COLLAPSE]', () => {
       sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })],
       filter: { op: LEAF_OP.IS, field: FILTER_FIELD.FLAGGED, value: true },
     })
-    const groups = renderPerspective(new RowStore([a, b, c, d]), p, NOW, DUE_SOON_MS, 'UTC', {
+    const groups = renderPerspective(new GtdModel([a, b, c, d]), p, NOW, DUE_SOON_MS, 'UTC', {
       availabilityFilter: AVAILABILITY_FILTER.AVAILABLE,
     })
     const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null)
@@ -648,7 +647,7 @@ describe('渲染层塌陷 [SP-COLLAPSE]', () => {
       sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })],
       filter: { op: LEAF_OP.IS, field: FILTER_FIELD.FLAGGED, value: true },
     })
-    const groups = renderPerspective(new RowStore([a, b, c, d]), p, NOW, DUE_SOON_MS, 'UTC', {
+    const groups = renderPerspective(new GtdModel([a, b, c, d]), p, NOW, DUE_SOON_MS, 'UTC', {
       availabilityFilter: AVAILABILITY_FILTER.AVAILABLE,
     })
     const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null)
@@ -665,7 +664,7 @@ describe('渲染层塌陷 [SP-COLLAPSE]', () => {
       sortBy: [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })],
       filter: { op: LEAF_OP.IS, field: FILTER_FIELD.FLAGGED, value: true },
     })
-    const groups = renderPerspective(new RowStore([a, b, x, c]), p, NOW, DUE_SOON_MS, 'UTC', {
+    const groups = renderPerspective(new GtdModel([a, b, x, c]), p, NOW, DUE_SOON_MS, 'UTC', {
       availabilityFilter: AVAILABILITY_FILTER.AVAILABLE,
     })
     const ids = groups.flatMap(g => g.children).map(c => 'taskId' in c ? c.taskId : null)
@@ -679,7 +678,7 @@ describe('渲染层塌陷 [SP-COLLAPSE]', () => {
     const b = makeTaskRow('b', { parentId: 'a', order: 0 })
     const c = makeTaskRow('c', { parentId: 'b', order: 0 })
     const d = makeTaskRow('d', { parentId: 'a', order: 5 })
-    const store = new RowStore([a, b, c, d])
+    const store = new GtdModel([a, b, c, d])
     const tree = buildTaskTree([a, b, c, d])
     const sortBy = [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })]
     // visible 排除 B（塌陷），C/D 可见
@@ -690,7 +689,7 @@ describe('渲染层塌陷 [SP-COLLAPSE]', () => {
   it('flattenInTreeOrder 直调：空集 collapsibleSet 行为不变（向后兼容）', () => {
     const a = makeTaskRow('a', { groupType: 'parallel', order: 0 })
     const b = makeTaskRow('b', { parentId: 'a', order: 0 })
-    const store = new RowStore([a, b])
+    const store = new GtdModel([a, b])
     const tree = buildTaskTree([a, b])
     const sortBy = [makeSortKey({ field: SORT_FIELD.ORDER, dir: 'asc' })]
     const out = flattenInTreeOrder(tree, [a, b], sortBy, store)

@@ -1,4 +1,4 @@
-import type { EntityRow, GtdIntent } from '@agent/gtd'
+import type { EntityRow, Op } from '@agent/gtd'
 import { randomUUID } from 'node:crypto'
 import { EXPLICIT_STATUS } from '@agent/gtd'
 import { e2eFetch, e2eRequest, GtdDevice, signInE2E } from '../client'
@@ -50,8 +50,8 @@ function jsonBody(value: unknown): RequestInit {
   }
 }
 
-async function actGtd(gtd: Gtd, intents: GtdIntent[]): Promise<void> {
-  await gtd.device.act(intents)
+async function actGtd(gtd: Gtd, ops: Op[]): Promise<void> {
+  await gtd.device.act(ops)
 }
 
 async function gtdRows(gtd: Gtd, deadTagId?: string): Promise<EntityRow[]> {
@@ -124,35 +124,29 @@ async function createScenario(
 
   const now = new Date().toISOString()
   const taskIds = [randomUUID(), randomUUID()]
-  const intents: GtdIntent[] = []
+  const ops: Op[] = []
   for (const [index, taskId] of taskIds.entries()) {
-    intents.push({
-      kind: 'command',
-      command: {
-        id: randomUUID(),
-        type: 'create_task',
-        taskId,
-        name: `e2e-${suffix}-task-${index + 1}`,
-        parentId: null,
-        order: index,
-        mountDirId: null,
-        clientTs: now,
-      },
+    ops.push({
+      kind: 'create',
+      id: randomUUID(),
+      clientTs: now,
+      taskId,
+      name: `e2e-${suffix}-task-${index + 1}`,
+      parentId: null,
+      order: index,
+      mountDirId: null,
     })
-    intents.push({
-      kind: 'mutation',
-      mutation: {
-        id: randomUUID(),
-        entity: 'task_tag',
-        entityId: `${taskId}|${tag.id}`,
-        op: 'upsert',
-        clientTs: now,
-        patch: { taskId, tagId: tag.id },
-      },
+    ops.push({
+      kind: 'patch',
+      id: randomUUID(),
+      clientTs: now,
+      entity: 'task_tag',
+      entityId: `${taskId}|${tag.id}`,
+      patch: { taskId, tagId: tag.id },
     })
     cleanup.taskIds.add(taskId)
   }
-  await actGtd(gtd, intents)
+  await actGtd(gtd, ops)
 
   // 从真实读接口确认两域关联均已落地。
   for (const doc of docs) {
@@ -314,17 +308,17 @@ async function cleanupFlow(gtd: Gtd, state: CleanupState): Promise<void> {
   try {
     const rows = await gtdRows(gtd)
     const now = new Date().toISOString()
-    const intents = [...state.taskIds].flatMap((taskId): GtdIntent[] => {
+    const ops = [...state.taskIds].flatMap((taskId): Op[] => {
       const status = taskStatus(rows, taskId)
       if (status === undefined)
         return []
-      const purge: GtdIntent = { kind: 'purge', taskId }
+      const purge: Op = { kind: 'purge', taskId }
       if (status === EXPLICIT_STATUS.DELETED)
         return [purge]
-      return [{ kind: 'command', command: { id: randomUUID(), type: 'delete', taskId, clientTs: now } }, purge]
+      return [{ kind: 'transition', id: randomUUID(), clientTs: now, action: 'delete', taskId }, purge]
     })
-    if (intents.length)
-      await actGtd(gtd, intents)
+    if (ops.length)
+      await actGtd(gtd, ops)
   }
   catch (error) {
     console.warn('[e2e/tags] cleanup GTD 失败:', error)

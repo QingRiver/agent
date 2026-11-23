@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EXPLICIT_STATUS } from '../data/types'
 import { makeTaskRow } from '../fixtures'
-import { buildTaskTree } from '../structure/tree'
+import { buildTaskTree } from '../state/tree'
 import { suppressingAncestor } from './suppressing-ancestor'
 
 function treeOf(

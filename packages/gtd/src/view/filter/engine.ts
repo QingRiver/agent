@@ -1,21 +1,21 @@
 import type { EntityRowOf } from '../../data/row-schema'
-import type { RowStore } from '../../data/rows'
-import type { TaskTree } from '../../structure/tree'
+import type { GtdModel } from '../../state/model'
+import type { TaskTree } from '../../state/tree'
 import type { CatalogProjection } from '../catalog'
 import type { FilterNode, LeafOp } from './schema'
 import { match, P } from 'ts-pattern'
 import { FILTER_FIELD } from '../../data/types'
-import { effectiveDefer, effectiveDue, effectiveStatus } from '../../inheritance/effective'
+import { effectiveDefer, effectiveDue, effectiveStatus } from '../../state/tree'
 import { isEmptyValueArrayOrScalar } from './helpers'
 import { isDateField, isNumericField, LEAF_OP, LOGIC_OP } from './schema'
 
 /**
- * DSL 求值引擎。吃 RowStore（行级）+ 可选目录投影。
+ * DSL 求值引擎。吃 GtdModel（行级）+ 可选目录投影。
  */
 
 /** 引擎求值上下文：rowStore + 可选树（Due / Defer 读时继承）+ 目录投影。TAG 只看物理 task_tag。 */
 export interface FilterEvalContext extends CatalogProjection {
-  rowStore: RowStore
+  rowStore: GtdModel
   tree?: TaskTree
 }
 

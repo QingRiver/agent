@@ -1,16 +1,17 @@
 import type { EntityRowOf } from '../../data/row-schema'
-import type { RowStore } from '../../data/rows'
+import type { GtdModel } from '../../state/model'
 /**
  * Forecast 渲染：按 timeslice 吸顶分块 + 块内树序（保层级）。
  * `computeAvailability` / depth 用全量 liveTasks 树；`tasks` 仅作归桶列表（已 applyBaseFilter）。
  */
 import type { RenderContext, RenderGroup, RenderItem } from '../../view/perspective'
 import type { ForecastBlockKey, ForecastOptions } from './types'
+import { computeAvailability } from '../../availability'
 import {
   FORECAST_STRIP,
   FORECAST_STRIP_TEXT,
 } from '../../data/types'
-import { taskDepth } from '../../structure/tree'
+import { taskDepth } from '../../state/tree'
 import {
   formatZonedYmd,
   inTimeSlice,
@@ -19,7 +20,6 @@ import {
   startOfZonedYmd,
 } from '../../time/calendar'
 import { flattenInTreeOrder } from '../../view/perspective'
-import { computeAvailability } from '../availability'
 import { assignForecastBlock } from './assign'
 import { dayBlockKey } from './block-key'
 import { dayStartAtOffset, NAMED_DAY_OFFSETS } from './strip-offsets'
@@ -77,7 +77,6 @@ function toItem(task: EntityRowOf<'task'>, ctx: RenderContext): RenderItem {
     ctx.now,
     ctx.tree,
     ctx.dueSoonIntervalMs,
-    ctx.statusCache,
   )
   return {
     taskId: task.id,
@@ -107,15 +106,15 @@ function blockSortKey(key: ForecastBlockKey, now: Date, timeZone: string): numbe
  * 树与 status 基于 `rowStore.taskTree()` 全量，避免过滤子集丢祖先导致 computed 失真。
  */
 export function renderForecast(
-  rowStore: RowStore,
+  rowStore: GtdModel,
   options: ForecastOptions,
   now: Date,
   dueSoonIntervalMs: number,
   tasks: EntityRowOf<'task'>[],
   timeZone: string,
 ): RenderGroup[] {
-  const tree = rowStore.taskTree()
-  const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, statusCache: new Map(), collapsibleSet: new Set() }
+  const tree = rowStore.tree()
+  const ctx: RenderContext = { rowStore, tree, now, dueSoonIntervalMs, collapsibleSet: new Set() }
 
   const buckets = new Map<ForecastBlockKey, EntityRowOf<'task'>[]>()
   const ensure = (k: ForecastBlockKey) => {

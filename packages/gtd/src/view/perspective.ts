@@ -1,4 +1,12 @@
 import type { EntityRowOf } from '../data/row-schema'
+import type {
+  ComputedStatus,
+  GroupKey,
+  Perspective,
+  SortKey,
+} from '../data/schema'
+import type { AvailabilityFilter, BuiltinPerspectiveId } from '../data/types'
+import type { ForecastOptions } from '../derived/forecast'
 /**
  * 透视渲染管线（通用路径）：
  * 1. 可用性 base filter（View Options）
@@ -9,18 +17,11 @@ import type { EntityRowOf } from '../data/row-schema'
  *
  * Forecast 在 step1 后早退到 renderForecast。下文按管线顺序排列，入口 {@link renderPerspective} 置顶。
  */
-import type { RowStore } from '../data/rows'
-import type {
-  ComputedStatus,
-  GroupKey,
-  Perspective,
-  SortKey,
-} from '../data/schema'
-import type { AvailabilityFilter, BuiltinPerspectiveId } from '../data/types'
-import type { ForecastOptions } from '../derived/forecast'
-import type { TaskNode, TaskTree } from '../structure/tree'
+import type { GtdModel } from '../state/model'
+import type { TaskNode, TaskTree } from '../state/tree'
 import type { CatalogProjection } from './catalog'
 import type { FilterEvalContext, FilterNode } from './filter'
+import { computeAvailability } from '../availability'
 import {
   AVAILABILITY_FILTER,
   BUILTIN_PERSPECTIVE_ID,
@@ -33,10 +34,8 @@ import {
   SORT_DIR,
   SORT_FIELD,
 } from '../data/types'
-import { computeAvailability } from '../derived/availability'
 import { defaultForecastOptions, renderForecast } from '../derived/forecast'
-import { effectiveDefer, effectiveDue, effectiveStatus } from '../inheritance/effective'
-import { ancestors } from '../structure/tree'
+import { ancestors, effectiveDefer, effectiveDue, effectiveStatus } from '../state/tree'
 import { formatZonedYmdHm } from '../time/calendar'
 import { computeCollapsibleSet, effectiveVisibleChildren } from './collapse'
 import { FILTER_FIELD, LEAF_OP, LOGIC_OP, matchFilter, rawValue } from './filter'
@@ -58,11 +57,10 @@ export interface RenderGroup {
 }
 
 export interface RenderContext extends CatalogProjection {
-  rowStore: RowStore
+  rowStore: GtdModel
   tree: TaskTree
   now: Date
   dueSoonIntervalMs: number
-  statusCache: Map<string, ComputedStatus>
   /** 分组日期标签用；缺省 UTC */
   timeZone?: string
   /** 塌陷节点集（纯结构祖先）；forecast 路径传空集（不塌陷）[SP-COLLAPSE] */
@@ -89,7 +87,7 @@ function catalogFromOptions(options?: RenderPerspectiveOptions): CatalogProjecti
 
 /** 透视渲染总入口（管线见文件头）。 */
 export function renderPerspective(
-  rowStore: RowStore,
+  rowStore: GtdModel,
   perspective: Perspective,
   now: Date,
   dueSoonIntervalMs: number,
@@ -101,14 +99,13 @@ export function renderPerspective(
   const catalog = catalogFromOptions(options)
 
   const tasks = rowStore.liveTasks()
-  const tree = rowStore.taskTree()
+  const tree = rowStore.tree()
   // ctx 先建（applyBaseFilter 需 ctx）；forecast 传空 collapsibleSet 不塌陷 [SP-COLLAPSE-FORECAST-NOOP]，通用路径 filter 后重算
   const ctx: RenderContext = {
     rowStore,
     tree,
     now,
     dueSoonIntervalMs,
-    statusCache: new Map(),
     timeZone,
     collapsibleSet: new Set(),
     ...catalog,
@@ -166,7 +163,6 @@ function taskComputed(task: EntityRowOf<'task'>, ctx: RenderContext): ComputedSt
     ctx.now,
     ctx.tree,
     ctx.dueSoonIntervalMs,
-    ctx.statusCache,
   )
 }
 
@@ -278,7 +274,7 @@ function compareField(
 export function sortTasks(
   tasks: EntityRowOf<'task'>[],
   sortBy: SortKey[],
-  rowStore: RowStore,
+  rowStore: GtdModel,
   tree: TaskTree,
   catalog?: CatalogProjection,
 ): EntityRowOf<'task'>[] {
@@ -316,7 +312,7 @@ export function flattenInTreeOrder(
   tree: TaskTree,
   visible: EntityRowOf<'task'>[],
   sortBy: SortKey[],
-  rowStore: RowStore,
+  rowStore: GtdModel,
   collapsibleSet: Set<string> = new Set(),
   catalog?: CatalogProjection,
 ): EntityRowOf<'task'>[] {

@@ -1,7 +1,5 @@
 export * from './filter-schema'
 export * from './normalize-rows'
-export * from './reader'
 export * from './row-schema'
-export * from './rows'
 export * from './schema'
 export * from './types'

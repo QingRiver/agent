@@ -5,11 +5,11 @@
  * - 包内单测：`from '../fixtures'` / `from '../../fixtures'`
  * - client Storybook（未来）：`from '@agent/gtd/fixtures'`（见 package.json `exports`）
  *
- * 内容：常量 + 领域/行级工厂 + 富场景 + intent 助手 + perspective prompt + Forecast 锚点。
+ * 内容：常量 + 领域/行级工厂 + 富场景 + Op 助手 + perspective prompt + Forecast 锚点。
  */
 export * from './constants'
 export * from './factories'
 export * from './forecast'
-export * from './intents'
+export * from './ops'
 export * from './perspective-prompt'
 export * from './scenarios'

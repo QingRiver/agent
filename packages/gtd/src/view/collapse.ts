@@ -1,4 +1,4 @@
-import type { TaskNode, TaskTree } from '../structure/tree'
+import type { TaskNode, TaskTree } from '../state/tree'
 
 /**
  * L7 渲染层塌陷（草案 §4 / 重设计 §4.3 §7.2）。

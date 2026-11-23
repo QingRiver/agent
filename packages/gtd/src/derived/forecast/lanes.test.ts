@@ -18,7 +18,7 @@ import {
   TZ,
   YESTERDAY,
 } from '../../fixtures'
-import { buildTaskTree } from '../../structure/tree'
+import { buildTaskTree } from '../../state/tree'
 
 describe('lanes mermaid branches', () => {
   const oToday = opts([FORECAST_STRIP.NOW])

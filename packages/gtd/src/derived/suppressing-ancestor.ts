@@ -10,9 +10,8 @@
  * 旧版 `trashRestoreTargets`/`holdRestoreTargets`（restore 路由到祖先链）已回退——改置灰替代路由。
  */
 import type { EntityRowOf } from '../data/row-schema'
-import type { TaskTree } from '../structure/tree'
-import { effectiveStatus } from '../inheritance/effective'
-import { ancestors } from '../structure/tree'
+import type { TaskTree } from '../state/tree'
+import { ancestors, effectiveStatus } from '../state/tree'
 
 /**
  * 返回压制 taskId 的最靠根终态祖先（有效 ≠ 自身状态时）；未被压制则返回 null。

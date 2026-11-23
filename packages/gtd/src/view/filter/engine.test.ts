@@ -2,17 +2,17 @@ import type { EntityRow, EntityRowOf } from '../../data/row-schema'
 import type { FilterEvalContext } from './engine'
 import type { FilterNode } from './schema'
 import { describe, expect, it } from 'vitest'
-import { RowStore } from '../../data/rows'
 import { EXPLICIT_STATUS } from '../../data/types'
 import { makeTaskRow, makeTaskTagRow, NOW } from '../../fixtures'
-import { buildTaskTree } from '../../structure/tree'
+import { GtdModel } from '../../state/model'
+import { buildTaskTree } from '../../state/tree'
 import { evalNode, matchFilter } from './engine'
 import { FILTER_FIELD, LEAF_OP, LOGIC_OP } from './schema'
 
 function ctx(rows: EntityRow[] = [], projectOf?: (t: EntityRowOf<'task'>) => string | null): FilterEvalContext {
   return projectOf
-    ? { rowStore: new RowStore(rows), projectOf }
-    : { rowStore: new RowStore(rows) }
+    ? { rowStore: new GtdModel(rows), projectOf }
+    : { rowStore: new GtdModel(rows) }
 }
 
 function leaf(field: string, op: string, value?: unknown): FilterNode {
@@ -80,7 +80,7 @@ describe('evalNode - 叶子: project/tag (some/empty)', () => {
     const parent = makeTaskRow('p')
     const child = makeTaskRow('c', { parentId: 'p' })
     const rows = [parent, child, makeTaskTagRow('p', 'g1')]
-    const c: FilterEvalContext = { rowStore: new RowStore(rows), tree: buildTaskTree([parent, child]) }
+    const c: FilterEvalContext = { rowStore: new GtdModel(rows), tree: buildTaskTree([parent, child]) }
     expect(evalNode(child, leaf(FILTER_FIELD.TAG, LEAF_OP.SOME, ['g1']), c)).toBe(false)
     expect(evalNode(child, leaf(FILTER_FIELD.TAG, LEAF_OP.EMPTY), c)).toBe(true)
   })
@@ -123,7 +123,7 @@ describe('evalNode - 叶子: 日期 (before/after/within/exist)', () => {
     const parent = makeTaskRow('p', { dueDate: base })
     const child = makeTaskRow('c', { parentId: 'p', dueDate: null })
     const c: FilterEvalContext = {
-      rowStore: new RowStore([parent, child]),
+      rowStore: new GtdModel([parent, child]),
       tree: buildTaskTree([parent, child]),
     }
     expect(evalNode(child, leaf(FILTER_FIELD.DUE_DATE, LEAF_OP.EXIST), c)).toBe(true)
@@ -133,7 +133,7 @@ describe('evalNode - 叶子: 日期 (before/after/within/exist)', () => {
     const parent = makeTaskRow('p', { deferDate: earlier })
     const child = makeTaskRow('c', { parentId: 'p', deferDate: null })
     const c: FilterEvalContext = {
-      rowStore: new RowStore([parent, child]),
+      rowStore: new GtdModel([parent, child]),
       tree: buildTaskTree([parent, child]),
     }
     expect(evalNode(child, leaf(FILTER_FIELD.DEFER_DATE, LEAF_OP.EXIST), c)).toBe(true)

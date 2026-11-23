@@ -4,7 +4,7 @@
  * Due / Defer / Plan 归块看 **effective** 日期（wiki/GTD_New.md §时间联动）；`tree` 缺省退回物理字段。
  */
 import type { EntityRowOf } from '../../data/row-schema'
-import type { TaskTree } from '../../structure/tree'
+import type { TaskTree } from '../../state/tree'
 import type { ForecastOptions, LaneHit } from './types'
 import { match } from 'ts-pattern'
 import { FORECAST_STRIP, PLANNED_MODE } from '../../data/types'
@@ -13,7 +13,7 @@ import {
   effectiveDue,
   effectivePlannedDate,
   effectivePlannedMode,
-} from '../../inheritance/effective'
+} from '../../state/tree'
 import {
   dayInTimeSlice,
   instantDayStart,

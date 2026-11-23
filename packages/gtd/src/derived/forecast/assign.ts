@@ -2,7 +2,7 @@
  * 栏位正交 → tier 去重 → 归块（wiki §1.1.1）。
  */
 import type { EntityRowOf } from '../../data/row-schema'
-import type { TaskTree } from '../../structure/tree'
+import type { TaskTree } from '../../state/tree'
 import type { ForecastBlockKey, ForecastOptions, LaneHit } from './types'
 import { laneDeferred, laneFlagged, laneOverdueDue, lanePlanned } from './lanes'
 import { TIER_ORDER } from './types'

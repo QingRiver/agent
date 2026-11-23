@@ -1,4 +1,4 @@
-import type { GtdIntent } from '@agent/gtd'
+import type { Op } from '@agent/gtd'
 import type { Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
@@ -29,25 +29,35 @@ function iso(d: Date): string {
   return d.toISOString()
 }
 
-function createTask(taskId: string, name: string, order: number, ts: string): GtdIntent {
+function createTask(taskId: string, name: string, order: number, ts: string): Op {
   return {
-    kind: 'command',
-    command: { id: randomUUID(), type: 'create_task', taskId, name, parentId: null, order, mountDirId: null, clientTs: ts },
+    kind: 'create',
+    id: randomUUID(),
+    clientTs: ts,
+    taskId,
+    name,
+    parentId: null,
+    order,
+    mountDirId: null,
   }
 }
 
-function patchTask(taskId: string, patch: Record<string, unknown>, ts: string): GtdIntent {
+function patchTask(taskId: string, patch: Record<string, unknown>, ts: string): Op {
   return {
-    kind: 'mutation',
-    mutation: { id: randomUUID(), entity: 'task', entityId: taskId, op: 'upsert', patch, clientTs: ts },
+    kind: 'patch',
+    id: randomUUID(),
+    clientTs: ts,
+    entity: 'task',
+    entityId: taskId,
+    patch,
   }
 }
 
 /** 本次创建的任务：移进回收站再永久删除。 */
 async function removeTasks(device: GtdDevice, taskIds: string[]): Promise<void> {
   const ts = new Date().toISOString()
-  await device.act(taskIds.flatMap((taskId): GtdIntent[] => [
-    { kind: 'command', command: { id: randomUUID(), type: 'delete', taskId, clientTs: ts } },
+  await device.act(taskIds.flatMap((taskId): Op[] => [
+    { kind: 'transition', id: randomUUID(), clientTs: ts, action: 'delete', taskId },
     { kind: 'purge', taskId },
   ]))
 }

@@ -1,4 +1,4 @@
-import type { EntityRow, GtdIntent, NormalizeRowsOptions } from '@agent/gtd'
+import type { EntityRow, NormalizeRowsOptions, Op } from '@agent/gtd'
 import { normalizeRows } from '@agent/gtd'
 import { e2eFetch } from './auth'
 
@@ -22,13 +22,13 @@ export class GtdDevice {
     return res.rows
   }
 
-  /** 在服务器上执行意图并刷新本地缓存。 */
-  async act(intents: GtdIntent[]): Promise<void> {
-    if (intents.length === 0)
+  /** 在服务器上执行 Op 并刷新本地缓存。 */
+  async act(ops: Op[]): Promise<void> {
+    if (ops.length === 0)
       return
     const res = await e2eFetch<{ rows: EntityRow[] }>(this.token, '/gtd/apply', {
       method: 'POST',
-      body: JSON.stringify({ intents }),
+      body: JSON.stringify({ ops }),
     })
     this.cached = res.rows
   }

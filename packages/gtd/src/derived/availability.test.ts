@@ -6,6 +6,7 @@
  * 墙钟/overdue/due_soon 轴已切 effective 日期（SP-AVAIL-EFFECTIVE）：父 due 截断子、父 defer 抬升子。
  */
 import { describe, expect, it } from 'vitest'
+import { computeAll, computeAvailability } from '../availability'
 import { COMPUTED_STATUS, EXPLICIT_STATUS, GROUP_TYPE } from '../data/types'
 import {
   availabilityMixScenario,
@@ -15,14 +16,13 @@ import {
   NOW,
   serialGroupScenario,
 } from '../fixtures'
-import { buildTaskTree } from '../structure/tree'
-import { computeAll, computeAvailability } from './availability'
+import { buildTaskTree } from '../state/tree'
 
 describe('可用性轴 [SP-AVAIL]', () => {
   // SP-AVAIL-TERMINAL: 终态 → blocked
   it('completed/hold/deleted → BLOCKED [SP-AVAIL-TERMINAL]', () => {
-    const completed = makeTaskRow('t1', { status: EXPLICIT_STATUS.COMPLETED, completedAt: NOW.toISOString() })
-    const hold = makeTaskRow('t2', { status: EXPLICIT_STATUS.HOLD, heldAt: NOW.toISOString() })
+    const completed = makeTaskRow('t1', { status: EXPLICIT_STATUS.COMPLETED, statusChangedAt: NOW.toISOString() })
+    const hold = makeTaskRow('t2', { status: EXPLICIT_STATUS.HOLD, statusChangedAt: NOW.toISOString() })
     const deleted = makeTaskRow('t3', { status: EXPLICIT_STATUS.DELETED })
     expect(computeAvailability(completed, NOW, buildTaskTree([completed]), DUE_SOON_MS)).toBe(COMPUTED_STATUS.BLOCKED)
     expect(computeAvailability(hold, NOW, buildTaskTree([hold]), DUE_SOON_MS)).toBe(COMPUTED_STATUS.BLOCKED)

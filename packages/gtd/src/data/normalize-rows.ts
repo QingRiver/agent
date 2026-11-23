@@ -2,9 +2,8 @@
  * 读路径投影：对已持久化的 EntityRow[] 做挂载/标签过滤，供 UI 使用。
  */
 import type { EntityRow, EntityRowOf } from './row-schema'
-import { effectiveMountDirId } from '../inheritance/effective'
-import { buildTaskTree } from '../structure/tree'
-import { liveTasks } from './rows'
+import { liveTasks } from '../state/model'
+import { buildTaskTree, effectiveMountDirId } from '../state/tree'
 
 export interface NormalizeRowsOptions {
   /** 标签目录里仍存在的标签；返回 false 的 task_tag 不输出。缺省视为都存在。 */

@@ -1,7 +1,7 @@
-import type { TaskTree } from '../structure/tree'
+import type { TaskTree } from '../state/tree'
 import { describe, expect, it } from 'vitest'
 import { makeTaskRow } from '../fixtures'
-import { buildTaskTree } from '../structure/tree'
+import { buildTaskTree } from '../state/tree'
 import { computeCollapsibleSet, effectiveVisibleChildren, visibleDepth } from './collapse'
 
 function treeOf(ids: string[]): TaskTree {

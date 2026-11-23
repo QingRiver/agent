@@ -1,8 +1,8 @@
 /**
- * GTD 服务端权威存储：当前行在 gtd_rows；写入走 applyIntents（与客户端同一套状态机）。
+ * GTD 服务端权威存储：当前行在 gtd_rows；写入走 applyOps（与客户端同一套状态机）。
  */
-import type { ApplyRequest, EntityRow, GtdEntity, GtdIntent } from '@agent/gtd'
-import { applyIntents, EntityRowSchema } from '@agent/gtd'
+import type { ApplyRequest, EntityRow, GtdEntity, Op } from '@agent/gtd'
+import { applyOps, EntityRowSchema } from '@agent/gtd'
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { HTTPException } from 'hono/http-exception'
 import { db } from '../db/drizzle'
@@ -104,7 +104,7 @@ export async function applyGtd(userId: string, req: ApplyRequest): Promise<{ row
     return await db.transaction(async (tx) => {
       await lockUser(tx, userId)
       const before = await loadRows(tx, userId)
-      const after = applyIntents(before, req.intents, userId)
+      const after = applyOps(before, req.ops, userId)
       await persistRows(tx, userId, before, after)
       return { rows: after }
     })
@@ -118,20 +118,20 @@ export async function applyGtd(userId: string, req: ApplyRequest): Promise<{ row
 }
 
 /**
- * 在已有数据库事务里执行意图（如删除标签时解绑）。调用方负责外层事务；
+ * 在已有数据库事务里执行 Op（如删除标签时解绑）。调用方负责外层事务；
  * 本函数会再加用户 advisory 锁（与外层同事务）。
  */
-export async function applyGtdIntents(
+export async function applyGtdOps(
   tx: Tx,
   userId: string,
-  build: (rows: EntityRow[]) => GtdIntent[],
+  build: (rows: EntityRow[]) => Op[],
 ): Promise<EntityRow[]> {
   await lockUser(tx, userId)
   const before = await loadRows(tx, userId)
-  const intents = build(before)
-  if (intents.length === 0)
+  const ops = build(before)
+  if (ops.length === 0)
     return before
-  const after = applyIntents(before, intents, userId)
+  const after = applyOps(before, ops, userId)
   await persistRows(tx, userId, before, after)
   return after
 }

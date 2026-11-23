@@ -2,7 +2,7 @@
  * 日历日界与 TimeSlice 几何：用户时区。
  *
  * 墙钟瞬时比较（defer 是否已过、墙钟已解锁）见 `./clock`，与本文件日历日界正交，勿混用。
- * repeat / review 周期推进仍用 UTC 日期算术（见 command/repeat.ts / review.ts）。
+ * repeat / review 周期推进仍用 UTC 日期算术（见 repeat.ts / review.ts）。
  *
  * SoT：wiki/GTD.md §1.1.1–1.1.2。
  */

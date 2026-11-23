@@ -3,9 +3,9 @@ import type {
   ForecastSignalOptions,
   ForecastStripKey,
   GroupType,
-  GtdIntent,
   InvariantViolation,
   NormalizeRowsOptions,
+  Op,
   Perspective,
   PerspectiveInput,
   RepeatRuleInput,
@@ -13,7 +13,7 @@ import type {
 } from '@agent/gtd'
 import type { GtdSelection, PerspectiveViewOptions } from '../gtd/view-options'
 import {
-  applyIntents,
+  applyOps,
   BUILTIN_PERSPECTIVE_ID,
   BUILTIN_PERSPECTIVE_IDS,
   builtinPerspectives,
@@ -21,7 +21,7 @@ import {
   DEFAULT_FORECAST_STRIP,
   entityFocusFilter,
   FORECAST_STRIP_ORDER,
-  GtdReader,
+  GtdModel,
   INVARIANT_TEXT,
   isBuiltinPerspectiveId,
   mergeFilter,
@@ -42,9 +42,8 @@ import {
   planSetTaskGroupTypeOp,
   planSetTaskRepeatOp,
   planSetTaskTagsOp,
-  planStatusCommandOp,
+  planStatusOp,
   planToggleFlagOp,
-  RowStore,
   validateInvariants,
 } from '@agent/gtd'
 import { GtdApi } from '@apis/gtd-api'
@@ -187,7 +186,7 @@ function perspectiveValidationContext(
   }
 }
 
-function resolvePerspectiveBase(store: RowStore, perspectiveId: string): Perspective {
+function resolvePerspectiveBase(store: GtdModel, perspectiveId: string): Perspective {
   if (isBuiltinPerspectiveId(perspectiveId)) {
     const builtin = builtinPerspectives().find(p => p.id === perspectiveId)
     return builtin ?? builtinPerspectives()[0]!
@@ -206,7 +205,7 @@ function resolvePerspectiveBase(store: RowStore, perspectiveId: string): Perspec
 
 /** base 透视 + mergeFilter(实体焦点)；有 focus 时去掉同名 groupBy 键 */
 export function resolvePerspective(
-  store: RowStore,
+  store: GtdModel,
   selection: GtdSelection,
 ): Perspective {
   const base = resolvePerspectiveBase(store, selection.perspectiveId)
@@ -228,13 +227,13 @@ export function resolvePerspectiveAvailability(
 }
 
 function violationKeys(rows: EntityRow[]): Set<string> {
-  return new Set(validateInvariants(new RowStore(rows)).map(v => `${v.code}|${v.entityId ?? ''}|${v.message}`))
+  return new Set(validateInvariants(new GtdModel(rows)).map(v => `${v.code}|${v.entityId ?? ''}|${v.message}`))
 }
 
 /** 只拒绝这次操作新引入的不变量违反；读时规则留下的旧状态不阻塞编辑。 */
 function introducedViolations(before: EntityRow[], after: EntityRow[]): InvariantViolation[] {
   const existing = violationKeys(before)
-  return validateInvariants(new RowStore(after))
+  return validateInvariants(new GtdModel(after))
     .filter(v => !existing.has(`${v.code}|${v.entityId ?? ''}|${v.message}`))
 }
 
@@ -288,10 +287,9 @@ export class GtdStore {
 
   static readonly rowsAtom = atom(get => normalizeRows(get(GtdStore.rawRowsAtom), get(GtdStore.displayOptionsAtom)))
 
-  static readonly rowStoreAtom = atom(get => new RowStore(get(GtdStore.rowsAtom)))
-  static readonly readerAtom = atom(get => new GtdReader(get(GtdStore.rowsAtom)))
-  /** 派生 TaskTree（GtdReader 缓存）；供 UI 读 effectiveStatus */
-  static readonly treeAtom = atom(get => get(GtdStore.readerAtom).taskTree())
+  static readonly rowStoreAtom = atom(get => new GtdModel(get(GtdStore.rowsAtom)))
+  /** 派生任务树，供 UI 读有效状态 */
+  static readonly treeAtom = atom(get => get(GtdStore.rowStoreAtom).tree())
 
   static readonly selectionAtom = atom<GtdSelection>(readSelection())
   static readonly forecastStripAtom = atom<ForecastStripKey[]>(readForecastStrip())
@@ -306,7 +304,7 @@ export class GtdStore {
   private static loadGeneration = 0
   private static applyChain: Promise<void> = Promise.resolve()
   private static textTimer: ReturnType<typeof setTimeout> | null = null
-  private static textIntents: GtdIntent[] = []
+  private static textOps: Op[] = []
 
   private static store() {
     return getDefaultStore()
@@ -435,7 +433,7 @@ export class GtdStore {
       clearTimeout(GtdStore.textTimer)
       GtdStore.textTimer = null
     }
-    GtdStore.textIntents = []
+    GtdStore.textOps = []
   }
 
   private static async flushTextDebounce(): Promise<void> {
@@ -443,17 +441,17 @@ export class GtdStore {
       clearTimeout(GtdStore.textTimer)
       GtdStore.textTimer = null
     }
-    const intents = GtdStore.textIntents
-    GtdStore.textIntents = []
-    if (intents.length > 0)
-      await GtdStore.pushIntents(intents)
+    const ops = GtdStore.textOps
+    GtdStore.textOps = []
+    if (ops.length > 0)
+      await GtdStore.pushOps(ops)
   }
 
   /**
    * 一次操作：乐观改内存 →（可选防抖）POST /gtd/apply → 成功用服务端行覆盖；失败 list 盖回。
    */
   private static applyLocal(
-    build: (reader: GtdReader) => GtdIntent[],
+    build: (model: GtdModel) => Op[],
     options: { debounce?: boolean } = {},
   ): boolean {
     const s = GtdStore.store()
@@ -469,13 +467,13 @@ export class GtdStore {
     }
 
     const before = s.get(GtdStore.rawRowsAtom)
-    let intents: GtdIntent[]
+    let ops: Op[]
     let after: EntityRow[]
     try {
-      intents = build(new GtdReader(normalizeRows(before, s.get(GtdStore.displayOptionsAtom))))
-      if (intents.length === 0)
+      ops = build(new GtdModel(normalizeRows(before, s.get(GtdStore.displayOptionsAtom))))
+      if (ops.length === 0)
         return false
-      after = applyIntents(before, intents, userId)
+      after = applyOps(before, ops, userId)
     }
     catch (e) {
       s.set(GtdStore.errorAtom, e instanceof Error ? e.message : String(e))
@@ -496,24 +494,24 @@ export class GtdStore {
 
     if (options.debounce) {
       // 只保留最新一批：乐观预览已是最终态，服务器只需最后一次补丁
-      GtdStore.textIntents = intents
+      GtdStore.textOps = ops
       if (GtdStore.textTimer)
         clearTimeout(GtdStore.textTimer)
       GtdStore.textTimer = setTimeout(() => {
         GtdStore.textTimer = null
-        const batch = GtdStore.textIntents
-        GtdStore.textIntents = []
-        void GtdStore.pushIntents(batch)
+        const batch = GtdStore.textOps
+        GtdStore.textOps = []
+        void GtdStore.pushOps(batch)
       }, TEXT_DEBOUNCE_MS)
       return true
     }
 
-    void GtdStore.flushTextDebounce().then(() => GtdStore.pushIntents(intents))
+    void GtdStore.flushTextDebounce().then(() => GtdStore.pushOps(ops))
     return true
   }
 
-  private static async pushIntents(intents: GtdIntent[]): Promise<void> {
-    if (intents.length === 0)
+  private static async pushOps(ops: Op[]): Promise<void> {
+    if (ops.length === 0)
       return
     const run = async () => {
       const s = GtdStore.store()
@@ -525,7 +523,7 @@ export class GtdStore {
       }
       s.set(GtdStore.syncStatusAtom, 'syncing')
       try {
-        const { rows } = await GtdApi.apply({ intents })
+        const { rows } = await GtdApi.apply({ ops })
         s.set(GtdStore.rawRowsAtom, rows)
         s.set(GtdStore.syncStatusAtom, 'idle')
         s.set(GtdStore.errorAtom, null)
@@ -545,7 +543,7 @@ export class GtdStore {
     await GtdStore.applyChain
   }
 
-  // ---------- Tasks（领域编排在 @agent/gtd command/ops） ----------
+  // ---------- Tasks（领域编排在 @agent/gtd plan） ----------
 
   static addInboxTask(name: string): void {
     GtdStore.applyLocal(reader => planAddInboxTaskOp(reader, name))
@@ -579,29 +577,29 @@ export class GtdStore {
   }
 
   static completeTask(taskId: string): void {
-    GtdStore.applyLocal(reader => planStatusCommandOp(reader, 'complete', taskId))
+    GtdStore.applyLocal(reader => planStatusOp(reader, 'complete', taskId))
   }
 
   static dropTask(taskId: string): void {
-    GtdStore.applyLocal(reader => planStatusCommandOp(reader, 'drop', taskId))
+    GtdStore.applyLocal(reader => planStatusOp(reader, 'drop', taskId))
   }
 
   static reopenTask(taskId: string): void {
-    GtdStore.applyLocal(reader => planStatusCommandOp(reader, 'reopen', taskId))
+    GtdStore.applyLocal(reader => planStatusOp(reader, 'reopen', taskId))
   }
 
   /** 恢复搁置：HOLD → ACTIVE。压制子的 UI 置灰见 Inspector/TaskRow。 */
   static restoreTask(taskId: string): void {
-    GtdStore.applyLocal(reader => planStatusCommandOp(reader, 'restore', taskId))
+    GtdStore.applyLocal(reader => planStatusOp(reader, 'restore', taskId))
   }
 
   static deleteTaskLogical(taskId: string): void {
-    GtdStore.applyLocal(reader => planStatusCommandOp(reader, 'delete', taskId))
+    GtdStore.applyLocal(reader => planStatusOp(reader, 'delete', taskId))
   }
 
   /** 移出回收站：DELETED → ACTIVE。压制子的 UI 置灰见 Inspector/TaskRow。 */
   static restoreFromTrash(taskId: string): void {
-    GtdStore.applyLocal(reader => planStatusCommandOp(reader, 'restore_from_trash', taskId))
+    GtdStore.applyLocal(reader => planStatusOp(reader, 'restore_from_trash', taskId))
   }
 
   /** 永久删除回收站任务（含子树）。 */

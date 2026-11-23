@@ -4,7 +4,7 @@ import type { DeferDuePair, DeferDuePatch } from './normalize'
  * 每条 `it` 上方 `// SP-LINK-TIME-*` 与 `wiki/draft/gtd行为规约.md` 一一对应。
  * 当前实现在 `normalize.ts` normalizeDeferDue（per-task 写路径规范化）。
  * 对齐 OmniFocus 4 三场景：直接修改不联动（A/B 不采纳保间隔/拉到Due之前，日期编辑走 patch=直接修改）+
- * CLAMP 硬钳制（冲突 defer>due 钳到相等，比 OF4 更严）+ 重复平移保间隔（command/repeat.ts computeNextDates，不在此处）。
+ * CLAMP 硬钳制（冲突 defer>due 钳到相等，比 OF4 更严）+ 重复平移保间隔（repeat.ts computeNextDates，不在此处）。
  */
 import { describe, expect, it } from 'vitest'
 import { normalizeDeferDue } from './normalize'
