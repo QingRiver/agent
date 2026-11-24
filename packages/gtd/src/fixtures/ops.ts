@@ -1,10 +1,10 @@
+import type { Op } from '../command/op'
+import type { StatusAction } from '../command/transition'
 /**
  * 测试里拼 Op。行级工厂见 factories.ts。
  */
 import type { EntityRow, GtdEntity } from '../data/row-schema'
 import type { Task } from '../data/schema'
-import type { Op } from '../op'
-import type { StatusAction } from '../transition'
 import { NOW_ISO } from './constants'
 
 /** 测试里常用的「当前时刻」别名（= NOW_ISO）。 */

@@ -1,6 +1,6 @@
-import type { GtdModel } from './state/model'
-import { EXPLICIT_STATUS, PLANNED_MODE } from './data/types'
-import { children, effectiveStatus } from './state/tree'
+import type { GtdModel } from '../state/model'
+import { EXPLICIT_STATUS, PLANNED_MODE } from '../data/types'
+import { siblingKey } from '../state/tree'
 
 type InvariantCode
   = | 'broken_reference'
@@ -13,16 +13,6 @@ type InvariantCode
     | 'invalid_repeat_trace'
     | 'invalid_planned'
     | 'invalid_defer_due'
-    // 物理不变量：禁止「物理完成 ∧ 有效活跃直接子」。父完成时子有效状态跟随完成——complete(P) 后子有效
-    // 变完成（非活跃），此态由 effectiveStatus 派生层自动保证合法，invariant 静态检查恒不触发；
-    // 保留作 effectiveStatus 演化的防御检查。只看直接子、看有效态。
-    | 'completed_with_active_child'
-    // transition 级不变量：repeatRuleId != null 的 COMPLETED 不可重开（SP-INV-REPEAT-REOPEN）。
-    // 非静态可检：完成即克隆（cloneNextInstance 把 repeatRule+completedOccurrences 继承到新 ACTIVE 实例），
-    // 故「非法重开后的 ACTIVE repeat 任务」与「合法新克隆实例」行态不可区分。
-    // 执行点在 transition.ts（throw，本地操作被拒绝）；
-    // 此 code 仅供 §6 不变量表追溯，validateInvariants 不加静态检查以避免误报合法克隆实例。
-    | 'repeat_not_reopenable'
 
 export interface InvariantViolation {
   code: InvariantCode
@@ -43,8 +33,6 @@ export const INVARIANT_TEXT: Record<InvariantCode, string> = {
   invalid_repeat_trace: '重复来源任务不存在',
   invalid_planned: '计划日期设置不完整',
   invalid_defer_due: '推迟日期晚于截止日期',
-  completed_with_active_child: '已完成但仍有活跃子任务',
-  repeat_not_reopenable: '是重复任务的已完成实例，不能重新打开',
 }
 
 function detectCycle(
@@ -72,16 +60,9 @@ export function validateInvariants(rowStore: GtdModel): InvariantViolation[] {
 
   const taskIds = new Set(tasks.map(t => t.id))
   const attachmentIds = new Set(attachments.map(a => a.id))
-  const repeatRuleIds = new Set<string>()
-  for (const t of tasks) {
-    if (t.data.repeatRule) {
-      repeatRuleIds.add(t.data.repeatRule.id)
-    }
-  }
 
   for (const t of tasks) {
     // 位置权威在 mountDirId；project 归属经 CatalogProjection.projectOf 注入（非 GtdModel）。
-    // task 领域删除 = status=DELETED（≠ envelope.deleted）；task_tag 软删走 envelope.deleted。勿双写。
     if (t.data.parentId && !taskIds.has(t.data.parentId)) {
       violations.push({ code: 'broken_reference', message: `Task ${t.id} parentId 悬空`, entityId: t.id })
     }
@@ -98,13 +79,6 @@ export function validateInvariants(rowStore: GtdModel): InvariantViolation[] {
           entityId: t.id,
         })
       }
-    }
-    if (t.data.repeatRuleId && !repeatRuleIds.has(t.data.repeatRuleId)) {
-      violations.push({
-        code: 'broken_reference',
-        message: `Task ${t.id} repeatRuleId 悬空`,
-        entityId: t.id,
-      })
     }
     if (t.data.repeatedFromTaskId && !taskIds.has(t.data.repeatedFromTaskId)) {
       violations.push({
@@ -151,7 +125,7 @@ export function validateInvariants(rowStore: GtdModel): InvariantViolation[] {
   // 同级 order 唯一：按 mountDirId（位置权威）+ parentId 分组
   const orderKeys = new Set<string>()
   for (const t of tasks) {
-    const key = `${t.data.mountDirId ?? ''}|${t.data.parentId ?? ''}|${t.data.order}`
+    const key = `${siblingKey(t.data.mountDirId, t.data.parentId)}|${t.data.order}`
     if (orderKeys.has(key)) {
       violations.push({ code: 'duplicate_order', message: `Task ${t.id} 同级 order 重复`, entityId: t.id })
     }
@@ -192,25 +166,6 @@ export function validateInvariants(rowStore: GtdModel): InvariantViolation[] {
         violations.push({
           code: 'invalid_defer_due',
           message: `Task ${t.id} deferDate 晚于 dueDate`,
-          entityId: t.id,
-        })
-      }
-    }
-  }
-
-  // 物理不变量：禁止「物理完成 ∧ 有效活跃直接子」。父完成时子有效状态跟随完成——已完成父让子有效
-  // 变完成（非活跃），故此态由 effectiveStatus 派生层自动保证合法，此处静态检查恒不触发
-  // （保留作 effectiveStatus 演化/缓存失效防御）。只看直接子、看有效态。
-  const tree = rowStore.tree()
-  for (const t of tasks) {
-    if (t.data.status !== EXPLICIT_STATUS.COMPLETED) {
-      continue
-    }
-    for (const c of children(tree, t.id)) {
-      if (effectiveStatus(c, tree) === EXPLICIT_STATUS.ACTIVE) {
-        violations.push({
-          code: 'completed_with_active_child',
-          message: `Task ${t.id} 物理 completed 但有有效活跃直接子 ${c.id}`,
           entityId: t.id,
         })
       }

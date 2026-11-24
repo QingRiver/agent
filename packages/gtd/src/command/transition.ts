@@ -1,32 +1,11 @@
-import type { EntityRowOf } from './data/row-schema'
-import type { ExplicitStatusValue } from './data/types'
-import type { GtdModel, TaskRow } from './state/model'
-import { EXPLICIT_STATUS } from './data/types'
+import type { TaskRow } from '../data/rows'
+import type { ExplicitStatusValue } from '../data/types'
+import type { GtdModel } from '../state/model'
+import type { UpEffect } from '../state/propagate'
+import { EXPLICIT_STATUS } from '../data/types'
+import { propagateUp } from '../state/propagate'
 import { statusRejected, taskLabel } from './errors'
-import { INVARIANT_TEXT } from './invariant'
 import { cloneIfRepeating } from './repeat'
-
-export interface UpEffect { kind: 'descendant-activated' }
-
-export interface PropagateTarget {
-  ancestors: (taskId: string) => EntityRowOf<'task'>[]
-  setStatus: (task: EntityRowOf<'task'>, status: ExplicitStatusValue, ts: string) => void
-}
-
-/**
- * 子孙变活跃后沿父链上翻。
- * 搁置或删除的祖先停住（不翻它，也不再往上）；已完成的祖先翻回活跃并继续；活跃的祖先跳过。
- */
-export function propagateUp(model: PropagateTarget, taskId: string, effect: UpEffect, ts: string): void {
-  if (effect.kind !== 'descendant-activated')
-    return
-  for (const ancestor of model.ancestors(taskId)) {
-    if (ancestor.data.status === EXPLICIT_STATUS.HOLD || ancestor.data.status === EXPLICIT_STATUS.DELETED)
-      return
-    if (ancestor.data.status === EXPLICIT_STATUS.COMPLETED)
-      model.setStatus(ancestor, EXPLICIT_STATUS.ACTIVE, ts)
-  }
-}
 
 export class TransitionError extends Error {
   readonly code: string
@@ -46,6 +25,10 @@ export type StatusAction
     | 'delete'
     | 'restore_from_trash'
 
+/**
+ * 全部状态动作（`as const` 元组，供 `z.enum` 与 `StatusAction` 类型派生）。
+ * 须与 {@link TRANSITIONS} 的 spec 列表保持同步——新增动作时两处都要加。
+ */
 export const STATUS_ACTIONS: readonly StatusAction[] = [
   'complete',
   'drop',
@@ -85,8 +68,8 @@ export const TRANSITIONS: readonly TransitionSpec[] = [
     from: [EXPLICIT_STATUS.COMPLETED],
     to: EXPLICIT_STATUS.ACTIVE,
     guard: (task) => {
-      if (task.data.repeatRuleId != null)
-        throw new TransitionError('repeat_not_reopenable', `${taskLabel(task)}${INVARIANT_TEXT.repeat_not_reopenable}；下一次已经生成`)
+      if (task.data.repeatRule != null)
+        throw new TransitionError('repeat_not_reopenable', `${taskLabel(task)}是重复任务的已完成实例，不能重新打开；下一次已经生成`)
     },
     propagate: { kind: 'descendant-activated' },
   },
@@ -142,20 +125,6 @@ export function canTransition(task: TaskRow, action: StatusAction): boolean {
 
 export function availableStatusActions(task: TaskRow): StatusAction[] {
   return STATUS_ACTIONS.filter(action => canTransition(task, action))
-}
-
-export function actionsForStatus(status: ExplicitStatusValue): StatusAction[] {
-  return STATUS_ACTIONS.filter((action) => {
-    const spec = specOf(action)
-    return status !== spec.to && spec.from.includes(status)
-  })
-}
-
-export function availableActions(model: GtdModel, taskId: string): StatusAction[] {
-  const task = model.findTask(taskId)
-  if (!task)
-    return []
-  return availableStatusActions(task)
 }
 
 /**

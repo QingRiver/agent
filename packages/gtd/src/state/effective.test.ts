@@ -5,10 +5,11 @@
  * SP-INV-REPEAT-REOPEN（transition 拒绝重开）归 apply.state.test.ts SP-STATE-3，此处不重复。
  */
 import { describe, expect, it } from 'vitest'
-import { computeAvailability } from '../availability'
 import { COMPUTED_STATUS, EXPLICIT_STATUS, PLANNED_MODE } from '../data/types'
+import { computeAvailability } from '../derived/availability'
 import { DUE_SOON_MS, makeTaskRow, NOW } from '../fixtures'
-import { buildTaskTree, effectiveDefer, effectiveDue, effectiveMountDirId, effectivePlannedDate, effectivePlannedMode, effectiveStatus } from './tree'
+import { effectiveDefer, effectiveDue, effectiveMountDirId, effectivePlannedDate, effectivePlannedMode, effectiveStatus } from './effective'
+import { buildTaskTree } from './tree'
 
 const D = (day: number) => `2026-07-${String(day).padStart(2, '0')}T00:00:00.000Z`
 

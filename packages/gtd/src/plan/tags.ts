@@ -1,7 +1,6 @@
-import type { Op, OpIds } from '../op'
+import type { Op, OpIds } from '../command/op'
 import type { GtdModel } from '../state/model'
-import { deleteOp } from '../op'
-import { update } from '../state/update'
+import { deleteOp, update } from '../command/op'
 
 /**
  * OF4 Inherited Tags Assignment：目标无标时复制父 task_tag；已有标不覆盖。

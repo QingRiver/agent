@@ -1,10 +1,11 @@
-import type { RepeatCycle, RepeatRule, Task } from './data/schema'
-import type { GtdModel, TaskRow } from './state/model'
+import type { TaskRow } from '../data/rows'
+import type { RepeatCycle, RepeatRule, Task } from '../data/schema'
+import type { GtdModel } from '../state/model'
 import { match, P } from 'ts-pattern'
-import { EXPLICIT_STATUS, REPEAT_ANCHOR, REPEAT_CYCLE } from './data/types'
-import { orderBetween, shouldReindex } from './state/order'
-import { shouldStop } from './time/date-math'
-import { propagateUp } from './transition'
+import { EXPLICIT_STATUS, REPEAT_ANCHOR, REPEAT_CYCLE } from '../data/types'
+import { orderBetween, shouldReindex } from '../state/order'
+import { propagateUp } from '../state/propagate'
+import { shouldStop } from '../time/date-math'
 
 const DAY = 86400000
 
@@ -98,18 +99,17 @@ function successorOrder(model: GtdModel, task: TaskRow, nextTaskId: string): num
 }
 
 /**
- * complete 的 local：周期未尽则克隆下一实例（或复活同源软删行），再向上传播。
+ * complete 的 local：周期未尽则克隆下一实例，再向上传播。
  * 后继已经活着时不再克隆、也不再累加次数。
  */
 export function cloneIfRepeating(model: GtdModel, task: TaskRow, ts: string): void {
-  const repeatRuleId = task.data.repeatRuleId
-  const rule = repeatRuleId != null ? task.data.repeatRule : null
-  if (repeatRuleId == null || rule == null || shouldStop(rule, new Date(ts)))
+  const rule = task.data.repeatRule
+  if (rule == null || shouldStop(rule, new Date(ts)))
     return
 
-  const nextTaskId = repeatSuccessorId(repeatRuleId, rule.completedOccurrences + 1)
+  const nextTaskId = repeatSuccessorId(rule.id, rule.completedOccurrences + 1)
   const existing = model.rows.find((row): row is TaskRow => row.entity === 'task' && row.id === nextTaskId)
-  if (existing && !existing.deleted) {
+  if (existing) {
     if (existing.data.repeatedFromTaskId !== task.id)
       throw new Error(`nextTaskId ${nextTaskId} occupied by different source`)
     return
@@ -117,7 +117,7 @@ export function cloneIfRepeating(model: GtdModel, task: TaskRow, ts: string): vo
 
   const dates = computeNextDates(rule, task.data, new Date(ts))
   task.data.repeatRule = { ...rule, completedOccurrences: rule.completedOccurrences + 1 }
-  const { id: _staleId, ...sourceData } = task.data as typeof task.data & { id?: string }
+  const sourceData = task.data
   const newTaskData = {
     ...sourceData,
     order: successorOrder(model, task, nextTaskId),
@@ -130,21 +130,14 @@ export function cloneIfRepeating(model: GtdModel, task: TaskRow, ts: string): vo
     updatedAt: ts,
   }
 
-  if (existing) {
-    existing.deleted = false
-    existing.data = newTaskData
-    model.touch(existing)
-  }
-  else {
-    model.rows.push({
-      entity: 'task',
-      id: nextTaskId,
-      userId: task.userId,
-      syncId: model.nextSyncId(),
-      deleted: false,
-      data: newTaskData,
-    })
-  }
+  model.rows.push({
+    entity: 'task',
+    id: nextTaskId,
+    userId: task.userId,
+    syncId: model.nextSyncId(),
+    deleted: false,
+    data: newTaskData,
+  })
 
   for (const tag of model.liveTaskTags().filter(row => row.data.taskId === task.id)) {
     const tagId = tag.data.tagId

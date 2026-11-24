@@ -6,7 +6,6 @@
  * 墙钟/overdue/due_soon 轴已切 effective 日期（SP-AVAIL-EFFECTIVE）：父 due 截断子、父 defer 抬升子。
  */
 import { describe, expect, it } from 'vitest'
-import { computeAll, computeAvailability } from '../availability'
 import { COMPUTED_STATUS, EXPLICIT_STATUS, GROUP_TYPE } from '../data/types'
 import {
   availabilityMixScenario,
@@ -17,6 +16,7 @@ import {
   serialGroupScenario,
 } from '../fixtures'
 import { buildTaskTree } from '../state/tree'
+import { computeAll, computeAvailability } from './availability'
 
 describe('可用性轴 [SP-AVAIL]', () => {
   // SP-AVAIL-TERMINAL: 终态 → blocked

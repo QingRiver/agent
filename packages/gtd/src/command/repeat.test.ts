@@ -1,11 +1,11 @@
-import type { EntityRow, EntityRowOf } from './data/row-schema'
+import type { EntityRow, EntityRowOf } from '../data/row-schema'
 import { describe, expect, it } from 'vitest'
+import { REPEAT_ANCHOR, REPEAT_CYCLE } from '../data/types'
+import { validateInvariants } from '../derived/invariant'
+import { makeRepeatRule, makeTask, makeTaskRow, makeTransition, NOW } from '../fixtures'
+import { GtdModel } from '../state/model'
 import { applyOps } from './apply'
-import { REPEAT_ANCHOR, REPEAT_CYCLE } from './data/types'
-import { makeRepeatRule, makeTask, makeTaskRow, makeTransition, NOW } from './fixtures'
-import { validateInvariants } from './invariant'
 import { computeNextDates, repeatSuccessorId } from './repeat'
-import { GtdModel } from './state/model'
 
 const DAY = 86400000
 
@@ -89,7 +89,7 @@ describe('完成重复任务克隆下一实例：同级 order', () => {
   }
   const base = () => [
     makeTaskRow('p', { mountDirId: 'd1', groupType: 'parallel' }),
-    makeTaskRow('t', { mountDirId: 'd1', parentId: 'p', order: 1, repeatRuleId: 'r1', repeatRule: rule }),
+    makeTaskRow('t', { mountDirId: 'd1', parentId: 'p', order: 1, repeatRule: rule }),
   ]
 
   it('新实例紧跟旧实例，夹在下一兄弟之前，不违反同级 order 唯一', () => {

@@ -2,8 +2,9 @@
  * 读路径投影：对已持久化的 EntityRow[] 做挂载/标签过滤，供 UI 使用。
  */
 import type { EntityRow, EntityRowOf } from './row-schema'
-import { liveTasks } from '../state/model'
-import { buildTaskTree, effectiveMountDirId } from '../state/tree'
+import { effectiveMountDirId } from '../state/effective'
+import { buildTaskTree } from '../state/tree'
+import { liveTasks } from './rows'
 
 export interface NormalizeRowsOptions {
   /** 标签目录里仍存在的标签；返回 false 的 task_tag 不输出。缺省视为都存在。 */
@@ -31,7 +32,7 @@ export function normalizeRows(rows: EntityRow[], options: NormalizeRowsOptions =
   const byTask = new Set(liveTasks(rows).map(r => r.id))
   const out: EntityRow[] = []
   for (const row of rows) {
-    if (row.deleted && row.entity !== 'task')
+    if (row.deleted)
       continue
     if (row.entity === 'task_tag' || row.entity === 'attachment') {
       if (!byTask.has(row.data.taskId))
@@ -44,7 +45,7 @@ export function normalizeRows(rows: EntityRow[], options: NormalizeRowsOptions =
       data: { ...row.data },
     } as EntityRow)
   }
-  // 含软删 task：挂载继承需看见回收站祖先；不可用 liveTaskTree
+  // task 删除走 status=DELETED（envelope.deleted 对 task 恒 false），回收站祖先仍参与挂载继承
   const tasks = out.filter((r): r is EntityRowOf<'task'> => r.entity === 'task')
   const tree = buildTaskTree(tasks)
   const mounts = new Map(tasks.map(t => [t.id, effectiveMountDirId(t, tree, options.isMountValid)]))

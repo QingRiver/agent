@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { EXPLICIT_STATUS, GROUP_TYPE, PLANNED_MODE } from '../data/types'
 import { makeTaskRow, makeTaskTagRow } from '../fixtures'
-import { validateInvariants } from '../invariant'
 import { GtdModel } from '../state/model'
+import { validateInvariants } from './invariant'
 
 describe('validateInvariants', () => {
   it('合法 rows 返回空数组', () => {
@@ -84,25 +84,23 @@ describe('validateInvariants', () => {
     expect(validateInvariants(new GtdModel([t])).some(v => v.code === 'invalid_defer_due')).toBe(true)
   })
 
-  // 物理不变量：禁止「物理 completed ∧ 有效活跃直接子」。父完成时子的有效状态跟随父，完成父的活跃子有效变
-  // 完成（非活跃）→ 不违反——此态由 effectiveStatus 派生层自动保证合法，invariant 静态检查恒不触发。
-  it('completed_with_active_child: 父完成时完成父的活跃子有效变完成 → 不违反', () => {
+  // 父完成时子的有效状态跟随父（effectiveStatus 派生），完成父的活跃子有效变完成（非活跃）→ 不违反。
+  it('父完成时活跃子有效变完成 → 无违反', () => {
     const p = makeTaskRow('p', { status: EXPLICIT_STATUS.COMPLETED, statusChangedAt: '2026-07-16T00:00:00.000Z', mountDirId: 'd1', groupType: GROUP_TYPE.PARALLEL })
     const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.ACTIVE, mountDirId: 'd1' })
-    expect(validateInvariants(new GtdModel([p, c])).some(v => v.code === 'completed_with_active_child')).toBe(false)
+    expect(validateInvariants(new GtdModel([p, c]))).toEqual([])
   })
 
-  it('物理 completed 父有有效 hold 直接子 → 不违反（hold 子非有效活跃）', () => {
+  it('物理 completed 父有 hold 直接子 → 无违反', () => {
     const p = makeTaskRow('p', { status: EXPLICIT_STATUS.COMPLETED, statusChangedAt: '2026-07-16T00:00:00.000Z', mountDirId: 'd1', groupType: GROUP_TYPE.PARALLEL })
     const c = makeTaskRow('c', { parentId: 'p', status: EXPLICIT_STATUS.HOLD, statusChangedAt: '2026-07-16T00:00:00.000Z', mountDirId: 'd1' })
-    expect(validateInvariants(new GtdModel([p, c])).some(v => v.code === 'completed_with_active_child')).toBe(false)
+    expect(validateInvariants(new GtdModel([p, c]))).toEqual([])
   })
 
-  it('父完成时子的有效状态跟随父整链：完成父→搁置子→活跃孙 → 子孙有效变完成非活跃 → 不违反', () => {
-    // m 的有效状态跟随 p 完成 → m 有效变完成；c 同随 p 有效变完成（非活跃）→ p 的直接子 m 非活跃，不违反
+  it('父完成时子有效状态跟随父整链：完成父→搁置子→活跃孙 → 无违反', () => {
     const p = makeTaskRow('p', { status: EXPLICIT_STATUS.COMPLETED, statusChangedAt: '2026-07-16T00:00:00.000Z', mountDirId: 'd1', groupType: GROUP_TYPE.PARALLEL })
     const m = makeTaskRow('m', { parentId: 'p', status: EXPLICIT_STATUS.HOLD, statusChangedAt: '2026-07-16T00:00:00.000Z', mountDirId: 'd1', groupType: GROUP_TYPE.PARALLEL })
     const c = makeTaskRow('c', { parentId: 'm', status: EXPLICIT_STATUS.ACTIVE, mountDirId: 'd1' })
-    expect(validateInvariants(new GtdModel([p, m, c])).some(v => v.code === 'completed_with_active_child')).toBe(false)
+    expect(validateInvariants(new GtdModel([p, m, c]))).toEqual([])
   })
 })

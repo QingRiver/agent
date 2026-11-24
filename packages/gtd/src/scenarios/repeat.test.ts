@@ -2,10 +2,11 @@
  * wiki/GTD.md「按状态重复」：完成一条带规则的任务，克隆下一实例。
  */
 import { describe, expect, it } from 'vitest'
+import { repeatSuccessorId } from '../command/repeat'
 import { EXPLICIT_STATUS, REPEAT_ANCHOR, REPEAT_CYCLE } from '../data/types'
 import { makeTaskRow } from '../fixtures'
-import { planSetTaskRepeatOp, planStatusOp } from '../plan/tasks'
-import { repeatSuccessorId } from '../repeat'
+import { planSetTaskRepeatOp } from '../plan/repeat'
+import { planStatusOp } from '../plan/tasks'
 import { act, read, task } from './run'
 
 describe('重复', () => {
@@ -19,7 +20,7 @@ describe('重复', () => {
       endDate: null,
       maxOccurrences: null,
     }, ids))
-    const ruleId = task(withRule, 't').data.repeatRuleId
+    const ruleId = task(withRule, 't').data.repeatRule?.id
     const after = act(withRule, (model, ids) => planStatusOp(model, 'complete', 't', ids))
     const nextId = repeatSuccessorId(ruleId!, 1)
     const view = read(after)

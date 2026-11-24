@@ -1,21 +1,11 @@
 import type { EntityRow, EntityRowOf, GtdEntity } from '../data/row-schema'
-import type { ComputedStatus } from '../data/schema'
+import type { TaskRow } from '../data/rows'
 import type { ExplicitStatusValue } from '../data/types'
 import type { TaskTree } from './tree'
-import { computeAvailability } from '../availability'
+import { liveTasks } from '../data/rows'
 import { EXPLICIT_STATUS } from '../data/types'
-import { foldStatusChangedAt } from '../schema'
-import {
-  ancestors,
-  buildTaskTree,
-  effectiveStatus as effectiveStatusOfTask,
-} from './tree'
-
-export type TaskRow = EntityRowOf<'task'>
-
-export function liveTasks(rows: readonly EntityRow[]): TaskRow[] {
-  return rows.filter((row): row is TaskRow => row.entity === 'task' && !row.deleted)
-}
+import { effectiveStatus as effectiveStatusOfTask } from './effective'
+import { ancestors, buildTaskTree } from './tree'
 
 /**
  * 任务行的唯一读写入口。持有调用方传入的行数组，写操作原地修改并推进 syncId。
@@ -27,13 +17,6 @@ export class GtdModel {
 
   constructor(rows: EntityRow[] = [], nextSyncId?: () => number) {
     this.rows = rows
-    for (const row of rows) {
-      if (row.entity !== 'task')
-        continue
-      const folded = foldStatusChangedAt(row.data) as typeof row.data
-      if (folded !== row.data)
-        row.data = folded
-    }
     let counter = rows.reduce((max, row) => Math.max(max, row.syncId), 0)
     this.alloc = nextSyncId ?? (() => ++counter)
   }
@@ -99,10 +82,6 @@ export class GtdModel {
     return this.treeCache ??= buildTaskTree(this.liveTasks())
   }
 
-  taskTree(): TaskTree {
-    return this.tree()
-  }
-
   ancestors(taskId: string): TaskRow[] {
     return ancestors(this.tree(), taskId)
   }
@@ -112,17 +91,6 @@ export class GtdModel {
     if (!task)
       return EXPLICIT_STATUS.DELETED
     return effectiveStatusOfTask(task, this.tree())
-  }
-
-  effectiveStatusOf(taskId: string): ExplicitStatusValue {
-    return this.effectiveStatus(taskId)
-  }
-
-  availabilityOf(taskId: string, now: Date, dueSoonIntervalMs: number): ComputedStatus | null {
-    const task = this.findTask(taskId)
-    if (!task)
-      return null
-    return computeAvailability(task, now, this.tree(), dueSoonIntervalMs)
   }
 
   setStatus(task: TaskRow, status: ExplicitStatusValue, ts: string): void {

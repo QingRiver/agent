@@ -1,9 +1,9 @@
-import type { EntityRow, EntityRowOf } from './data/row-schema'
+import type { EntityRow, EntityRowOf } from '../data/row-schema'
 import type { Op } from './op'
 import { describe, expect, it } from 'vitest'
+import { EXPLICIT_STATUS } from '../data/types'
+import { makeCreate, makeDelete, makeMove, makePatch, makeRepeatRule, makeTaskRow, makeTaskTagRow, makeTransition, SYNC_NOW } from '../fixtures'
 import { applyOps } from './apply'
-import { EXPLICIT_STATUS } from './data/types'
-import { makeCreate, makeDelete, makeMove, makePatch, makeRepeatRule, makeTaskRow, makeTaskTagRow, makeTransition, SYNC_NOW } from './fixtures'
 import { repeatSuccessorId } from './repeat'
 
 function task(rows: EntityRow[], id: string): EntityRowOf<'task'> | undefined {
@@ -30,7 +30,7 @@ describe('applyOps：状态与建点', () => {
 
   it('完成重复任务：后继 id 由规则与次数决定', () => {
     const rule = makeRepeatRule({ id: 'r1', cycle: 'daily', completedOccurrences: 2 })
-    const rows: EntityRow[] = [makeTaskRow('t1', { repeatRuleId: 'r1', repeatRule: rule }), makeTaskTagRow('t1', 'g')]
+    const rows: EntityRow[] = [makeTaskRow('t1', { repeatRule: rule }), makeTaskTagRow('t1', 'g')]
     const next = apply(rows, makeTransition({ taskId: 't1' }))
     const successorId = repeatSuccessorId('r1', 3)
     expect(task(next, successorId)?.data.repeatedFromTaskId).toBe('t1')
@@ -48,7 +48,7 @@ describe('applyOps：状态与建点', () => {
 
   it('不修改传入的行', () => {
     const rule = makeRepeatRule({ id: 'r1', completedOccurrences: 0 })
-    const rows: EntityRow[] = [makeTaskRow('t1', { repeatRuleId: 'r1', repeatRule: rule })]
+    const rows: EntityRow[] = [makeTaskRow('t1', { repeatRule: rule })]
     const before = structuredClone(rows)
     apply(rows, makeTransition({ taskId: 't1' }))
     expect(rows).toEqual(before)

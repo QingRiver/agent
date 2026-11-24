@@ -2,7 +2,7 @@ import type { TaskTree } from '../state/tree'
 import { describe, expect, it } from 'vitest'
 import { makeTaskRow } from '../fixtures'
 import { buildTaskTree } from '../state/tree'
-import { computeCollapsibleSet, effectiveVisibleChildren, visibleDepth } from './collapse'
+import { computeCollapsibleSet, effectiveVisibleChildren } from './collapse'
 
 function treeOf(ids: string[]): TaskTree {
   // ids 形如 'a' / 'b>a'（parentId）；按 token 构造父子树
@@ -42,33 +42,6 @@ describe('computeCollapsibleSet [SP-COLLAPSE-1]', () => {
     const tree = treeOf(['a'])
     const collapsible = computeCollapsibleSet(tree, new Set(), new Set())
     expect(collapsible).toEqual(new Set())
-  })
-})
-
-describe('visibleDepth [SP-COLLAPSE-2]', () => {
-  it('根 depth=0', () => {
-    const tree = treeOf(['a'])
-    expect(visibleDepth(tree, 'a', new Set())).toBe(0)
-  })
-
-  it('空集等价 taskDepth：A>B>C 查 C → 2', () => {
-    const tree = treeOf(['a', 'b>a', 'c>b'])
-    expect(visibleDepth(tree, 'c', new Set())).toBe(2)
-  })
-
-  it('跳过塌陷祖先：A>B(塌陷)>C 查 C → 1（只计 A）', () => {
-    const tree = treeOf(['a', 'b>a', 'c>b'])
-    expect(visibleDepth(tree, 'c', new Set(['b']))).toBe(1)
-  })
-
-  it('matched 自身：A 查 A → 0', () => {
-    const tree = treeOf(['a', 'b>a', 'c>b'])
-    expect(visibleDepth(tree, 'a', new Set(['b']))).toBe(0)
-  })
-
-  it('全链塌陷：A>B(塌陷)>C(塌陷)>D 查 D → 1（只计 A）', () => {
-    const tree = treeOf(['a', 'b>a', 'c>b', 'd>c'])
-    expect(visibleDepth(tree, 'd', new Set(['b', 'c']))).toBe(1)
   })
 })
 

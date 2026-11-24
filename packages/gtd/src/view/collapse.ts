@@ -44,21 +44,6 @@ export function computeCollapsibleSet(
 }
 
 /**
- * 塌陷后可见深度：数真实祖先链中「非塌陷」节点数（可见根=0）[SP-COLLAPSE-2]。
- * collapsibleSet 为空集时等价 taskDepth（forecast 路径）。
- */
-export function visibleDepth(tree: TaskTree, taskId: string, collapsibleSet: Set<string>): number {
-  let depth = 0
-  let node = tree.byId.get(taskId)?.parent ?? null
-  while (node) {
-    if (!collapsibleSet.has(node.task.id))
-      depth++
-    node = node.parent
-  }
-  return depth
-}
-
-/**
  * 塌陷节点的「有效可见子」：沿真实子下行，跳过连续塌陷层，遇非塌陷且有可见后代的节点收入 [SP-COLLAPSE-3]。
  * 无可见后代的旁枝（subtreeHas=false）剪除，防止无可见后代的支被误提升进排序组。
  * 用于 flattenInTreeOrder 同级排序提升：塌陷节点的有效子上浮与最近可见祖先的真实非塌陷子同组 sortBy。

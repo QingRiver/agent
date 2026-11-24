@@ -4,22 +4,24 @@
  * 实现在 `apply.ts`（经 applyOps 驱动 transition / create / move / patch）。
  * complete/drop/delete 不改子任务自身状态；reopen/restore 只改自身，再由 propagateUp 拉回祖先。
  */
-import type { EntityRow, EntityRowOf } from './data/row-schema'
+import type { EntityRow, EntityRowOf } from '../data/row-schema'
 import type { Op } from './op'
 import { describe, expect, it } from 'vitest'
-import { applyOps } from './apply'
-import { EXPLICIT_STATUS, GROUP_TYPE } from './data/types'
+import { EXPLICIT_STATUS, GROUP_TYPE } from '../data/types'
 import {
   field,
   findRow,
   makeCreate,
   makeMove,
   makePatch,
+  makeRepeatRule,
   makeTaskRow,
   makeTransition,
   SYNC_NOW,
-} from './fixtures'
-import { buildTaskTree, effectiveStatus } from './state/tree'
+} from '../fixtures'
+import { effectiveStatus } from '../state/effective'
+import { buildTaskTree } from '../state/tree'
+import { applyOps } from './apply'
 
 interface State {
   rows: EntityRow[]
@@ -123,8 +125,8 @@ describe('状态机 [SP-STATE]', () => {
       const res = runOp(state, makeTransition({ id: 'c1', action: 'reopen', taskId: 't1' }))
       expect(res.response.rejected).toHaveLength(1)
     })
-    it('重复任务(repeatRuleId≠null) COMPLETED → 拒重开 [SP-INV-REPEAT-REOPEN]', () => {
-      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.COMPLETED, statusChangedAt: SYNC_NOW, repeatRuleId: 'r1' }, { syncId: 1 })])
+    it('重复任务(repeatRule≠null) COMPLETED → 拒重开 [SP-INV-REPEAT-REOPEN]', () => {
+      const state = makeState([makeTaskRow('t1', { status: EXPLICIT_STATUS.COMPLETED, statusChangedAt: SYNC_NOW, repeatRule: makeRepeatRule({ id: 'r1' }) }, { syncId: 1 })])
       const res = runOp(state, makeTransition({ id: 'c1', action: 'reopen', taskId: 't1' }))
       expect(res.response.rejected).toHaveLength(1)
       expect(res.response.rejected[0]?.reason ?? '').toContain('不能重新打开')
@@ -508,7 +510,7 @@ describe('拒绝原因面向用户：用任务名称指代，不带 id', () => {
     ['回收站里的任务不能搁置', { status: EXPLICIT_STATUS.DELETED, statusChangedAt: SYNC_NOW }, { action: 'drop' }, '「写周报」在回收站中，不能搁置'],
     ['搁置的任务不能重新打开', { status: EXPLICIT_STATUS.HOLD, statusChangedAt: SYNC_NOW }, { action: 'reopen' }, '「写周报」已搁置，不能重新打开'],
     ['已完成的任务不能从搁置恢复', { status: EXPLICIT_STATUS.COMPLETED, statusChangedAt: SYNC_NOW }, { action: 'restore' }, '「写周报」已完成，不能从搁置中恢复'],
-    ['重复任务的已完成实例不能重开', { status: EXPLICIT_STATUS.COMPLETED, statusChangedAt: SYNC_NOW, repeatRuleId: 'r1' }, { action: 'reopen' }, '「写周报」是重复任务的已完成实例，不能重新打开；下一次已经生成'],
+    ['重复任务的已完成实例不能重开', { status: EXPLICIT_STATUS.COMPLETED, statusChangedAt: SYNC_NOW, repeatRule: makeRepeatRule({ id: 'r1' }) }, { action: 'reopen' }, '「写周报」是重复任务的已完成实例，不能重新打开；下一次已经生成'],
   ] as const)('%s', (_label, data, action, expected) => {
     const rows = [makeTaskRow('t1', { name: '写周报', ...data })]
     expect(reason(rows, makeTransition({ taskId: 't1', ...action }))).toBe(expected)

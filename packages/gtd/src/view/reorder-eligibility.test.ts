@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { makeTaskRow } from '../fixtures'
-import { fullyVisibleSiblingReorderIds, taskSiblingKey } from './reorder-eligibility'
+import { siblingKey } from '../state/tree'
+import { fullyVisibleSiblingReorderIds } from './reorder-eligibility'
 
-describe('taskSiblingKey', () => {
+describe('siblingKey', () => {
   it('根任务按 mountDirId 分桶', () => {
-    expect(taskSiblingKey({ mountDirId: null, parentId: null })).toBe('\0')
-    expect(taskSiblingKey({ mountDirId: 'p1', parentId: null })).toBe('p1\0')
+    expect(siblingKey(null, null)).toBe('\0')
+    expect(siblingKey('p1', null)).toBe('p1\0')
   })
 
   it('子任务带 parentId', () => {
-    expect(taskSiblingKey({ mountDirId: 'p1', parentId: 'a' })).toBe('p1\0a')
+    expect(siblingKey('p1', 'a')).toBe('p1\0a')
   })
 })
 

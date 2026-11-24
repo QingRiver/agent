@@ -3,8 +3,8 @@
  * 串行只挡住可执行性，不挡住完成。
  */
 import { describe, expect, it } from 'vitest'
-import { computeAvailability } from '../availability'
 import { AVAILABILITY_FILTER, COMPUTED_STATUS, EXPLICIT_STATUS, GROUP_TYPE } from '../data/types'
+import { computeAvailability } from '../derived/availability'
 import { DUE_SOON_MS, isoFromNow, makeTaskRow, NOW } from '../fixtures'
 import { planStatusOp } from '../plan/tasks'
 import { matchesAvailability } from '../view/perspective'

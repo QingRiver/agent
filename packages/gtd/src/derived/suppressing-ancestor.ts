@@ -7,11 +7,11 @@
  * 逐层继承下有效状态由最靠根的终态决定，指向它让用户一次操作让整棵子树恢复（操作最近祖先后仍可能被更靠根的压制）。
  *
  * 子不能单独恢复（重开/继续/移出回收站）：单 restore 自身无效（挡住在祖先），须从压制祖先操作让子树恢复。
- * 旧版 `trashRestoreTargets`/`holdRestoreTargets`（restore 路由到祖先链）已回退——改置灰替代路由。
  */
 import type { EntityRowOf } from '../data/row-schema'
 import type { TaskTree } from '../state/tree'
-import { ancestors, effectiveStatus } from '../state/tree'
+import { effectiveStatus } from '../state/effective'
+import { ancestors } from '../state/tree'
 
 /**
  * 返回压制 taskId 的最靠根终态祖先（有效 ≠ 自身状态时）；未被压制则返回 null。

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { EXPLICIT_STATUS } from '../data/types'
+import { makeTaskRow, makeTransition, SYNC_NOW } from '../fixtures'
 import { applyOps } from './apply'
-import { EXPLICIT_STATUS } from './data/types'
-import { makeTaskRow, makeTransition, SYNC_NOW } from './fixtures'
 
 function nextId(start = 0): () => number {
   let n = start

@@ -13,7 +13,7 @@ import {
   effectiveDue,
   effectivePlannedDate,
   effectivePlannedMode,
-} from '../../state/tree'
+} from '../../state/effective'
 import {
   dayInTimeSlice,
   instantDayStart,

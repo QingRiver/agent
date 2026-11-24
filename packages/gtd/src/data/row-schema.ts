@@ -19,7 +19,7 @@ const id = z.string().min(1)
 
 /**
  * task 行 data：无 tagIds / attachmentIds（标签与附件走独立 task_tag / attachment 行）；
- * repeatRule 内联（与 DB repeat_rule jsonb 一致），repeatRuleId != null 时 repeatRule 应存在。
+ * repeatRule 内联（DB jsonb 视角，规则的 id 在 repeatRule.id）。
  * 含 mountDirId（权威挂载，LWW）。
  */
 export const TaskRowDataSchema = TaskSchema
@@ -40,7 +40,6 @@ const CREATE_TASK_DEFAULTS = {
   statusChangedAt: null,
   flagged: false,
   estimateMinutes: null,
-  repeatRuleId: null,
   repeatedFromTaskId: null,
   repeatRule: null,
 } as const
@@ -138,6 +137,7 @@ export const TaskUpsertPatchSchema = TaskRowDataSchema.partial().omit({
   parentId: true,
   statusChangedAt: true,
 })
+export type TaskUpsertPatch = z.infer<typeof TaskUpsertPatchSchema>
 
 // ---------------- 派生类型 ----------------
 

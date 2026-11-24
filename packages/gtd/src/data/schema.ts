@@ -64,18 +64,6 @@ const fractionalOrder = z
   .number()
   .describe('同级排序索引，建议 fractional indexing 以避免频繁重排')
 
-// ---------- Tag ----------
-
-export const TagSchema = z
-  .object({
-    id: uuid,
-    name: z.string().min(1).describe('标签名'),
-    color: z.string().nullable().describe('CSS 颜色字符串，如 #3b82f6'),
-    createdAt: datetime,
-    updatedAt: datetime.nullable(),
-  })
-  .describe('扁平标签目录（REST）；Task 经 task_tag 行多对多绑定')
-
 const PlannedModeSchema = z.enum(PLANNED_MODE).default(PLANNED_MODE.NONE)
 
 // ---------- RepeatRule ----------
@@ -140,7 +128,6 @@ export const TaskSchema = z
     statusChangedAt: datetime.nullable().describe('进入当前 status 的时间；active 时为 null'),
     flagged: z.boolean().describe('旗标'),
     estimateMinutes: z.number().int().min(0).nullable().describe('预估时长（分钟）'),
-    repeatRuleId: uuid.nullable().describe('关联 RepeatRule id；null=不重复'),
     repeatedFromTaskId: uuid.nullable().describe('克隆来源 Task id（重复实例追溯）；null=非重复实例'),
     createdAt: datetime,
     updatedAt: datetime,
@@ -172,7 +159,6 @@ export const PerspectiveSchema = z
 
 // ---------- 派生类型 ----------
 
-export type Tag = z.infer<typeof TagSchema>
 export type RepeatRule = z.infer<typeof RepeatRuleSchema>
 export type Attachment = z.infer<typeof AttachmentSchema>
 export type Task = z.infer<typeof TaskSchema>

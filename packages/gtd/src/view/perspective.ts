@@ -21,7 +21,6 @@ import type { GtdModel } from '../state/model'
 import type { TaskNode, TaskTree } from '../state/tree'
 import type { CatalogProjection } from './catalog'
 import type { FilterEvalContext, FilterNode } from './filter'
-import { computeAvailability } from '../availability'
 import {
   AVAILABILITY_FILTER,
   BUILTIN_PERSPECTIVE_ID,
@@ -34,8 +33,10 @@ import {
   SORT_DIR,
   SORT_FIELD,
 } from '../data/types'
+import { computeAvailability } from '../derived/availability'
 import { defaultForecastOptions, renderForecast } from '../derived/forecast'
-import { ancestors, effectiveDefer, effectiveDue, effectiveStatus } from '../state/tree'
+import { effectiveDefer, effectiveDue, effectiveStatus } from '../state/effective'
+import { ancestors } from '../state/tree'
 import { formatZonedYmdHm } from '../time/calendar'
 import { computeCollapsibleSet, effectiveVisibleChildren } from './collapse'
 import { FILTER_FIELD, LEAF_OP, LOGIC_OP, matchFilter, rawValue } from './filter'
@@ -306,7 +307,7 @@ function subtreeHasVisible(node: TaskNode, visibleIds: Set<string>): boolean {
  * 塌陷 pass [SP-COLLAPSE-3]：`collapsibleSet` 中的纯结构祖先不占行，其有效子（经
  * `effectiveVisibleChildren` 上浮、跳过连续塌陷层、剪除无可见后代旁枝）与本层真实非塌陷子
  * 同组 `sortBy` 排序。递归仍走真实 `node.children`——提升只决定节点在哪层输出，不改子树结构。
- * `collapsibleSet` 默认空集：无塌陷，行为与历史一致（直调测试向后兼容）。
+ * `collapsibleSet` 默认空集：默认无塌陷。
  */
 export function flattenInTreeOrder(
   tree: TaskTree,

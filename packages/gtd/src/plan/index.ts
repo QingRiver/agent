@@ -1,4 +1,6 @@
+export * from './move'
 export * from './order'
 export * from './perspectives'
+export * from './repeat'
 export * from './tags'
 export * from './tasks'

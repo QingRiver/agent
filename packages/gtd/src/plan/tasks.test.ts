@@ -1,15 +1,15 @@
+import type { Op, OpIds } from '../command/op'
 import type { EntityRow, EntityRowOf } from '../data/row-schema'
-import type { Op, OpIds } from '../op'
 import { describe, expect, it } from 'vitest'
-import { applyOps } from '../apply'
+import { applyOps } from '../command/apply'
 import { EXPLICIT_STATUS, GROUP_TYPE } from '../data/types'
 import { makeTaskRow, makeTaskTagRow } from '../fixtures'
 import { GtdModel } from '../state/model'
+import { planMoveTaskOp } from './move'
 import { planSetTaskTagsOp } from './tags'
 import {
   planAddChildTaskOp,
   planIndentTaskOp,
-  planMoveTaskOp,
   planReorderTaskOp,
 } from './tasks'
 

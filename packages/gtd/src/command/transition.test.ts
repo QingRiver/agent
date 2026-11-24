@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { EXPLICIT_STATUS } from './data/types'
-import { makeTaskRow } from './fixtures'
+import { EXPLICIT_STATUS } from '../data/types'
+import { makeRepeatRule, makeTaskRow } from '../fixtures'
 import {
-  actionsForStatus,
   availableStatusActions,
   canTransition,
   STATUS_ACTIONS,
@@ -20,14 +19,18 @@ describe('status transitions 表驱动', () => {
   it('每个状态的 availableStatusActions 与表一致（无特殊 guard）', () => {
     for (const status of ALL_STATUSES) {
       const task = makeTaskRow('t1', { status })
-      expect(availableStatusActions(task).sort()).toEqual(actionsForStatus(status).sort())
+      const expected = STATUS_ACTIONS.filter((action) => {
+        const spec = STATUS_TRANSITIONS[action]
+        return status !== spec.to && spec.from.includes(status)
+      })
+      expect(availableStatusActions(task).sort()).toEqual(expected.sort())
     }
   })
 
-  it('completed + repeatRuleId 时 reopen 不可用', () => {
+  it('completed + repeatRule 时 reopen 不可用', () => {
     const task = makeTaskRow('t1', {
       status: EXPLICIT_STATUS.COMPLETED,
-      repeatRuleId: 'r1',
+      repeatRule: makeRepeatRule({ id: 'r1' }),
       statusChangedAt: '2026-01-01T00:00:00.000Z',
     })
     expect(canTransition(task, 'reopen')).toBe(false)

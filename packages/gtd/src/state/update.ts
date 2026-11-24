@@ -1,32 +1,11 @@
-import type { EntityRow, GtdEntity } from '../data/row-schema'
-import type { Op, OpIds } from '../op'
+import type { Op } from '../command/op'
+import type { EntityRow } from '../data/row-schema'
 import type { GtdModel } from './model'
+import { parentNotFound, taskLabel, taskNotFound } from '../command/errors'
 import { EXPLICIT_STATUS } from '../data/types'
-import { parentNotFound, taskLabel, taskNotFound } from '../errors'
-import { stamp } from '../op'
 import { normalizeDeferDue } from '../time/normalize'
-import { propagateUp } from '../transition'
+import { propagateUp } from './propagate'
 import { ancestors } from './tree'
-
-/** 改父节点，收成 move Op。 */
-export function moveTask(
-  input: { taskId: string, parentId: string | null, order: number },
-  ids?: OpIds,
-): Op {
-  const { id, clientTs } = stamp(ids)
-  return { kind: 'move', id, clientTs, ...input }
-}
-
-/** 改点上的字段（以及标签、透视等非任务行），收成 patch Op。 */
-export function update(
-  entity: GtdEntity,
-  entityId: string,
-  patch: Record<string, unknown>,
-  ids?: OpIds,
-): Op {
-  const { id, clientTs } = stamp(ids)
-  return { kind: 'patch', id, clientTs, entity, entityId, patch } as Op
-}
 
 export function runMove(model: GtdModel, op: Extract<Op, { kind: 'move' }>): void {
   const task = model.findTask(op.taskId)

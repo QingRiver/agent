@@ -5,7 +5,7 @@ import type { CatalogProjection } from '../catalog'
 import type { FilterNode, LeafOp } from './schema'
 import { match, P } from 'ts-pattern'
 import { FILTER_FIELD } from '../../data/types'
-import { effectiveDefer, effectiveDue, effectiveStatus } from '../../state/tree'
+import { effectiveDefer, effectiveDue, effectiveStatus } from '../../state/effective'
 import { isEmptyValueArrayOrScalar } from './helpers'
 import { isDateField, isNumericField, LEAF_OP, LOGIC_OP } from './schema'
 

@@ -6,7 +6,6 @@ import type { GtdModel } from '../../state/model'
  */
 import type { RenderContext, RenderGroup, RenderItem } from '../../view/perspective'
 import type { ForecastBlockKey, ForecastOptions } from './types'
-import { computeAvailability } from '../../availability'
 import {
   FORECAST_STRIP,
   FORECAST_STRIP_TEXT,
@@ -20,6 +19,7 @@ import {
   startOfZonedYmd,
 } from '../../time/calendar'
 import { flattenInTreeOrder } from '../../view/perspective'
+import { computeAvailability } from '../availability'
 import { assignForecastBlock } from './assign'
 import { dayBlockKey } from './block-key'
 import { dayStartAtOffset, NAMED_DAY_OFFSETS } from './strip-offsets'
@@ -103,7 +103,7 @@ function blockSortKey(key: ForecastBlockKey, now: Date, timeZone: string): numbe
 /**
  * 渲染 Forecast：按 timeslice 吸顶分块。
  * `tasks` 须由调用方先经 applyBaseFilter（通常 REMAINING）；本函数不再自行按 status 过滤。
- * 树与 status 基于 `rowStore.taskTree()` 全量，避免过滤子集丢祖先导致 computed 失真。
+ * 树与 status 基于 `rowStore.tree()` 全量，避免过滤子集丢祖先导致 computed 失真。
  */
 export function renderForecast(
   rowStore: GtdModel,

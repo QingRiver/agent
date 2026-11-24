@@ -1,23 +1,8 @@
-import type { Op, OpIds } from '../op'
+import type { Op } from '../command/op'
 import type { GtdModel } from './model'
+import { parentNotFound } from '../command/errors'
 import { createTaskData } from '../data/row-schema'
-import { parentNotFound } from '../errors'
-import { stamp } from '../op'
-import { propagateUp } from '../transition'
-
-export interface CreateTaskInput {
-  taskId: string
-  name: string
-  parentId: string | null
-  order: number
-  mountDirId: string | null
-}
-
-/** 建一个点，收成 create Op。 */
-export function createTask(input: CreateTaskInput, ids?: OpIds): Op {
-  const { id, clientTs } = stamp(ids)
-  return { kind: 'create', id, clientTs, ...input }
-}
+import { propagateUp } from './propagate'
 
 export function runCreate(model: GtdModel, op: Extract<Op, { kind: 'create' }>, userId: string): void {
   if (model.rows.some(row => row.entity === 'task' && row.id === op.taskId))

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeTaskRow } from '../fixtures'
-import { ancestors, buildTaskTree, children, nearestAncestor } from './tree'
+import { ancestors, buildTaskTree, children } from './tree'
 
 describe('buildTaskTree', () => {
   it('顶层 action 作为 roots', () => {
@@ -92,22 +92,5 @@ describe('children', () => {
     const c2 = makeTaskRow('c', { parentId: 'a', order: 1 })
     const tree = buildTaskTree([parent, c1, c2])
     expect(children(tree, 'a').map(t => t.id)).toEqual(['c', 'b'])
-  })
-})
-
-describe('nearestAncestor', () => {
-  it('返回最近满足 predicate 的祖先', () => {
-    const root = makeTaskRow('r', { groupType: 'sequential' })
-    const mid = makeTaskRow('m', { parentId: 'r', groupType: 'parallel' })
-    const leaf = makeTaskRow('l', { parentId: 'm' })
-    const tree = buildTaskTree([root, mid, leaf])
-    const seq = nearestAncestor(tree, 'l', t => t.data.groupType === 'sequential')
-    expect(seq?.id).toBe('r')
-  })
-
-  it('无满足者返回 null', () => {
-    const leaf = makeTaskRow('l')
-    const tree = buildTaskTree([leaf])
-    expect(nearestAncestor(tree, 'l', () => false)).toBeNull()
   })
 })

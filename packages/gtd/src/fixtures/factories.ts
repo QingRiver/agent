@@ -2,14 +2,13 @@ import type { EntityRow, EntityRowOf } from '../data/row-schema'
 /**
  * 领域级 + 行级数据工厂（共享：单测 + 未来 client Storybook）。
  *
- * - 领域实体：makeTask/makeTag/makeRepeatRule/makeSortKey/makePerspective
+ * - 领域实体：makeTask/makeRepeatRule/makeSortKey/makePerspective
  * - 行级（运行时真相）：makeRow/makeTaskRow/makeTaskTagRow
  */
 import type {
   Perspective,
   RepeatRule,
   SortKey,
-  Tag,
   Task,
 } from '../data/schema'
 import { randomUUID } from 'node:crypto'
@@ -23,17 +22,7 @@ import { NOW_ISO } from './constants'
 
 // ---------------- 领域实体 ----------------
 
-type TaskDraft = Partial<Task> & {
-  completedAt?: string | null
-  heldAt?: string | null
-  droppedAt?: string | null
-}
-
-export function makeTask(overrides: TaskDraft = {}): Task {
-  const { completedAt, heldAt, droppedAt, statusChangedAt, ...rest } = overrides
-  const stamp = statusChangedAt !== undefined
-    ? statusChangedAt
-    : (completedAt ?? heldAt ?? droppedAt ?? null)
+export function makeTask(overrides: Partial<Task> = {}): Task {
   return {
     id: randomUUID(),
     name: 'task',
@@ -47,24 +36,12 @@ export function makeTask(overrides: TaskDraft = {}): Task {
     dueDate: null,
     plannedMode: PLANNED_MODE.NONE,
     plannedDate: null,
+    statusChangedAt: null,
     flagged: false,
     estimateMinutes: null,
-    repeatRuleId: null,
     repeatedFromTaskId: null,
     createdAt: NOW_ISO,
     updatedAt: NOW_ISO,
-    ...rest,
-    statusChangedAt: stamp,
-  }
-}
-
-export function makeTag(overrides: Partial<Tag> = {}): Tag {
-  return {
-    id: randomUUID(),
-    name: 'tag',
-    color: null,
-    createdAt: NOW_ISO,
-    updatedAt: null,
     ...overrides,
   }
 }
@@ -122,7 +99,7 @@ export function makeRow(opts: Partial<EntityRow> = {}): EntityRow {
  */
 export function makeTaskRow(
   id: string,
-  dataOverrides: TaskDraft & { repeatRule?: RepeatRule | null } = {},
+  dataOverrides: Partial<Task> & { repeatRule?: RepeatRule | null } = {},
   opts: Partial<Omit<EntityRow, 'entity' | 'id' | 'data'>> = {},
 ): EntityRowOf<'task'> {
   const { repeatRule, ...taskOverrides } = dataOverrides

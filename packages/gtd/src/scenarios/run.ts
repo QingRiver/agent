@@ -1,15 +1,15 @@
+import type { Op, OpIds } from '../command/op'
 import type { EntityRow, EntityRowOf } from '../data/row-schema'
-import type { Op, OpIds } from '../op'
-import { applyOps } from '../apply'
-import { GtdModel } from '../state/model'
+import { applyOps } from '../command/apply'
 import {
-  buildTaskTree,
   effectiveDefer,
   effectiveDue,
   effectivePlannedDate,
   effectivePlannedMode,
   effectiveStatus,
-} from '../state/tree'
+} from '../state/effective'
+import { GtdModel } from '../state/model'
+import { buildTaskTree } from '../state/tree'
 
 export function stamp(): OpIds {
   let n = 0

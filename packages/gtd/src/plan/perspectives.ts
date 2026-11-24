@@ -1,9 +1,8 @@
-import type { Op, OpIds } from '../op'
+import type { Op, OpIds } from '../command/op'
 import type { GtdModel } from '../state/model'
 import type { PerspectiveResolutionContext } from '../view/filter'
 import type { PerspectiveInput } from '../view/perspective-input'
-import { deleteOp, resolveOpIds } from '../op'
-import { update } from '../state/update'
+import { deleteOp, resolveOpIds, update } from '../command/op'
 import { validatePerspectiveInput } from '../view/perspective-input'
 
 export function planAddPerspectiveOp(

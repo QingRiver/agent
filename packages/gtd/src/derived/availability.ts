@@ -1,9 +1,9 @@
-import type { EntityRowOf } from './data/row-schema'
-import type { ComputedStatus } from './data/schema'
-import type { TaskTree } from './state/tree'
-import { COMPUTED_STATUS, EXPLICIT_STATUS, GROUP_TYPE } from './data/types'
-import { effectiveDefer, effectiveDue, effectiveStatus } from './state/tree'
-import { isWallClockUnlocked } from './time/clock'
+import type { EntityRowOf } from '../data/row-schema'
+import type { ComputedStatus } from '../data/schema'
+import type { TaskTree } from '../state/tree'
+import { COMPUTED_STATUS, EXPLICIT_STATUS, GROUP_TYPE } from '../data/types'
+import { effectiveDefer, effectiveDue, effectiveStatus } from '../state/effective'
+import { isWallClockUnlocked } from '../time/clock'
 
 /**
  * 可用性：有效状态非活跃则阻塞；否则看 effectiveDefer、串行前序兄弟、截止日。
@@ -45,11 +45,11 @@ export function computeAvailability(
 }
 
 export function computeAll(
-  source: { liveTasks: () => EntityRowOf<'task'>[], taskTree: () => TaskTree },
+  source: { liveTasks: () => EntityRowOf<'task'>[], tree: () => TaskTree },
   now: Date,
   dueSoonIntervalMs: number,
 ): Record<string, ComputedStatus> {
-  const tree = source.taskTree()
+  const tree = source.tree()
   const result: Record<string, ComputedStatus> = {}
   for (const task of source.liveTasks())
     result[task.id] = computeAvailability(task, now, tree, dueSoonIntervalMs)
