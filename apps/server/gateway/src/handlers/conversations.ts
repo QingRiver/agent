@@ -59,3 +59,12 @@ export async function deleteConversation(
   await getCheckpointer().deleteThread(req.id)
   return c.json({ ok: true })
 }
+
+/** 清空当前用户全部对话及对应 checkpoint / interrupt。 */
+export async function deleteAllConversations(c: Context<AppEnv>, user: AuthUser) {
+  const ids = await ConversationService.deleteAll(user.id)
+  const checkpointer = getCheckpointer()
+  for (const id of ids)
+    await checkpointer.deleteThread(id)
+  return c.json({ ok: true, deleted: ids.length })
+}

@@ -98,6 +98,15 @@ export class ConversationService {
     return deleted.length > 0
   }
 
+  /** 删除该用户全部会话行，返回被删 id（供调用方清 checkpoint）。 */
+  static async deleteAll(userId: string): Promise<string[]> {
+    const deleted = await db
+      .delete(conversationThreads)
+      .where(eq(conversationThreads.userId, userId))
+      .returning({ id: conversationThreads.id })
+    return deleted.map(row => row.id)
+  }
+
   static async touch(userId: string, id: string): Promise<void> {
     await db
       .update(conversationThreads)

@@ -3,6 +3,7 @@ import { END, START, StateGraph } from '@langchain/langgraph'
 import { clarifyDevIntent } from '../nodes/clarifyDevIntent'
 import { collectHitlDemo } from '../nodes/collectHitlDemo'
 import { executeHitlDemo } from '../nodes/executeHitlDemo'
+import { CODE_CARD_SYSTEM_PROMPT } from '../prompts/codeCard'
 import { DEV_INTENT_ENDS, DevRouteTarget, DevState, DevToolsNode } from '../state/devState'
 import { ASK_TOOLS } from '../tools/ask-tools'
 import { KB_TOOLS } from '../tools/kb'
@@ -16,8 +17,12 @@ const WEATHER_SYSTEM_PROMPT = [
   '1. 用户尚未提出查天气需求时（例如刚选能力、只说「你好」「开始演示」等）：只回一段简短开场白，邀请用户说明想查哪个城市的天气；本轮不要调用任何工具，等待用户下一句。',
   '2. 用户已明确要查天气、但未给出城市/地区：必须调用 ask_input（message 问城市，placeholder 如「北京」），禁止在正文里用自然语言追问。调用 ask_input 时本轮不要写解释性正文。',
   '3. 城市已明确：先 get_weather。',
-  '4. get_weather 返回 ok:true 时：必须立刻调用 weather_current，把 weather 对象字段原样传入（city / country / temperatureC / condition）；禁止用正文罗列气温数字代替卡片。可在卡片后再用一两句短总结。',
-  '5. get_weather 返回 ok:false 时：如实告知 error，不要调用 weather_current，不要臆测默认城市。',
+  '4. get_weather 返回 ok:true 时：必须立刻调用 render_code_card：',
+  '   - info = weather 对象原样（city / country / temperatureC / condition / observedAt）',
+  '   - html = 按「HTML 卡片写作规约」现场编写（数据从 window.__CARD_INFO__ 读；禁止把气温写死在 html 里；禁止照抄固定模板）',
+  '   - 禁止用正文罗列气温数字代替卡片；可在卡片后再用一两句短总结。',
+  '   - 不要调用 weather_current（已被 HTML 沙箱卡片替代）。',
+  '5. get_weather 返回 ok:false 时：如实告知 error，不要调用 render_code_card，不要臆测默认城市。',
 ].join('\n')
 
 const ORDER_SYSTEM_PROMPT = [
@@ -39,7 +44,7 @@ const KB_SYSTEM_PROMPT = [
 
 const weatherLoop = createToolLoopParts({
   tools: [...WEATHER_TOOLS, ...ASK_TOOLS],
-  system: `${WEATHER_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`,
+  system: `${WEATHER_SYSTEM_PROMPT}\n\n${CODE_CARD_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`,
   toolsNodeName: DevToolsNode.weather,
 })
 const orderLoop = createToolLoopParts({

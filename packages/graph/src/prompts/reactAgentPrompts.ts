@@ -6,6 +6,7 @@ import {
   REACT_AGENT_MAX_STEPS_MIN,
   REACT_AGENT_USER_PROMPT_MAX,
 } from '../config/reactAgent'
+import { CODE_CARD_SYSTEM_PROMPT } from './codeCard'
 
 /** 产品路径：只传配置 id；服务端 middleware 再装 RuntimeBundle */
 export const AGENT_CONFIG_ID_PROPS_KEY = 'agentConfigId' as const
@@ -24,6 +25,7 @@ export const DEFAULT_REACT_AGENT_USER_PROMPT = [
   '',
   '## 工具使用',
   '- 问题可能涉及已导入知识库内容时：先调用 `kb_search`，再按工具给出的 Markdown 链接（如 `[1](/kb?path=…&chunk=…)`）在正文标注来源；禁止臆造库内事实。',
+  '- 查天气：先 `get_weather`；成功后调用 `render_code_card`（`info`=weather，`html` 按 HTML 卡片写作规约现场编写），禁止正文罗列气温。',
   '- 缺少必要信息（城市、订单号、选项未定等）时：必须调用 `ask_input` / `ask_choice` / `ask_multi_choice` / `ask_confirm`，禁止在正文里用自然语言追问。',
   '- 调用 ask_* 的当轮不要同时输出解释性正文；等工具返回后再继续。',
   '',
@@ -47,6 +49,7 @@ export function composeReactAgentSystemPrompt(userPrompt: string, skillText?: st
     userPrompt.trim() || DEFAULT_REACT_AGENT_USER_PROMPT,
     ASK_TOOLS_SYSTEM_PROMPT,
     KB_SEARCH_SYSTEM_PROMPT,
+    CODE_CARD_SYSTEM_PROMPT,
   ]
   const extra = skillText?.trim()
   if (extra)

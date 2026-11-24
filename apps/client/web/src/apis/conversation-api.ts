@@ -37,4 +37,9 @@ export class Conversation {
   static async delete(id: string) {
     await api.conversations.delete.$post({ json: { id } })
   }
+
+  static async deleteAll() {
+    const res = await api.conversations['delete-all'].$post()
+    return await successData(res)
+  }
 }

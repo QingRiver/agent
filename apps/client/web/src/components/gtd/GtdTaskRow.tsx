@@ -157,7 +157,7 @@ export function GtdTaskRow({
       <span className={cn('min-w-0 flex-1 truncate', done && 'text-muted-foreground line-through')}>
         {task.data.name}
       </span>
-      {task.data.repeatRuleId && (
+      {task.data.repeatRule && (
         <Repeat2 className="size-3.5 shrink-0 text-muted-foreground" aria-label="重复任务" />
       )}
       {dueLabel && (

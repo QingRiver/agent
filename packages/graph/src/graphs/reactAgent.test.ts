@@ -33,6 +33,7 @@ describe('reactAgent prompts / sanitizers', () => {
     expect(out.startsWith('用户角色')).toBe(true)
     expect(out).toContain('ask_input')
     expect(out).toContain('kb_search')
+    expect(out).toContain('HTML 卡片写作规约')
   })
 
   it('composeReactAgentSystemPrompt appends skillText when provided', () => {

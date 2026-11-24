@@ -1,6 +1,7 @@
 import { openMeteo } from '@agent/tools'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
+import { renderCodeCardTool } from './code-card'
 
 /**
  * 与 `@agent/ui` `WeatherCurrentPropsSchema` / `weather_current` 卡片同形。
@@ -43,7 +44,7 @@ export const getWeatherTool = tool(
   },
   {
     name: 'get_weather',
-    description: '根据城市名称查询当前真实天气（Open-Meteo）。成功时返回 JSON：{ ok:true, weather:{ city, country?, temperatureC, condition } }；失败 { ok:false, error }。查到后必须再调用 weather_current 展示卡片。',
+    description: '根据城市名称查询当前真实天气（Open-Meteo）。成功时返回 JSON：{ ok:true, weather:{ city, country?, temperatureC, condition } }；失败 { ok:false, error }。查到后必须再调用 render_code_card（HTML 沙箱卡片，优先）或 weather_current 展示卡片。',
     schema: z.object({
       location: z.string().describe('城市名称，如：北京、上海、Tokyo'),
     }),
@@ -68,4 +69,9 @@ export const weatherCurrentTool = tool(
   },
 )
 
-export const WEATHER_TOOLS = [getWeatherTool, weatherCurrentTool]
+export const WEATHER_TOOLS = [getWeatherTool, weatherCurrentTool, renderCodeCardTool]
+
+export {
+  RENDER_CODE_CARD_TOOL_NAME,
+  renderCodeCardTool,
+} from './code-card'

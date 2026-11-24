@@ -7,6 +7,7 @@ import {
 import {
   conversationDetail,
   createConversation,
+  deleteAllConversations,
   deleteConversation,
   listConversationGraphs,
   listConversations,
@@ -44,3 +45,4 @@ export const conversationsRoutes = new Hono<AppEnv>()
     zValidator('json', ConversationIdRequestSchema),
     c => deleteConversation(c, c.get('user')!, c.req.valid('json')),
   )
+  .post('/delete-all', c => deleteAllConversations(c, c.get('user')!))

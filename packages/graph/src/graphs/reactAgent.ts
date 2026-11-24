@@ -6,9 +6,10 @@ import {
 import { ASK_TOOLS } from '../tools/ask-tools'
 import { KB_TOOLS } from '../tools/kb'
 import { readSkillFileTool } from '../tools/read-skill-file'
+import { WEATHER_TOOLS } from '../tools/weather'
 import { createToolLoopGraph } from './createToolLoopGraph'
 
-const tools = [...KB_TOOLS, ...ASK_TOOLS, readSkillFileTool]
+const tools = [...KB_TOOLS, ...ASK_TOOLS, ...WEATHER_TOOLS, readSkillFileTool]
 
 function readUserPrompt(config: LangGraphRunnableConfig): string {
   return sanitizeUserPrompt(config.configurable?.userPrompt)

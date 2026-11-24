@@ -11,6 +11,8 @@ import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown'
 import { toInterruptRequest } from '@lib/langgraphInterrupt'
 import { use } from 'react'
 import { HideAssistantTextContext } from './assistantContexts'
+import { RENDER_CODE_CARD_TOOL_NAME } from './htmlCardConstants'
+import { HtmlCardToolRender } from './HtmlCardTool'
 import { LangGraphInterruptUi } from './LangGraphInterruptUi'
 import { WeatherCurrentToolRender } from './WeatherCurrentTool'
 
@@ -119,6 +121,7 @@ export function AssistantThread({
                       tools: {
                         by_name: {
                           [WEATHER_CURRENT_TOOL_NAME]: WeatherCurrentToolRender,
+                          [RENDER_CODE_CARD_TOOL_NAME]: HtmlCardToolRender,
                           ...toolRenderers,
                         },
                         Fallback: ToolCallFallback,

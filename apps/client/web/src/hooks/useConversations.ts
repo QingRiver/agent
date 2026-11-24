@@ -15,10 +15,12 @@ export function useConversations() {
     isLoading,
     error,
     select: ConversationStore.select,
+    markActive: ConversationStore.markActive,
     create: ConversationStore.create,
     pin: ConversationStore.pin,
     unpin: ConversationStore.unpin,
     remove: ConversationStore.remove,
+    removeAll: ConversationStore.removeAll,
     refresh: ConversationStore.refresh,
   }
 }

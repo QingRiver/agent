@@ -13,6 +13,20 @@ interface ConversationListItemProps {
   onDelete: () => void
 }
 
+function conversationDisplayTitle(conversation: ConversationThread): string {
+  return `${conversation.agentId} · 对话 #${conversation.seq}`
+}
+
+function formatLastActive(updatedAt: number): string {
+  const d = new Date(updatedAt)
+  if (Number.isNaN(d.getTime()))
+    return '最后活跃 · 未知'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return `最后活跃 · ${date} ${time}`
+}
+
 export function ConversationListItem({
   conversation,
   selected,
@@ -22,6 +36,7 @@ export function ConversationListItem({
   onDelete,
 }: ConversationListItemProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const title = conversationDisplayTitle(conversation)
 
   return (
     <div
@@ -37,10 +52,12 @@ export function ConversationListItem({
         onClick={onSelect}
         className="min-w-0 flex-1 text-left"
       >
-        <div className="truncate font-medium">{conversation.title}</div>
-        <div className="mt-0.5 truncate text-xs text-muted-foreground">{conversation.agentId}</div>
+        <div className="truncate font-medium">{title}</div>
+        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+          {formatLastActive(conversation.updatedAt)}
+        </div>
       </button>
-      <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="flex shrink-0 gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
         <button
           type="button"
           title={conversation.pinned ? '取消置顶' : '置顶'}
@@ -57,7 +74,8 @@ export function ConversationListItem({
         </button>
         <button
           type="button"
-          title="删除"
+          title="删除对话"
+          aria-label="删除对话"
           onClick={(e) => {
             e.stopPropagation()
             setConfirmDelete(true)
@@ -72,7 +90,7 @@ export function ConversationListItem({
           <div className="w-full max-w-sm rounded-xl border border-border bg-card p-4 shadow-xl">
             <p className="text-sm text-foreground">
               删除「
-              {conversation.title}
+              {title}
               」？关联的检查点数据将一并清除。
             </p>
             <div className="mt-4 flex justify-end gap-2">

@@ -1,9 +1,0 @@
-@import 'tailwindcss';
-@source '../src';
-
-html,
-body,
-#storybook-root {
-  min-height: 100%;
-  background: #fafafa;
-}

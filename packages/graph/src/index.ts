@@ -26,6 +26,7 @@ export {
 export { reactAgentGraph } from './graphs/reactAgent'
 export { tushareGraph } from './graphs/tushare'
 export { type EditorFocus, runWriteEdit, type WriteEditInput } from './nodes/writeEdit'
+export { CODE_CARD_SYSTEM_PROMPT } from './prompts/codeCard'
 export {
   AGENT_CONFIG_ID_PROPS_KEY,
   clampMaxSteps,

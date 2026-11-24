@@ -11,6 +11,7 @@ import {
 import { requireThreadOwned } from '../conversation/threadGuard'
 import { getThreadSnapshot } from '../conversation/threadState'
 import { createGraphSseResponse } from '../http/graphSse'
+import { ConversationService } from '../service/conversation'
 
 /** LangGraph `messages` + `updates` + `custom` SSE，供 assistant-ui 直接消费。 */
 export async function streamGraph(
@@ -20,6 +21,7 @@ export async function streamGraph(
   body: GraphStreamRequest,
 ) {
   await requireThreadOwned(user.id, body.threadId)
+  await ConversationService.touch(user.id, body.threadId)
 
   const input = resolveGraphInput(name, {
     messages: body.messages,

@@ -53,6 +53,18 @@ export class ConversationStore {
     ConversationStore.store().set(ConversationStore.activeIdAtom, id)
   }
 
+  /** 本地标记会话活跃（配合服务端 stream touch，刷新侧栏「最后活跃」）。 */
+  static markActive(id: string): void {
+    const store = ConversationStore.store()
+    const now = Date.now()
+    store.set(
+      ConversationStore.conversationsAtom,
+      prev => sortConversations(
+        prev.map(c => c.id === id ? { ...c, updatedAt: now } : c),
+      ),
+    )
+  }
+
   static async refresh(): Promise<void> {
     const store = ConversationStore.store()
     const userId = store.get(ConversationStore.userIdAtom)
@@ -114,5 +126,21 @@ export class ConversationStore {
     const current = store.get(ConversationStore.activeIdAtom)
     if (current === id)
       store.set(ConversationStore.activeIdAtom, next[0]?.id ?? null)
+    if (next.length === 0)
+      await ConversationStore.refresh()
+  }
+
+  /** 清空全部对话与 checkpoint；随后 refresh 会自动建一条默认会话。 */
+  static async removeAll(): Promise<void> {
+    const store = ConversationStore.store()
+    store.set(ConversationStore.errorAtom, null)
+    try {
+      await Conversation.deleteAll()
+      await ConversationStore.refresh()
+    }
+    catch (e) {
+      store.set(ConversationStore.errorAtom, e instanceof Error ? e.message : String(e))
+      throw e
+    }
   }
 }
