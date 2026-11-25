@@ -26,6 +26,7 @@
     "@agent/kb": "workspace:*",
     "@agent/project": "workspace:*",
     "@agent/proto": "workspace:*",
+    "@agent/skills": "workspace:*",
     "@hono/node-server": "catalog:",
     "@hono/zod-validator": "catalog:",
     "@langchain/core": "catalog:",

@@ -1,11 +1,11 @@
 import type { TushareMcp } from '@agent/tools'
 import type { ToolDef } from '@core/types'
+import { getTusharePrompt } from '@agent/skills/node'
 import {
   asString,
   findQueryTool,
   findStockBasicTool,
   queryStockBasic,
-  renderTushareSystemPrompt,
   TOKEN_HINT,
   toolErrorMessage,
 } from '@agent/tools'
@@ -102,7 +102,7 @@ function createResolveStockTool(mcp: TushareMcp): ToolDef {
 function createTushareAgent(mcp: TushareMcp): { tools: ToolDef[], systemPrompt: string } {
   return {
     tools: [...mcpToolsToToolDefs(mcp), createResolveStockTool(mcp)],
-    systemPrompt: renderTushareSystemPrompt(),
+    systemPrompt: getTusharePrompt(),
   }
 }
 

@@ -1,0 +1,11 @@
+{
+  "id": "tushare",
+  "transport": "streamable-http",
+  "url": "https://api.tushare.pro/mcp/token=${token}",
+  "tokenEnv": "TUSHARE_TOKEN",
+  "headers": {
+    "Authorization": "Bearer ${token}",
+    "X-Tushare-Token": "${token}"
+  },
+  "postOnlyGet": true
+}

@@ -1,0 +1,10 @@
+{
+  "id": "ha",
+  "transport": "streamable-http",
+  "urlEnv": "HA_URL",
+  "urlSuffix": "/api/mcp",
+  "tokenEnv": "HA_TOKEN",
+  "headers": {
+    "Authorization": "Bearer ${token}"
+  }
+}

@@ -1,6 +1,7 @@
-import type { HaMcp } from '@agent/tools'
+import type { McpCallable } from '@agent/tools'
 import type { StructuredToolInterface } from '@langchain/core/tools'
-import { createHaMcp } from '@agent/tools'
+import { getBuiltInSkill, loadBuiltInSkills } from '@agent/skills/node'
+import { createMcpCallable } from '@agent/tools'
 import { ASK_TOOLS } from '../ask-tools'
 import { mcpToolsToLangchainTools } from '../mcpToLangchain'
 
@@ -8,13 +9,34 @@ export interface HaToolset {
   tools: StructuredToolInterface[]
 }
 
-export async function buildHaToolset(mcp: HaMcp): Promise<HaToolset> {
+export async function buildHaToolset(mcp: McpCallable): Promise<HaToolset> {
   return {
     tools: [
       ...mcpToolsToLangchainTools(mcp),
       ...ASK_TOOLS,
     ],
   }
+}
+
+/**
+ * 从 home-assistant skill 的 mcp 声明（`mcp/ha.mcp.json`）连接 MCP。
+ * url 取 HA_URL + urlSuffix "/api/mcp"；token 取 HA_TOKEN 作 Bearer。
+ */
+async function createHaMcpFromSkill(): Promise<McpCallable> {
+  await loadBuiltInSkills()
+  const bundle = getBuiltInSkill('home_assistant')
+  const decl = bundle?.mcp[0]
+  if (!decl)
+    throw new Error('home-assistant skill 未声明 MCP（mcp/ha.mcp.json）')
+  return createMcpCallable({
+    ...(decl.urlEnv ? { urlEnv: decl.urlEnv } : {}),
+    ...(decl.urlSuffix ? { urlSuffix: decl.urlSuffix } : {}),
+    ...(decl.url ? { url: decl.url } : {}),
+    ...(decl.tokenEnv ? { tokenEnv: decl.tokenEnv } : {}),
+    ...(decl.headers ? { headers: decl.headers } : {}),
+    ...(decl.postOnlyGet ? { postOnlyGet: true } : {}),
+    clientName: 'skill-ha',
+  })
 }
 
 /**
@@ -25,7 +47,7 @@ let toolsetPromise: Promise<HaToolset> | null = null
 
 export async function getHaToolset(): Promise<HaToolset> {
   if (!toolsetPromise) {
-    toolsetPromise = createHaMcp().then(buildHaToolset)
+    toolsetPromise = createHaMcpFromSkill().then(buildHaToolset)
     toolsetPromise.catch(() => {
       toolsetPromise = null
     })

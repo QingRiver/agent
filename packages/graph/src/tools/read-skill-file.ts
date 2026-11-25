@@ -1,10 +1,12 @@
+import type { SkillBinding } from '@agent/skills'
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
 import {
   READ_SKILL_FILE_TOOL_NAME,
   readSkillFile,
   resolveBoundSkillCode,
   SKILL_ENTRY_FILENAME,
-} from '@agent/proto'
+} from '@agent/skills'
+import { getBuiltInSkill } from '@agent/skills/node'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 
@@ -18,12 +20,6 @@ let skillFileLoader: SkillFileLoader | null = null
 /** gateway 启动时注入；函数本身不进 checkpoint */
 export function setSkillFileLoader(loader: SkillFileLoader | null): void {
   skillFileLoader = loader
-}
-
-export interface SkillBinding {
-  code: string
-  name?: string
-  strategy: 'latest'
 }
 
 function readSkillRuntime(config: LangGraphRunnableConfig): {
@@ -54,6 +50,10 @@ function readSkillRuntime(config: LangGraphRunnableConfig): {
 
 export const readSkillFileTool = tool(
   async ({ skill_code, path }, config) => {
+    // 内置 skill（系统 tier）：按 code 直读，不走用户 binding / userId 鉴权
+    const builtIn = getBuiltInSkill(skill_code)
+    if (builtIn)
+      return readSkillFile(builtIn.files, path)
     const { userId, skillBindings } = readSkillRuntime(config)
     if (!userId)
       return '错误：SKILL_NOT_BOUND（缺少 userId）'

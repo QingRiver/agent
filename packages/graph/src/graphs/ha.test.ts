@@ -1,9 +1,9 @@
-import type { HaMcp } from '@agent/tools'
+import type { McpCallable } from '@agent/tools'
 import { MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it } from 'vitest'
 import { buildHaToolset, haGraph } from './ha'
 
-function mockHaMcp(): HaMcp {
+function mockHaMcp(): McpCallable {
   return {
     tools: [{
       name: 'HassTurnOn',

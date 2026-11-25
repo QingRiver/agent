@@ -1,3 +1,4 @@
+import type { VersionTextType } from '@agent/skills'
 import type { Context } from 'hono'
 import type {
   SkillCreate,
@@ -5,14 +6,20 @@ import type {
   VersionTextGet,
   VersionTextListVersions,
   VersionTextPublish,
-  VersionTextType,
   VersionTextUpsert,
 } from '../../shared/skill'
 import type { AppEnv, AuthUser } from '../types'
+import { composeBuiltInSkillIndex } from '@agent/skills/node'
 import { SkillService } from '../service/skill'
 import { TagsService } from '../service/tags'
 
 export class SkillHandlers {
+  /** 平台级内置 skill 索引（skillText + bindings），供 client Lab 预览平台规约 */
+  static async builtInPrompt(c: Context<AppEnv>) {
+    const { skillText, skillBindings } = await composeBuiltInSkillIndex()
+    return c.json({ skillText, skillBindings })
+  }
+
   static async list(c: Context<AppEnv>, user: AuthUser) {
     const skills = await SkillService.list(user.id)
     return c.json({ skills })

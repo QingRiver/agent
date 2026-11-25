@@ -1,4 +1,4 @@
-import { VERSION_TEXT_TYPES } from '@agent/proto'
+import { VERSION_TEXT_TYPES } from '@agent/skills'
 import { z } from 'zod'
 
 export const SkillCreateSchema = z.object({
@@ -10,12 +10,6 @@ export type SkillCreate = z.infer<typeof SkillCreateSchema>
 export const SkillIdParamSchema = z.object({
   id: z.string().min(1).max(128),
 })
-
-export {
-  VERSION_TEXT_TYPE,
-  VERSION_TEXT_TYPES,
-  type VersionTextType,
-} from '@agent/proto'
 
 export const VersionTextTypeSchema = z.enum(VERSION_TEXT_TYPES)
 

@@ -135,6 +135,9 @@ catalogs:
     '@types/diff-match-patch':
       specifier: ^1.0.36
       version: 1.0.36
+    '@types/js-yaml':
+      specifier: ^4.0.9
+      version: 4.0.9
     '@types/node':
       specifier: ^26.1.1
       version: 26.1.1
@@ -210,6 +213,9 @@ catalogs:
     jotai:
       specifier: ^2.12.5
       version: 2.20.0
+    js-yaml:
+      specifier: ^4.1.0
+      version: 4.3.2
     jszip:
       specifier: ^3.10.1
       version: 3.10.1
@@ -368,6 +374,9 @@ importers:
       '@agent/proto':
         specifier: workspace:*
         version: link:../../../packages/proto
+      '@agent/skills':
+        specifier: workspace:*
+        version: link:../../../packages/skills
       '@agent/ui':
         specifier: workspace:*
         version: link:../../../packages/ui
@@ -561,6 +570,9 @@ importers:
       '@agent/proto':
         specifier: workspace:*
         version: link:../../../packages/proto
+      '@agent/skills':
+        specifier: workspace:*
+        version: link:../../../packages/skills
       '@hono/node-server':
         specifier: ^2.1.5
         version: 2.1.5(hono@4.13.13)
@@ -624,6 +636,9 @@ importers:
       '@agent/proto':
         specifier: workspace:*
         version: link:../proto
+      '@agent/skills':
+        specifier: workspace:*
+        version: link:../skills
       '@agent/tools':
         specifier: workspace:*
         version: link:../tools
@@ -708,6 +723,9 @@ importers:
       '@agent/proto':
         specifier: workspace:*
         version: link:../proto
+      '@agent/skills':
+        specifier: workspace:*
+        version: link:../skills
       '@agent/tools':
         specifier: workspace:*
         version: link:../tools
@@ -840,6 +858,19 @@ importers:
       '@types/diff-match-patch':
         specifier: 'catalog:'
         version: 1.0.36
+
+  packages/skills:
+    dependencies:
+      js-yaml:
+        specifier: 'catalog:'
+        version: 4.3.2
+    devDependencies:
+      '@types/js-yaml':
+        specifier: 'catalog:'
+        version: 4.0.9
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.1.1
 
   packages/tools:
     dependencies:
@@ -4483,6 +4514,9 @@ packages:
   '@types/hast@3.0.5':
     resolution: {integrity: sha512-rp/ezSWaD1m44dPKICGhiskI13nVr7qTloFwDa/IYkhhf5nzwP+zIQcIJh3WIFSBOy/H1PzB40jPjMDksN4F+g==}
 
+  '@types/js-yaml@4.0.9':
+    resolution: {integrity: sha512-k4MGaQl5TGo/iipqb2UDG2UwjXziSWkh0uysQelTlJpX1qGlpUZYm8PnO4DxG1qBomtJUdYJ6qR6xdIah10JLg==}
+
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
@@ -6713,6 +6747,10 @@ packages:
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
+
+  js-yaml@4.3.2:
+    resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
+    hasBin: true
 
   jsdoc-type-pratt-parser@7.1.1:
     resolution: {integrity: sha512-/2uqY7x6bsrpi3i9LVU6J89352C0rpMk0as8trXxCtvd4kPk1ke/Eyif6wqfSLvoNJqcDG9Vk4UsXgygzCt2xA==}
@@ -12299,6 +12337,8 @@ snapshots:
     dependencies:
       '@types/unist': 3.0.3
 
+  '@types/js-yaml@4.0.9': {}
+
   '@types/json-schema@7.0.15': {}
 
   '@types/katex@0.16.8': {}
@@ -12340,7 +12380,6 @@ snapshots:
   '@types/node@26.6.6':
     dependencies:
       undici-types: 8.9.0
-    optional: true
 
   '@types/pg@8.20.0':
     dependencies:
@@ -12371,7 +12410,7 @@ snapshots:
 
   '@types/ws@8.18.2':
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 26.6.6
 
   '@typescript-eslint/eslint-plugin@8.62.0(@typescript-eslint/parser@8.62.0(@typescript/typescript6@6.0.1)(eslint@10.5.0(jiti@2.7.0)))(@typescript/typescript6@6.0.1)(eslint@10.5.0(jiti@2.7.0))':
     dependencies:
@@ -13119,7 +13158,7 @@ snapshots:
 
   buffer-image-size@0.6.4:
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 26.6.6
 
   buffer@5.7.1:
     dependencies:
@@ -14396,7 +14435,7 @@ snapshots:
 
   happy-dom@20.14.6:
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 26.6.6
       '@types/whatwg-mimetype': 3.0.2
       '@types/ws': 8.18.2
       buffer-image-size: 0.6.4
@@ -14680,6 +14719,10 @@ snapshots:
     optional: true
 
   js-tokens@4.0.0: {}
+
+  js-yaml@4.3.2:
+    dependencies:
+      argparse: 2.0.1
 
   jsdoc-type-pratt-parser@7.1.1: {}
 
@@ -16802,8 +16845,7 @@ snapshots:
 
   undici-types@8.3.0: {}
 
-  undici-types@8.9.0:
-    optional: true
+  undici-types@8.9.0: {}
 
   undici@7.29.1: {}
 

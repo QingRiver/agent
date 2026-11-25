@@ -1,7 +1,7 @@
 import type { SkillRow, VersionTextRow } from '@apis/skill-api'
 import type { TagRow } from '@apis/tags-api'
 import type { ProjectSelection } from './ProjectFileTree'
-import { SKILL_ENTRY_FILENAME } from '@agent/proto'
+import { SKILL_ENTRY_FILENAME } from '@agent/skills'
 import { KbDocTagsBar } from '@components/kb/KbDocTagsBar'
 import { BookMarked, Sparkles } from 'lucide-react'
 import { VersionTextWorkbench } from './VersionTextWorkbench'

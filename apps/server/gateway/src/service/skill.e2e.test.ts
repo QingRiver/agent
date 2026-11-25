@@ -32,8 +32,8 @@ describe('skillService e2e', () => {
     const root = await ProjectService.createDir(USER_ID, { parentId: project.id, name: 'weather' })
     const scripts = await ProjectService.createDir(USER_ID, { parentId: root.id, name: 'scripts' })
 
-    const skill = await SkillService.create(USER_ID, { dirId: root.id, code: 'weather' })
-    expect(skill.code).toBe('weather')
+    const skill = await SkillService.create(USER_ID, { dirId: root.id, code: 'my_weather' })
+    expect(skill.code).toBe('my_weather')
 
     await SkillService.upsertVersionText(USER_ID, {
       dirId: root.id,
@@ -46,17 +46,17 @@ describe('skillService e2e', () => {
       content: 'note',
     })
 
-    const files = await SkillService.walkFiles(USER_ID, 'weather')
+    const files = await SkillService.walkFiles(USER_ID, 'my_weather')
     expect(files).toEqual({
       'SKILL.md': '---\nname: 天气\ndescription: 查天气\n---\nbody',
       'scripts/a.md': 'note',
     })
 
-    const index = await SkillService.buildIndex(USER_ID, ['weather'])
+    const index = await SkillService.buildIndex(USER_ID, ['my_weather'])
     expect(index.skillText).toContain('天气')
-    expect(index.skillText).toContain('weather')
+    expect(index.skillText).toContain('my_weather')
     expect(index.skillText).not.toContain('scripts/a.md')
-    expect(index.skillBindings).toEqual([{ code: 'weather', name: '天气', strategy: 'latest' }])
+    expect(index.skillBindings).toEqual([{ code: 'my_weather', name: '天气', strategy: 'latest' }])
   })
 
   it('reserved skill_code 拒绝；卸标硬删 texts、dirs 保留', async () => {

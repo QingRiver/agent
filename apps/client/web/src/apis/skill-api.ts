@@ -1,18 +1,21 @@
-import type { VersionTextType } from '@agent/proto'
+import type { VersionTextType } from '@agent/skills'
 import type { InferResponseType } from 'hono/client'
-import { VERSION_TEXT_TYPE } from '@agent/proto'
 import { api, successData } from './api-client'
 
 type Skills = typeof api.skills
 export type SkillRow = InferResponseType<Skills['list']['$post'], 200>['skills'][number]
 export type VersionTextRow = InferResponseType<typeof api['version-texts']['list']['$post'], 200>['versionTexts'][number]
 
-export { VERSION_TEXT_TYPE, type VersionTextType }
-
 export class SkillApi {
   static async list(): Promise<SkillRow[]> {
     const res = await api.skills.list.$post()
     return (await successData(res)).skills
+  }
+
+  /** 平台级内置 skill 索引（skillText + bindings），供 Lab 预览平台规约 */
+  static async fetchBuiltInPrompt(): Promise<{ skillText: string, skillBindings: unknown[] }> {
+    const res = await api.skills['built-in-prompt'].$get()
+    return await successData(res)
   }
 
   static async create(body: { dirId: string, code?: string }): Promise<SkillRow> {

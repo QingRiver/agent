@@ -1,6 +1,6 @@
-import type { VersionTextType } from '@agent/proto'
+import type { VersionTextType } from '@agent/skills'
 import type { SkillRow, VersionTextRow } from '@apis/skill-api'
-import { SKILL_ENTRY_FILENAME, slugifySkillCode, VERSION_TEXT_TYPE } from '@agent/proto'
+import { SKILL_ENTRY_FILENAME, slugifySkillCode, VERSION_TEXT_TYPE } from '@agent/skills'
 import { SkillApi } from '@apis/skill-api'
 import { atom, getDefaultStore } from 'jotai'
 

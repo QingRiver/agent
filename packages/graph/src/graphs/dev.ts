@@ -1,15 +1,22 @@
-import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
+import { CODE_CARD_SYSTEM_PROMPT, getBuiltInSkill, loadBuiltInSkills, readSkillBody } from '@agent/skills/node'
 import { END, START, StateGraph } from '@langchain/langgraph'
 import { clarifyDevIntent } from '../nodes/clarifyDevIntent'
 import { collectHitlDemo } from '../nodes/collectHitlDemo'
 import { executeHitlDemo } from '../nodes/executeHitlDemo'
-import { CODE_CARD_SYSTEM_PROMPT } from '../prompts/codeCard'
+import { materializeSkillTools } from '../skills/materializeSkillTools'
 import { DEV_INTENT_ENDS, DevRouteTarget, DevState, DevToolsNode } from '../state/devState'
 import { ASK_TOOLS } from '../tools/ask-tools'
 import { KB_TOOLS } from '../tools/kb'
 import { ORDER_TOOLS } from '../tools/order'
 import { WEATHER_TOOLS } from '../tools/weather'
 import { createToolLoopParts } from './createToolLoopGraph'
+
+/** weather skill 声明的 get_weather（自包含 Open-Meteo 脚本）物化进 dev weatherLoop。 */
+async function weatherSkillTools() {
+  await loadBuiltInSkills()
+  const bundle = getBuiltInSkill('weather')
+  return bundle ? materializeSkillTools([bundle]) : []
+}
 
 const WEATHER_SYSTEM_PROMPT = [
   '你是天气助手。查天气只能通过 get_weather，禁止编造气温或天气。',
@@ -37,24 +44,26 @@ const KB_SYSTEM_PROMPT = [
   '你是知识库问答助手。回答涉及已导入知识库内容的问题时，必须先调用 kb_search 检索，再据返回的引用片段作答。',
   '硬性规则：',
   '1. 用户问题可能涉及知识库时，先 kb_search 再回答；禁止凭空编造库内内容。',
-  '2. 回答时引用返回片段的编号（如 [1]、[2]），并标注来源 doc。',
+  '2. 回答时引用返回片段的编号，用标准 Markdown 链接（直接使用工具结果给出的形式，如 [1](/kb?path=…&chunk=…)）；不要写裸 [1]，也不要脚注。',
   '3. 工具返回「未找到」或澄清建议时，如实转达，不要臆造答案。',
   '4. 问题明显与知识库无关时，可直接作答，不必调用工具。',
 ].join('\n')
 
+const ASK_PROMPT = readSkillBody('clarify-ask')
+
 const weatherLoop = createToolLoopParts({
-  tools: [...WEATHER_TOOLS, ...ASK_TOOLS],
-  system: `${WEATHER_SYSTEM_PROMPT}\n\n${CODE_CARD_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`,
+  tools: async () => [...WEATHER_TOOLS, ...ASK_TOOLS, ...await weatherSkillTools()],
+  system: `${WEATHER_SYSTEM_PROMPT}\n\n${CODE_CARD_SYSTEM_PROMPT}\n\n${ASK_PROMPT}`,
   toolsNodeName: DevToolsNode.weather,
 })
 const orderLoop = createToolLoopParts({
   tools: [...ORDER_TOOLS, ...ASK_TOOLS],
-  system: `${ORDER_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`,
+  system: `${ORDER_SYSTEM_PROMPT}\n\n${ASK_PROMPT}`,
   toolsNodeName: DevToolsNode.order,
 })
 const kbLoop = createToolLoopParts({
   tools: [...KB_TOOLS, ...ASK_TOOLS],
-  system: `${KB_SYSTEM_PROMPT}\n\n${ASK_TOOLS_SYSTEM_PROMPT}`,
+  system: `${KB_SYSTEM_PROMPT}\n\n${ASK_PROMPT}`,
   toolsNodeName: DevToolsNode.kb,
 })
 

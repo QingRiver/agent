@@ -1,5 +1,5 @@
 import type { VersionTextRow } from '@apis/skill-api'
-import { VERSION_TEXT_TYPE } from '@agent/proto'
+import { VERSION_TEXT_TYPE } from '@agent/skills'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'

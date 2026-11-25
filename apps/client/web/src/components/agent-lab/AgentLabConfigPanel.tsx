@@ -3,15 +3,12 @@ import {
   REACT_AGENT_MAX_STEPS_MAX,
   REACT_AGENT_MAX_STEPS_MIN,
 } from '@agent/graph/react-agent-config'
-import {
-  composeReactAgentSystemPrompt,
-  KB_SEARCH_SYSTEM_PROMPT,
-} from '@agent/graph/react-agent-prompts'
-import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
+import { composeReactAgentSystemPrompt } from '@agent/graph/react-agent-prompts'
+import { SkillApi } from '@apis/skill-api'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { KbMarkdownEditor } from '../kb/KbMarkdownEditor'
 import {
   DEFAULT_REACT_AGENT_LAB_CONFIG,
@@ -36,6 +33,13 @@ export function AgentLabConfigPanel({
   const [previewOpen, setPreviewOpen] = useState(false)
   const [editorKey, setEditorKey] = useState(0)
   const [hint, setHint] = useState<string | null>(null)
+  const [platformPrompt, setPlatformPrompt] = useState<string>('（加载中…）')
+
+  useEffect(() => {
+    SkillApi.fetchBuiltInPrompt()
+      .then(({ skillText }) => setPlatformPrompt(skillText || '（无平台规约）'))
+      .catch(() => setPlatformPrompt('（加载失败）'))
+  }, [])
 
   const finalSystem = composeReactAgentSystemPrompt(config.userPrompt)
 
@@ -89,7 +93,7 @@ export function AgentLabConfigPanel({
         </button>
         {platformOpen && (
           <pre className="max-h-48 overflow-auto border-t border-border bg-muted/40 p-3 text-xs whitespace-pre-wrap text-muted-foreground">
-            {`${ASK_TOOLS_SYSTEM_PROMPT}\n\n---\n\n${KB_SEARCH_SYSTEM_PROMPT}`}
+            {platformPrompt}
           </pre>
         )}
       </div>

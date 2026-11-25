@@ -1,6 +1,6 @@
 import type { VersionTextRow } from '@apis/skill-api'
 import type { ResourceRow } from './ResourcesTable'
-import { parseFrontmatter, SKILL_ENTRY_FILENAME, VERSION_TEXT_TYPE } from '@agent/proto'
+import { parseFrontmatter, SKILL_ENTRY_FILENAME, VERSION_TEXT_TYPE } from '@agent/skills'
 import { ProjectListPage } from '@components/project/ProjectListPage'
 import { VersionTextWorkbench } from '@components/project/VersionTextWorkbench'
 import { Button } from '@components/ui/button'

@@ -16,6 +16,7 @@
     "@agent/markdown": "workspace:*",
     "@agent/project": "workspace:*",
     "@agent/proto": "workspace:*",
+    "@agent/skills": "workspace:*",
     "@agent/ui": "workspace:*",
     "@assistant-ui/react": "catalog:",
     "@assistant-ui/react-langgraph": "catalog:",

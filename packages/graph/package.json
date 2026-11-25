@@ -16,6 +16,7 @@
     "@agent/env": "workspace:*",
     "@agent/kb": "workspace:*",
     "@agent/proto": "workspace:*",
+    "@agent/skills": "workspace:*",
     "@agent/tools": "workspace:*",
     "@langchain/core": "catalog:",
     "@langchain/deepseek": "catalog:",

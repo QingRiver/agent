@@ -20,6 +20,7 @@ import { zValidator } from '../middleware/zodValidator'
 export const skillRoutes = new Hono<AppEnv>()
   .onError(handleAppError)
   .use('*', requireAuth)
+  .get('/built-in-prompt', c => SkillHandlers.builtInPrompt(c))
   .post('/list', c => SkillHandlers.list(c, c.get('user')!))
   .post('/create', zValidator('json', SkillCreateSchema), c =>
     SkillHandlers.create(c, c.get('user')!, c.req.valid('json')))

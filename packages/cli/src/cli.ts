@@ -1,5 +1,5 @@
 import process from 'node:process'
-import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
+import { readSkillBody } from '@agent/skills/node'
 import { createTushareMcp } from '@agent/tools'
 import { interactTools } from '@cli/agent/interact-tools'
 import { createTushareAgent } from '@cli/agent/tushare'
@@ -34,7 +34,7 @@ async function main() {
     boot(
       new OpenAIDriver(),
       [...tools, ...interactTools],
-      [systemPrompt, ASK_TOOLS_SYSTEM_PROMPT].join('\n\n'),
+      [systemPrompt, readSkillBody('clarify-ask')].join('\n\n'),
     )
   }
   catch (err) {

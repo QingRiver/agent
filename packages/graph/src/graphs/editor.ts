@@ -7,7 +7,6 @@ import { EDITOR_ASK_SYSTEM_PROMPT } from '../prompts/editorPrompts'
 import { EditorChatState } from '../state/editorChatState'
 
 export type { EditorPath } from '../edges/routeByEditorPath'
-export { WRITER_CHANGE_SUMMARIES_EVENT, type WriterChangeSummary } from '@agent/proto'
 
 /**
  * 文本编辑器统一图。

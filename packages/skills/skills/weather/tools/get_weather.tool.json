@@ -1,0 +1,12 @@
+{
+  "name": "get_weather",
+  "description": "根据城市名称查询当前真实天气（Open-Meteo）。成功返回 JSON：{ ok:true, weather:{ city, country?, temperatureC, condition } }；失败 { ok:false, error }。查到后必须再调用 render_code_card 展示卡片。",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "location": { "type": "string", "description": "城市名称，如：北京、上海、Tokyo" }
+    },
+    "required": ["location"]
+  },
+  "run": "scripts/weather.mts"
+}

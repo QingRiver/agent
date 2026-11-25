@@ -1,10 +1,6 @@
-import { openMeteo } from './openMeteo'
-import { tushare } from './tushare'
-
-export type { HaMcp } from './mcp/haClient'
-export { createHaMcp, HA_TOKEN_HINT, HA_URL_HINT } from './mcp/haClient'
+export type { McpCallable, McpCallableConfig } from './mcp/createMcpCallable'
+export { createMcpCallable } from './mcp/createMcpCallable'
 export type { StockCandidate } from './mcp/stockResolve'
-
 export {
   asString,
   buildStockBasicArgs,
@@ -18,9 +14,3 @@ export {
 } from './mcp/stockResolve'
 export type { McpTool, TushareMcp } from './mcp/tushareClient'
 export { createTushareMcp, TOKEN_HINT } from './mcp/tushareClient'
-export { openMeteo, tushare }
-
-export { renderTushareSystemPrompt, TUSHARE_SYSTEM_PROMPT } from './mcp/tusharePrompt'
-export type { CurrentWeather } from './openMeteo'
-export { createSchemaFromPrompt, extractTemplateVariables, renderPrompt } from './promptTemplate'
-export type { DailyRow, RealtimeQuoteRow, StockBasicRow } from './tushare'

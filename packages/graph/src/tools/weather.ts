@@ -1,4 +1,3 @@
-import { openMeteo } from '@agent/tools'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 import { renderCodeCardTool } from './code-card'
@@ -19,37 +18,10 @@ const weatherCurrentArgsSchema = z.object({
 const WEATHER_CURRENT_TOOL_NAME = 'weather_current' as const
 
 /**
- * 查询真实天气，返回 JSON（对齐天气卡 props）。
- * 前端由同名 `weather_current` + useComponent / useRenderTool 渲染。
+ * `get_weather` 已迁至 weather skill（`@agent/skills/skills/weather/`）：
+ * 自包含 `scripts/weather.mjs` 取 Open-Meteo，经 `materializeSkillTools` 物化进 reactAgent。
+ * 本文件只保留 UI 同名回执工具 `weather_current` 与 `render_code_card`。
  */
-export const getWeatherTool = tool(
-  async ({ location }) => {
-    try {
-      const weather = await openMeteo.fetchCurrentWeatherByCity(location)
-      if (weather == null) {
-        return JSON.stringify({
-          ok: false,
-          error: `找不到城市「${location}」，请检查名称或尝试英文名。`,
-        })
-      }
-      return JSON.stringify({ ok: true, weather })
-    }
-    catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return JSON.stringify({
-        ok: false,
-        error: `查询「${location}」天气失败：${message}`,
-      })
-    }
-  },
-  {
-    name: 'get_weather',
-    description: '根据城市名称查询当前真实天气（Open-Meteo）。成功时返回 JSON：{ ok:true, weather:{ city, country?, temperatureC, condition } }；失败 { ok:false, error }。查到后必须再调用 render_code_card（HTML 沙箱卡片，优先）或 weather_current 展示卡片。',
-    schema: z.object({
-      location: z.string().describe('城市名称，如：北京、上海、Tokyo'),
-    }),
-  },
-)
 
 /**
  * 展示天气卡 —— 与前端 useComponent(`weather_current`) 同名同 schema。
@@ -69,7 +41,7 @@ export const weatherCurrentTool = tool(
   },
 )
 
-export const WEATHER_TOOLS = [getWeatherTool, weatherCurrentTool, renderCodeCardTool]
+export const WEATHER_TOOLS = [weatherCurrentTool, renderCodeCardTool]
 
 export {
   RENDER_CODE_CARD_TOOL_NAME,

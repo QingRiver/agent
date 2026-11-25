@@ -1,8 +1,6 @@
 import { KbQueryOptionsSchema } from '@agent/kb'
 import { z } from 'zod'
 
-export { type KbQueryOptions, KbQueryOptionsSchema } from '@agent/kb'
-
 export const KbQueryRequestSchema = z.object({
   query: z.string().min(1),
   /** 知识库根 dirId（kbs.dir_id）；检索走全局 collection，此值仅记录 */

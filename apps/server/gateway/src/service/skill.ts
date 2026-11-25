@@ -1,4 +1,4 @@
-import type { VersionTextType } from '@agent/proto'
+import type { SkillBinding, VersionTextType } from '@agent/skills'
 import {
   canonicalSkillCode,
   formatSkillContext,
@@ -7,12 +7,14 @@ import {
   SKILL_ENTRY_FILENAME,
   slugifySkillCode,
   VERSION_TEXT_TYPE,
-} from '@agent/proto'
+} from '@agent/skills'
+import { readSkillDir, writeSkillDir } from '@agent/skills/node'
 import { and, eq, inArray } from 'drizzle-orm'
 import { invalidateAgentConfigCache } from '../agent/agentConfig/store'
 import { db } from '../db/drizzle'
 import { agentConfigs, dirs, kbDocuments, kbs, skills, skillTags, versionTexts } from '../db/schema'
 import { hasTasksMountedIn } from './gtd'
+import { ProjectService } from './project'
 
 export class SkillConflictError extends Error {
   readonly status: 400 | 409
@@ -50,12 +52,6 @@ export interface VersionTextDto {
   versionDesc: string | null
   publishedAt: string | null
   updatedAt: string | null
-}
-
-export interface SkillBinding {
-  code: string
-  name: string
-  strategy: 'latest'
 }
 
 function now(): Date {
@@ -663,4 +659,91 @@ export class SkillService {
     )).limit(1)
     return !!row
   }
+
+  /**
+   * 导出 skill 为标准目录（SKILL.md + 支持文件），可被 Claude Code 等 agent 直接消费。
+   * 取每个逻辑文件的最新版（已发布最大 version，无则草稿 v0），按相对路径写出。
+   */
+  static async exportSkillToDir(
+    userId: string,
+    skillId: string,
+    destDir: string,
+  ): Promise<{ code: string, fileCount: number }> {
+    const [skill] = await db.select().from(skills).where(and(
+      eq(skills.id, skillId),
+      eq(skills.userId, userId),
+    )).limit(1)
+    if (!skill)
+      throw new SkillConflictError('skill 不存在或不可见')
+    const files = await SkillService.walkFiles(userId, skill.code)
+    if (!files)
+      throw new SkillConflictError('skill 无可导出内容')
+    await writeSkillDir({ files }, destDir)
+    return { code: skill.code, fileCount: Object.keys(files).length }
+  }
+
+  /**
+   * 从标准 skill 目录导入到 targetDirId（须为 live dir）。
+   * 每个文件按相对路径写入：根级文件直接 upsert version_text；嵌套路径（refs/x.md 等）
+   * 按 segments 创建子目录链（ProjectService.createDir，已存在则复用）后在叶目录 upsert。
+   * type 统一为 skill。不自动标记 targetDir 为 skill（由调用方决定）。
+   */
+  static async importSkillFromDir(
+    userId: string,
+    dirPath: string,
+    targetDirId: string,
+  ): Promise<{ code: string, fileCount: number }> {
+    await loadLiveDir(userId, targetDirId)
+    const bundle = await readSkillDir(dirPath)
+    const dirCache = new Map<string, string>([['', targetDirId]])
+    let count = 0
+    for (const [path, content] of Object.entries(bundle.files)) {
+      const segments = path.split('/')
+      const filename = segments.pop()!
+      const parentPath = segments.join('/')
+      const mountDirId = await ensureSubdirChain(userId, targetDirId, parentPath, dirCache)
+      await SkillService.upsertVersionText(userId, {
+        dirId: mountDirId,
+        filename,
+        content,
+        type: VERSION_TEXT_TYPE.SKILL,
+      })
+      count++
+    }
+    return { code: bundle.code, fileCount: count }
+  }
+}
+
+/** 按 posix 路径段在 baseDir 下创建子目录链，返回叶目录 id（已存在则复用）。 */
+async function ensureSubdirChain(
+  userId: string,
+  baseDirId: string,
+  parentPath: string,
+  cache: Map<string, string>,
+): Promise<string> {
+  if (parentPath === '')
+    return baseDirId
+  const cached = cache.get(parentPath)
+  if (cached)
+    return cached
+  const segments = parentPath.split('/')
+  let parentId = baseDirId
+  let acc = ''
+  for (const seg of segments) {
+    acc = acc ? `${acc}/${seg}` : seg
+    const hit = cache.get(acc)
+    if (hit) {
+      parentId = hit
+      continue
+    }
+    // 同名 live 子目录复用，否则新建
+    const all = await loadLiveDirs(userId)
+    const existing = all.find(d => d.parentId === parentId && d.name === seg)
+    const dirDto = existing
+      ? { id: existing.id }
+      : await ProjectService.createDir(userId, { parentId, name: seg })
+    parentId = dirDto.id
+    cache.set(acc, parentId)
+  }
+  return parentId
 }

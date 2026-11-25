@@ -1,0 +1,20 @@
+{
+  "name": "@agent/skills",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node/index.ts"
+  },
+  "scripts": {
+    "tc": "pnpm -w run tsc-go --noEmit"
+  },
+  "dependencies": {
+    "js-yaml": "catalog:"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "catalog:",
+    "@types/node": "catalog:"
+  }
+}

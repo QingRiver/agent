@@ -1,4 +1,3 @@
-import { ASK_TOOLS_SYSTEM_PROMPT } from '@agent/proto'
 import { z } from 'zod'
 import {
   REACT_AGENT_MAX_STEPS_DEFAULT,
@@ -6,28 +5,14 @@ import {
   REACT_AGENT_MAX_STEPS_MIN,
   REACT_AGENT_USER_PROMPT_MAX,
 } from '../config/reactAgent'
-import { CODE_CARD_SYSTEM_PROMPT } from './codeCard'
 
 /** 产品路径：只传配置 id；服务端 middleware 再装 RuntimeBundle */
 export const AGENT_CONFIG_ID_PROPS_KEY = 'agentConfigId' as const
 
-/** 平台 KB 工具引导（仅服务端拼接进 system，客户端不可覆盖） */
-export const KB_SEARCH_SYSTEM_PROMPT = [
-  '涉及已导入知识库内容的问题时，必须先调用 kb_search，再据返回的引用片段作答。',
-  '回答正文使用标准 Markdown 链接引用：直接使用工具结果里给出的形式，例如 `[1](/kb?path=…&chunk=…)`；不要写裸 `[1]`，也不要脚注。',
-  '工具返回未找到或澄清建议时如实转达，禁止臆造。问题明显与知识库无关时可直接作答。',
-].join('\n')
-
-/** Lab / 默认配置用的可测 userPrompt 模板 */
+/** Lab / 默认配置用的可测 userPrompt 模板（平台级工具纪律由内置 skill 经 skillText 注入，此处只留角色与风格） */
 export const DEFAULT_REACT_AGENT_USER_PROMPT = [
   '# 角色',
   '你是一个乐于助人的通用助手，可检索知识库，并在缺信息时向用户提问。',
-  '',
-  '## 工具使用',
-  '- 问题可能涉及已导入知识库内容时：先调用 `kb_search`，再按工具给出的 Markdown 链接（如 `[1](/kb?path=…&chunk=…)`）在正文标注来源；禁止臆造库内事实。',
-  '- 查天气：先 `get_weather`；成功后调用 `render_code_card`（`info`=weather，`html` 按 HTML 卡片写作规约现场编写），禁止正文罗列气温。',
-  '- 缺少必要信息（城市、订单号、选项未定等）时：必须调用 `ask_input` / `ask_choice` / `ask_multi_choice` / `ask_confirm`，禁止在正文里用自然语言追问。',
-  '- 调用 ask_* 的当轮不要同时输出解释性正文；等工具返回后再继续。',
   '',
   '## 回答风格',
   '- 简洁、可执行；有引用时写标准 Markdown 链接，不要脚注。',
@@ -43,14 +28,13 @@ export const ReactAgentRuntimeConfigSchema = z.object({
 
 export type ReactAgentRuntimeConfig = z.infer<typeof ReactAgentRuntimeConfigSchema>
 
-/** 与服务端一致的最终 system 拼接（配置页预览可不传 skillText） */
+/**
+ * 与服务端一致的最终 system 拼接。
+ * 平台级规约（ask 纪律 / KB 引用 / html_card 写作规约）由内置 skill 经 skillText 注入，
+ * 此处只拼 userPrompt + skillText。配置页预览不传 skillText 时仅显示 userPrompt。
+ */
 export function composeReactAgentSystemPrompt(userPrompt: string, skillText?: string): string {
-  const parts = [
-    userPrompt.trim() || DEFAULT_REACT_AGENT_USER_PROMPT,
-    ASK_TOOLS_SYSTEM_PROMPT,
-    KB_SEARCH_SYSTEM_PROMPT,
-    CODE_CARD_SYSTEM_PROMPT,
-  ]
+  const parts = [userPrompt.trim() || DEFAULT_REACT_AGENT_USER_PROMPT]
   const extra = skillText?.trim()
   if (extra)
     parts.push(extra)

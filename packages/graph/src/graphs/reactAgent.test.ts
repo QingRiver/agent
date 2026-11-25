@@ -1,4 +1,5 @@
 import type { AIMessage as AIMessageType, BaseMessage } from '@langchain/core/messages'
+import { composeBuiltInSkillIndex } from '@agent/skills/node'
 import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages'
 import { MemorySaver } from '@langchain/langgraph'
 import { describe, expect, it, vi } from 'vitest'
@@ -28,18 +29,38 @@ vi.mock('../utils/chatModel', () => ({
 }))
 
 describe('reactAgent prompts / sanitizers', () => {
-  it('composeReactAgentSystemPrompt always appends platform segments', () => {
+  it('composeReactAgentSystemPrompt 仅拼 userPrompt + skillText（平台规约由内置 skill 注入）', () => {
     const out = composeReactAgentSystemPrompt('用户角色')
     expect(out.startsWith('用户角色')).toBe(true)
-    expect(out).toContain('ask_input')
-    expect(out).toContain('kb_search')
-    expect(out).toContain('HTML 卡片写作规约')
+    // 平台规约（ask / kb）不再硬拼进 compose，由内置 skill 经 skillText 注入
+    expect(out).toBe('用户角色')
   })
 
   it('composeReactAgentSystemPrompt appends skillText when provided', () => {
     const out = composeReactAgentSystemPrompt('用户角色', '## 可用 Skill\n- weather')
     expect(out).toContain('可用 Skill')
     expect(out).toContain('weather')
+  })
+
+  it('composeBuiltInSkillIndex 急切注入平台级 skill（html_card / rag_cite / clarify_ask / weather）', async () => {
+    const { skillText, skillBindings } = await composeBuiltInSkillIndex()
+    // html_card 写作规约
+    expect(skillText).toContain('HTML 卡片写作规约')
+    expect(skillText).toContain('render_code_card')
+    // rag_cite 检索引用纪律
+    expect(skillText).toContain('kb_search')
+    // clarify_ask 主动提问纪律
+    expect(skillText).toContain('ask_input')
+    // weather 流程（get_weather → render_code_card）
+    expect(skillText).toContain('get_weather')
+    const codes = skillBindings.map(b => b.code)
+    expect(codes).toContain('html_card')
+    expect(codes).toContain('rag_cite')
+    expect(codes).toContain('clarify_ask')
+    expect(codes).toContain('weather')
+    // 编辑器域 skill autoBind:false，不进平台索引
+    expect(codes).not.toContain('writing_editor')
+    expect(codes).not.toContain('patch_edit')
   })
 
   it('sanitizeUserPrompt falls back to default when empty', () => {
